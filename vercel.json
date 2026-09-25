@@ -1,7 +1,1 @@
-{
-  "$schema": "https://openapi.vercel.sh/vercel.json",
-  // 2026-09-25：觀眾主要在澳門，Function 放香港（hkg1）最近。
-  // 若 Vercel plan 不支援該 region，會退回預設並在 deploy log 警告，
-  // 亦可在 Vercel Dashboard → Project Settings → Functions → Region 人手設定。
-  "regions": ["hkg1"]
-}
+{"$schema":"https://openapi.vercel.sh/vercel.json","regions":["hkg1"]}
