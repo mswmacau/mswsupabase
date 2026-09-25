@@ -3,7 +3,7 @@ import { ArrowRight, CalendarDays, Gift, Route, Users } from "lucide-react";
 import { RULES } from "@/lib/config";
 import { currentMonth, monthLabel } from "@/lib/utils";
 import { getCurrentProfile } from "@/lib/supabase/server";
-import { getPublishedEvents } from "@/lib/queries";
+import { getCachedPublishedEvents } from "@/lib/queries";
 import { EventCard } from "@/components/EventCard";
 
 export const metadata = { title: "活動總覽" };
@@ -13,7 +13,7 @@ export default async function EventsPage() {
   const month = currentMonth();
   // FE-14 + PM 拍板：保留 getCurrentProfile()，CTA 依登入狀態切換
   const [events, profile] = await Promise.all([
-    getPublishedEvents(),
+    getCachedPublishedEvents(),
     getCurrentProfile(),
   ]);
   const isLoggedIn = Boolean(profile);

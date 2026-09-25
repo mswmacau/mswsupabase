@@ -100,6 +100,153 @@ export const getSiteTheme = unstable_cache(
   { tags: [SITE_THEME_TAG], revalidate: 60 }
 );
 
+/**
+ * ── 前台公開查詢的快取版本 ──
+ *
+ * 首頁 / 活動 / 排行榜 / 訓練頁每次載入都會打 Supabase，但呢啲資料
+ * 人人睇到嘅都一樣。用不含 cookie 的 anonClient + unstable_cache 包一層，
+ * 60 秒內重複訪問唔使再打 DB，大幅縮短 TTFB。
+ * （個人化查詢如 getCurrentProfile 照舊每次即時查；後台 admin/* 繼續用
+ * 原本無快取嘅版本，確保審核睇到即時資料。）
+ */
+
+/** 全站統計（快取 120 秒，首頁用） */
+export function getCachedSiteStats(): Promise<SiteStats> {
+  return unstable_cache(
+    cache(async (): Promise<SiteStats> => {
+      const supabase = anonClient();
+      if (!supabase) return EMPTY_STATS;
+      const { data, error } = await supabase.from("site_stats").select("*").maybeSingle();
+      if (error || !data) return EMPTY_STATS;
+      return {
+        members: Number(data.members ?? 0),
+        total_km: Number(data.total_km ?? 0),
+        total_runs: Number(data.total_runs ?? 0),
+        total_sessions: Number(data.total_sessions ?? 0),
+      };
+    }),
+    ["site-stats"],
+    { revalidate: 120 }
+  )();
+}
+
+/** 即將到來的訓練場次（快取 60 秒，首頁用） */
+export function getCachedUpcomingSessions(limit = 4): Promise<TrainingSession[]> {
+  return unstable_cache(
+    cache(async (): Promise<TrainingSession[]> => {
+      const supabase = anonClient();
+      if (!supabase) return [];
+      const today = new Date().toISOString().slice(0, 10);
+      const { data } = await supabase
+        .from("training_sessions")
+        .select("*")
+        .gte("session_date", today)
+        .order("session_date", { ascending: true })
+        .limit(limit);
+      return (data as TrainingSession[]) ?? [];
+    }),
+    ["upcoming-sessions", String(limit)],
+    { revalidate: 60 }
+  )();
+}
+
+/** 全部訓練場次（快取 60 秒，前台訓練頁用） */
+export function getCachedAllSessions(limit = 60): Promise<TrainingSession[]> {
+  return unstable_cache(
+    cache(async (): Promise<TrainingSession[]> => {
+      const supabase = anonClient();
+      if (!supabase) return [];
+      const { data } = await supabase
+        .from("training_sessions")
+        .select("*")
+        .order("session_date", { ascending: false })
+        .limit(limit);
+      return (data as TrainingSession[]) ?? [];
+    }),
+    ["all-sessions", String(limit)],
+    { revalidate: 60 }
+  )();
+}
+
+/** 已上架活動（快取 60 秒，前台活動頁用） */
+export function getCachedPublishedEvents(limit = 50): Promise<Event[]> {
+  return unstable_cache(
+    cache(async (): Promise<Event[]> => {
+      const supabase = anonClient();
+      if (!supabase) return [];
+      const { data } = await supabase
+        .from("events")
+        .select("*")
+        .eq("status", "published")
+        .gte("event_date", todayISO())
+        .order("event_date", { ascending: true })
+        .order("sort_order", { ascending: false })
+        .limit(limit);
+      return (data as Event[]) ?? [];
+    }),
+    ["published-events", String(limit)],
+    { revalidate: 60 }
+  )();
+}
+
+/** 月度排行榜（快取 60 秒，首頁 + 排行榜頁用） */
+export function getCachedMonthlyLeaderboard(
+  month: string,
+  limit = 10
+): Promise<LeaderRow[]> {
+  return unstable_cache(
+    cache(async (): Promise<LeaderRow[]> => {
+      const supabase = anonClient();
+      if (!supabase) return [];
+      const { data, error } = await supabase
+        .from("monthly_leaderboard")
+        .select("user_id, period_month, total_km, runs, display_name, points")
+        .eq("period_month", month)
+        .order("total_km", { ascending: false })
+        .limit(limit);
+      if (error || !data?.length) return [];
+      type LeaderboardRow = MonthlyStat & {
+        display_name: string | null;
+        points: number | null;
+      };
+      return (data as LeaderboardRow[]).map((d) => ({
+        user_id: d.user_id,
+        name: d.display_name ?? "匿名會員",
+        total_km: Number(d.total_km),
+        runs: Number(d.runs),
+        points: Number(d.points ?? 0),
+      }));
+    }),
+    ["monthly-leaderboard", month, String(limit)],
+    { revalidate: 60 }
+  )();
+}
+
+/** 總排行榜（快取 60 秒，排行榜頁用） */
+export function getCachedAllTimeLeaderboard(limit = 20): Promise<LeaderRow[]> {
+  return unstable_cache(
+    cache(async (): Promise<LeaderRow[]> => {
+      const supabase = anonClient();
+      if (!supabase) return [];
+      const { data } = await supabase
+        .from("public_leaderboard")
+        .select("id, display_name, avatar_url, points, total_km")
+        .order("total_km", { ascending: false })
+        .order("points", { ascending: false })
+        .limit(limit);
+      return ((data as Profile[]) ?? []).map((p) => ({
+        user_id: p.id,
+        name: p.display_name ?? "匿名會員",
+        total_km: Number(p.total_km),
+        runs: 0,
+        points: p.points,
+      }));
+    }),
+    ["all-time-leaderboard", String(limit)],
+    { revalidate: 60 }
+  )();
+}
+
 /** 前台：已上架且尚未過期的活動（單次查詢上限 50 筆，Q6） */
 export async function getPublishedEvents(limit = 50): Promise<Event[]> {
   const supabase = await createClient();
@@ -447,7 +594,10 @@ export async function getAllCoupons(limit = 200): Promise<Coupon[]> {
 
   const { data } = await supabase
     .from("coupons")
-    .select("*, profile:profiles(id, display_name)")
+    // 2026-09-25 修復：coupons 有兩個 FK 指向 profiles（user_id、redeemed_by），
+    // 不加 hint 會觸發 PGRST201「more than one relationship」導致整表查回空陣列，
+    // 後台總覽顯示 3 張、列表卻顯示 0 張。明確指定走 user_id 的 FK。
+    .select("*, profile:profiles!coupons_user_id_fkey(id, display_name)")
     .order("created_at", { ascending: false })
     .limit(limit);
 

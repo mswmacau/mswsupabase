@@ -1,4 +1,4 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import { Suspense } from "react";
 import "./globals.css";
 import { Nav } from "@/components/Nav";
@@ -10,13 +10,31 @@ import { getSiteTheme } from "@/lib/queries";
 import { themeCssVars } from "@/lib/theme";
 import { publicAssetUrl } from "@/lib/assets";
 
+const SITE_URL =
+  process.env.NEXT_PUBLIC_SITE_URL ?? "https://msw-street-workout.vercel.app";
+
+const SITE_DESCRIPTION =
+  "MSW 街健館是澳門街頭健身社群平台。每週定期訓練、每月 300 公里跑步挑戰、積分與優惠券獎勵，讓訓練變成看得見的累積。";
+
 export const metadata: Metadata = {
+  metadataBase: new URL(SITE_URL),
   title: {
     default: "MSW 街健館 | Macau Street Workout",
     template: `%s | MSW 街健館`,
   },
-  description:
-    "MSW 街健館是澳門街頭健身社群平台。每週定期訓練、每月 300 公里跑步挑戰、積分與優惠券獎勵，讓訓練變成看得見的累積。",
+  description: SITE_DESCRIPTION,
+  openGraph: {
+    title: "MSW 街健館 | Macau Street Workout",
+    description: SITE_DESCRIPTION,
+    type: "website",
+    locale: "zh_HK",
+    url: "/",
+    siteName: "MSW 街健館",
+  },
+};
+
+export const viewport: Viewport = {
+  themeColor: "#0F0F0F",
 };
 
 export default async function RootLayout({

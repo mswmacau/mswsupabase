@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { CalendarDays, Check, Clock, MapPin, Users } from "lucide-react";
 import { getCurrentProfile } from "@/lib/supabase/server";
-import { getAllSessions, getUserCheckins } from "@/lib/queries";
+import { getCachedAllSessions, getUserCheckins } from "@/lib/queries";
 import { SessionAction } from "@/components/SessionAction";
 import { BRAND, RULES } from "@/lib/config";
 import { formatDate, weekdayLabel } from "@/lib/utils";
@@ -14,7 +14,7 @@ export default async function TrainingPage() {
   // FE-17：profile 與 sessions 平行發出，wall-clock 由加總變最大值
   const [profile, supabaseSessions] = await Promise.all([
     getCurrentProfile(),
-    getAllSessions(60),
+    getCachedAllSessions(60),
   ]);
   const checkins = profile ? await getUserCheckins(profile.id, 60) : [];
 

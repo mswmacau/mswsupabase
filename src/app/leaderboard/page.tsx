@@ -1,8 +1,8 @@
 import Link from "next/link";
 import { Medal, Trophy } from "lucide-react";
 import {
-  getAllTimeLeaderboard,
-  getMonthlyLeaderboard,
+  getCachedAllTimeLeaderboard,
+  getCachedMonthlyLeaderboard,
 } from "@/lib/queries";
 import { RULES } from "@/lib/config";
 import { currentMonth, formatKm, monthLabel, recentMonths } from "@/lib/utils";
@@ -19,8 +19,8 @@ export default async function LeaderboardPage({
   const month = m && /^\d{4}-\d{2}$/.test(m) ? m : currentMonth();
 
   const [monthly, allTime] = await Promise.all([
-    getMonthlyLeaderboard(month, 50),
-    getAllTimeLeaderboard(20),
+    getCachedMonthlyLeaderboard(month, 50),
+    getCachedAllTimeLeaderboard(20),
   ]);
 
   const months = recentMonths(6);

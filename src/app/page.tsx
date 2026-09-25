@@ -10,10 +10,10 @@ import {
 } from "lucide-react";
 import { HeroVisual } from "@/components/HeroVisual";
 import {
-  getMonthlyLeaderboard,
-  getSiteStats,
+  getCachedMonthlyLeaderboard,
+  getCachedSiteStats,
   getSiteTheme,
-  getUpcomingSessions,
+  getCachedUpcomingSessions,
 } from "@/lib/queries";
 import { BRAND, DISCIPLINES, RULES } from "@/lib/config";
 import { publicAssetUrl } from "@/lib/assets";
@@ -26,9 +26,9 @@ export const dynamic = "force-dynamic";
 export default async function HomePage() {
   const month = currentMonth();
   const [stats, sessions, leaders, profile, theme] = await Promise.all([
-    getSiteStats(),
-    getUpcomingSessions(3),
-    getMonthlyLeaderboard(month, 5),
+    getCachedSiteStats(),
+    getCachedUpcomingSessions(3),
+    getCachedMonthlyLeaderboard(month, 5),
     getCurrentProfile(),
     getSiteTheme(),
   ]);

@@ -7,7 +7,7 @@ export const BRAND = {
   description:
     "MSW 街健館是澳門街頭健身社群平台。每週定期訓練、每月 300 公里跑步挑戰、積分與優惠券獎勵，讓訓練變成看得見的累積。",
   location: "澳門",
-  email: "hello@mswstreethworkout.com",
+  email: "hello@mswstreetworkout.com",
   instagram: "@msw.streetworkout",
 } as const;
 
