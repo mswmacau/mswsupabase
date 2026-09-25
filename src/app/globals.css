@@ -1,0 +1,158 @@
+@import "tailwindcss";
+
+@theme {
+  /* MSW 品牌色 */
+  --color-ink: #0f0f0f;              /* 近黑 — 主背景 */
+  --color-ink-soft: #161616;         /* 卡片深底 */
+  --color-ink-line: #262626;         /* 深色區分割線 */
+  --color-paper: #f5f5f7;            /* 淺灰白 — 內容區塊 */
+  --color-cobalt: #0047ab;           /* 鈷藍 — 主要藍 */
+  --color-cobalt-bright: #0057ff;    /* 亮鈷藍 — hover / 漸層 */
+  --color-vital: #e3001b;            /* 活力紅 — 按鈕 / 重要提示 */
+  --color-vital-bright: #ff2d2d;     /* 亮紅 — hover */
+  --color-white: #ffffff;
+
+  --font-sans: "Inter", "PingFang TC", "PingFang SC", "Microsoft JhengHei",
+    "Noto Sans TC", "Helvetica Neue", Helvetica, Arial, sans-serif;
+}
+
+html {
+  scroll-behavior: smooth;
+}
+
+body {
+  background-color: var(--color-ink);
+  color: var(--color-white);
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+}
+
+@layer components {
+  .container-msw {
+    width: 100%;
+    max-width: var(--container-max, 1200px);
+    margin-inline: auto;
+    padding-inline: 1.25rem;
+  }
+
+  /* 區塊留白：由後台 --space-section 驅動（SPEC §3.4） */
+  .section-pad {
+    padding-block: var(--space-section, 80px);
+  }
+
+  .btn-base {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.5rem;
+    border-radius: var(--radius-btn, 9999px);
+    padding: 0.75rem 1.75rem;
+    font-weight: 600;
+    font-size: 0.95rem;
+    letter-spacing: 0.02em;
+    transition: all 0.25s ease;
+    cursor: pointer;
+  }
+
+  .btn-vital {
+    background-color: var(--color-vital);
+    color: var(--color-white);
+  }
+  .btn-vital:hover:not(:disabled) {
+    background-color: var(--color-vital-bright);
+    transform: translateY(-2px);
+    box-shadow: 0 10px 24px -8px rgba(255, 45, 45, 0.7);
+  }
+
+  .btn-cobalt {
+    background-color: var(--color-cobalt);
+    color: var(--color-white);
+  }
+  .btn-cobalt:hover:not(:disabled) {
+    background-color: var(--color-cobalt-bright);
+    transform: translateY(-2px);
+    box-shadow: 0 10px 24px -8px rgba(0, 87, 255, 0.7);
+  }
+
+  .btn-ghost {
+    border: 1px solid rgba(255, 255, 255, 0.35);
+    color: var(--color-white);
+    background: transparent;
+  }
+  .btn-ghost:hover:not(:disabled) {
+    border-color: var(--color-white);
+    background: rgba(255, 255, 255, 0.08);
+  }
+
+  .btn-base:disabled {
+    opacity: 0.55;
+    cursor: not-allowed;
+    transform: none;
+  }
+
+  .card-dark {
+    background-color: var(--color-ink-soft);
+    border: 1px solid var(--color-ink-line);
+    border-radius: var(--radius-card, 1rem);
+  }
+
+  .card-light {
+    background-color: var(--color-paper);
+    border-radius: var(--radius-card, 1rem);
+    color: var(--color-ink);
+  }
+
+  .section-title {
+    font-size: clamp(1.85rem, 4vw, 2.75rem);
+    font-weight: 800;
+    line-height: 1.15;
+    letter-spacing: -0.02em;
+  }
+
+  .eyebrow {
+    font-size: 0.78rem;
+    font-weight: 700;
+    letter-spacing: 0.32em;
+    text-transform: uppercase;
+    color: var(--color-vital);
+  }
+
+  .field {
+    width: 100%;
+    border-radius: var(--radius-field, 0.75rem);
+    border: 1px solid var(--color-ink-line);
+    background: #1c1c1c;
+    color: var(--color-white);
+    padding: 0.7rem 0.9rem;
+    font-size: 0.95rem;
+    outline: none;
+    transition: border-color 0.2s, box-shadow 0.2s;
+  }
+  .field:focus {
+    border-color: var(--color-cobalt-bright);
+    box-shadow: 0 0 0 3px rgba(0, 87, 255, 0.25);
+  }
+  .field::placeholder {
+    color: #8a8a8a;
+  }
+
+  .label {
+    display: block;
+    font-size: 0.82rem;
+    font-weight: 600;
+    color: #b9b9b9;
+    margin-bottom: 0.4rem;
+  }
+}
+
+/* Hero 網格底紋 */
+.hero-grid {
+  background-image:
+    linear-gradient(rgba(255, 255, 255, 0.045) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255, 255, 255, 0.045) 1px, transparent 1px);
+  background-size: 56px 56px;
+}
+
+.text-balance {
+  text-wrap: balance;
+}
