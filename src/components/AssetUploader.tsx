@@ -16,7 +16,6 @@ import { useRef, useState } from "react";
 import { ImagePlus, Loader2, RefreshCw, Trash2 } from "lucide-react";
 import { uploadImageFile } from "@/lib/upload";
 import { publicAssetUrl } from "@/lib/assets";
-import type { AssetKind } from "@/lib/assets";
 
 export interface AssetUploaderProps {
   kind: "event" | "logo" | "hero";

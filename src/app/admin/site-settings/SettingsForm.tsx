@@ -17,7 +17,6 @@ import { Loader2, RotateCcw, Save } from "lucide-react";
 import {
   COLOR_FIELDS,
   COLOR_PALETTE,
-  DEFAULT_THEME,
   FONT_PRESET_ORDER,
   FONT_PRESETS,
   type SiteTheme,

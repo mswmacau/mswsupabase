@@ -4,7 +4,6 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { Menu, Shield, Ticket, User, X } from "lucide-react";
-import { NAV_LINKS } from "@/lib/config";
 import { LogoutButton } from "./LogoutButton";
 
 interface Props {
@@ -24,14 +23,12 @@ export function MobileNav({
   displayName = null,
   points = 0,
   brandName = "MSW 街健館",
-  brandNameEn = "Macau Street Workout",
 }: Props) {
-  const [open, setOpen] = useState(false);
+  // 以「開啟時的路徑」推導開啟狀態：換頁後 open 自動變 false，
+  // 不需要在 effect 裡 setState（避免連鎖 render）。
+  const [openPath, setOpenPath] = useState<string | null>(null);
   const pathname = usePathname();
-
-  useEffect(() => {
-    setOpen(false);
-  }, [pathname]);
+  const open = openPath !== null && openPath === pathname;
 
   useEffect(() => {
     document.body.style.overflow = open ? "hidden" : "";
@@ -45,7 +42,7 @@ export function MobileNav({
       <button
         type="button"
         aria-label="開啟選單"
-        onClick={() => setOpen(true)}
+        onClick={() => setOpenPath(pathname)}
         className="rounded-lg p-2 text-white/80 transition hover:bg-white/10 md:hidden"
       >
         <Menu size={22} />
@@ -60,7 +57,7 @@ export function MobileNav({
             <button
               type="button"
               aria-label="關閉選單"
-              onClick={() => setOpen(false)}
+              onClick={() => setOpenPath(null)}
               className="rounded-lg p-2 text-white/80 transition hover:bg-white/10"
             >
               <X size={22} />

@@ -4,14 +4,19 @@ import { StatusBadge } from "./StatusBadge";
 import { formatDate } from "@/lib/utils";
 import type { Coupon } from "@/lib/types";
 
+/**
+ * 到期判定（一般函式，非 component／hook）。
+ * 到期是相對於「本次請求當下」的快照，放在這裡可讓 component render 保持可預測。
+ */
+function resolveStatus(coupon: Coupon): Coupon["status"] | "expired" {
+  if (coupon.status !== "active") return coupon.status;
+  if (!coupon.expires_at) return coupon.status;
+  return new Date(coupon.expires_at).getTime() < Date.now() ? "expired" : coupon.status;
+}
+
 /** 優惠券卡片：含 QR Code（伺服端產生 dataURL） */
 export async function CouponCard({ coupon }: { coupon: Coupon }) {
-  const expired =
-    coupon.expires_at &&
-    new Date(coupon.expires_at).getTime() < Date.now() &&
-    coupon.status === "active";
-
-  const status = expired ? "expired" : coupon.status;
+  const status = resolveStatus(coupon);
 
   const qr = await QRCode.toDataURL(coupon.code, {
     errorCorrectionLevel: "M",

@@ -18,25 +18,24 @@ export function SessionForm() {
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
-  const refs = {
-    session_date: useRef<HTMLInputElement>(null),
-    capacity: useRef<HTMLInputElement>(null),
-    start_time: useRef<HTMLInputElement>(null),
-    end_time: useRef<HTMLInputElement>(null),
-    title: useRef<HTMLInputElement>(null),
-    location: useRef<HTMLInputElement>(null),
-    note: useRef<HTMLInputElement>(null),
-  };
+  // 各欄位獨立 ref（勿放進物件字面量：render 期間讀取 refs.X 會違反 React 規則）
+  const sessionDateRef = useRef<HTMLInputElement>(null);
+  const capacityRef = useRef<HTMLInputElement>(null);
+  const startTimeRef = useRef<HTMLInputElement>(null);
+  const endTimeRef = useRef<HTMLInputElement>(null);
+  const titleRef = useRef<HTMLInputElement>(null);
+  const locationRef = useRef<HTMLInputElement>(null);
+  const noteRef = useRef<HTMLInputElement>(null);
 
   async function submit() {
     const payload = {
-      session_date: refs.session_date.current?.value ?? "",
-      capacity: Number(refs.capacity.current?.value ?? 30),
-      start_time: refs.start_time.current?.value ?? "20:00",
-      end_time: refs.end_time.current?.value ?? "21:00",
-      title: refs.title.current?.value ?? "",
-      location: refs.location.current?.value ?? "",
-      note: refs.note.current?.value ?? "",
+      session_date: sessionDateRef.current?.value ?? "",
+      capacity: Number(capacityRef.current?.value ?? 30),
+      start_time: startTimeRef.current?.value ?? "20:00",
+      end_time: endTimeRef.current?.value ?? "21:00",
+      title: titleRef.current?.value ?? "",
+      location: locationRef.current?.value ?? "",
+      note: noteRef.current?.value ?? "",
     };
     if (!payload.session_date) {
       setError("請選擇日期。");
@@ -87,7 +86,7 @@ export function SessionForm() {
           </label>
           <input
             id="session_date"
-            ref={refs.session_date}
+            ref={sessionDateRef}
             type="date"
             defaultValue={nextMonday()}
             className="field"
@@ -99,7 +98,7 @@ export function SessionForm() {
           </label>
           <input
             id="capacity"
-            ref={refs.capacity}
+            ref={capacityRef}
             type="number"
             defaultValue={30}
             min={1}
@@ -112,7 +111,7 @@ export function SessionForm() {
           </label>
           <input
             id="start_time"
-            ref={refs.start_time}
+            ref={startTimeRef}
             type="time"
             defaultValue="20:00"
             className="field"
@@ -124,7 +123,7 @@ export function SessionForm() {
           </label>
           <input
             id="end_time"
-            ref={refs.end_time}
+            ref={endTimeRef}
             type="time"
             defaultValue="21:00"
             className="field"
@@ -136,7 +135,7 @@ export function SessionForm() {
           </label>
           <input
             id="title"
-            ref={refs.title}
+            ref={titleRef}
             defaultValue="MSW 定期訓練"
             className="field"
           />
@@ -147,7 +146,7 @@ export function SessionForm() {
           </label>
           <input
             id="location"
-            ref={refs.location}
+            ref={locationRef}
             defaultValue="澳門街健館"
             className="field"
           />
@@ -158,7 +157,7 @@ export function SessionForm() {
           </label>
           <input
             id="note"
-            ref={refs.note}
+            ref={noteRef}
             placeholder="訓練重點、攜帶物品等"
             className="field"
           />

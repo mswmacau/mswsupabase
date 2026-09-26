@@ -19,7 +19,9 @@ import {
   jsonBadJson,
   jsonConflict,
   jsonForbidden,
+  jsonDbError,
   jsonInternal,
+  jsonMethodNotAllowed,
   jsonNotFound,
   jsonNotConfigured,
   jsonOk,
@@ -243,6 +245,19 @@ function parseEventFields(
   }
 
   return value;
+}
+
+/* =============================================================
+ * GET — 未實作：仍依 H4 先驗身分，再回 JSON 405（NEW-P3，不回空 body）
+ * ============================================================= */
+export async function GET() {
+  try {
+    const auth = (await authorizeAdmin()) as Authorized;
+    if ("res" in auth) return auth.res;
+    return jsonMethodNotAllowed();
+  } catch (err) {
+    return jsonDbError("GET /api/admin/events", err);
+  }
 }
 
 /* =============================================================

@@ -76,6 +76,9 @@ export const jsonValidation = (
   error = "請檢查表單內容。"
 ) => jsonErr(error, "VALIDATION", 400, { fields });
 
+/** 405 不支援此方法。（H6：未實作的方法也要回 JSON，不回空 body） */
+export const jsonMethodNotAllowed = () => jsonErr("不支援此方法。", "VALIDATION", 405);
+
 /** 404 找不到這筆資料。 */
 export const jsonNotFound = (error = "找不到這筆資料。") =>
   jsonErr(error, "NOT_FOUND", 404);
@@ -105,9 +108,57 @@ export function withJson<A extends unknown[]>(handler: (...args: A) => Promise<R
     try {
       return await handler(...args);
     } catch (err) {
-      return jsonInternal(handler.name || "handler", err);
+      return jsonDbError(handler.name || "handler", err);
     }
   };
+}
+
+/* =============================================================
+ * 輸入驗證：UUID（NEW-P2-1）
+ * ============================================================= */
+
+/** Postgres uuid 格式（大小寫皆接受） */
+export const UUID_RE =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+/** 是否為合法 uuid；非字串一律 false */
+export function isUuid(value: unknown): boolean {
+  return typeof value === "string" && UUID_RE.test(value.trim());
+}
+
+/* =============================================================
+ * Postgres 錯誤對映（NEW-P2-2）
+ * ============================================================= */
+
+type PgErrorLike = { code?: unknown; message?: unknown };
+
+function pgField(error: unknown, key: "code" | "message"): string {
+  if (typeof error !== "object" || error === null) return "";
+  const v = (error as PgErrorLike)[key];
+  return typeof v === "string" ? v : "";
+}
+
+/**
+ * 是否為「查無資料」語意的 raised exception。
+ * 只認 Postgres raise 的 P0001 且訊息帶「找不到／不存在」，
+ * 其餘 P0001（例如業務規則拒絕）與真實系統錯誤一律不算，
+ * 避免把系統錯誤吞成 404。
+ */
+export function isNotFoundPgError(error: unknown): boolean {
+  if (pgField(error, "code") !== "P0001") return false;
+  return /找不到|不存在|not found/i.test(pgField(error, "message"));
+}
+
+/**
+ * DB 錯誤的統一對映：
+ * - P0001（查無資料）→ 404 NOT_FOUND
+ * - 22P02（型別轉換失敗，例如非法 UUID）→ 400 VALIDATION（第二道防線）
+ * - 其他一律 500 INTERNAL，並寫 server log
+ */
+export function jsonDbError(where: string, error: unknown) {
+  if (isNotFoundPgError(error)) return jsonNotFound();
+  if (pgField(error, "code") === "22P02") return jsonValidation({}, "編號格式錯誤。");
+  return jsonInternal(where, error);
 }
 
 /** 讀取 JSON body；失敗回傳 null（呼叫端自行回 jsonBadJson()） */

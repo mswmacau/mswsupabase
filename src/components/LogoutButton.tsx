@@ -25,6 +25,7 @@ export function LogoutButton({
     } catch {
       // 即使請求失敗，下面仍強制整頁重整，讓前端狀態回到未登入
     }
+    // eslint-disable-next-line @next/next/no-location-assign-relative-destination -- 登出後必須整頁重載，讓所有 SSR 頁面重新以匿名狀態渲染（router.push 只做客戶端導覽，不足以重置）
     window.location.assign("/");
   }
 

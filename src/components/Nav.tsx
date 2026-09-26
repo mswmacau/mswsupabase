@@ -28,8 +28,10 @@ export function Nav({
   brandNameEn = BRAND.nameEn,
 }: Props) {
   const [scrolled, setScrolled] = useState(false);
-  const [menuOpen, setMenuOpen] = useState(false);
+  // 以「開啟時的路徑」推導選單狀態：換頁後自動關閉，不需要在 effect 裡 setState
+  const [menuOpenPath, setMenuOpenPath] = useState<string | null>(null);
   const pathname = usePathname();
+  const menuOpen = menuOpenPath !== null && menuOpenPath === pathname;
 
   useEffect(() => {
     const onScroll = () => setScrolled(window.scrollY > 24);
@@ -37,8 +39,6 @@ export function Nav({
     window.addEventListener("scroll", onScroll, { passive: true });
     return () => window.removeEventListener("scroll", onScroll);
   }, []);
-
-  useEffect(() => setMenuOpen(false), [pathname]);
 
   const links = NAV_LINKS.map((l) => ({ ...l }));
 
@@ -98,7 +98,7 @@ export function Nav({
             <div className="relative hidden md:block">
               <button
                 type="button"
-                onClick={() => setMenuOpen((v) => !v)}
+                onClick={() => setMenuOpenPath((prev) => (prev === pathname ? null : pathname))}
                 className="flex items-center gap-2 rounded-full border border-white/15 bg-white/5 py-1.5 pl-2 pr-3 text-sm font-semibold transition hover:border-white/40"
               >
                 <span className="flex h-7 w-7 items-center justify-center rounded-full bg-cobalt text-xs font-bold">
@@ -117,7 +117,7 @@ export function Nav({
                 <>
                   <div
                     className="fixed inset-0 z-40"
-                    onClick={() => setMenuOpen(false)}
+                    onClick={() => setMenuOpenPath(null)}
                   />
                   <div className="absolute right-0 z-50 mt-2 w-52 overflow-hidden rounded-xl border border-ink-line bg-ink-soft py-1.5 shadow-2xl">
                     <Link

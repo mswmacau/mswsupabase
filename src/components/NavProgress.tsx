@@ -10,7 +10,7 @@
  *  4. 元件卸載移除監聽
  */
 
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { usePathname, useSearchParams } from "next/navigation";
 
 const COMPLETE_DELAY = 150; // 補滿後等待再淡出
@@ -36,7 +36,7 @@ export function NavProgress() {
     fadeTimerRef.current = null;
   }
 
-  function complete() {
+  const complete = useCallback(() => {
     startedRef.current = false;
     clearTimers();
     setWidth(100);
@@ -48,9 +48,9 @@ export function NavProgress() {
         setFade(false);
       }, FADE_MS);
     }, COMPLETE_DELAY);
-  }
+  }, []);
 
-  function start() {
+  const start = useCallback(() => {
     if (startedRef.current) return;
     startedRef.current = true;
     clearTimers();
@@ -59,7 +59,7 @@ export function NavProgress() {
     // 下一幀才把寬度設到 85%，觸發 transition
     requestAnimationFrame(() => setWidth(85));
     safetyRef.current = setTimeout(() => complete(), SAFETY_MS);
-  }
+  }, [complete]);
 
   // capture 階段 click 監聽：只攔截同源內部連結
   useEffect(() => {
@@ -90,7 +90,7 @@ export function NavProgress() {
 
     document.addEventListener("click", onClick, true);
     return () => document.removeEventListener("click", onClick, true);
-  }, [pathname, searchParams]);
+  }, [pathname, searchParams, start]);
 
   // pathname / search 變化 → 完成進度
   useEffect(() => {

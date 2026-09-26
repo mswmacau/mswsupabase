@@ -244,28 +244,97 @@ create trigger profiles_guard_insert
 -- 5.5（中 #11）管理員操作稽核：優惠券核銷者
 --     原本 coupons.redeemed_at 有記錄但沒有「誰核銷的」，
 --     發生爭議時無法追溯。
+--
+--     【R6 驗收 P1-1 修正】原本本函式 returns void，
+--     UPDATE 命中 0 列（代碼不存在／已被核銷）時函式照樣正常返回，
+--     API 端只看 error 有無 → 對客人回報「已核銷」的**假成功**。
+--     現在改為 returns table(result text, …) 明確回傳結果碼：
+--       'ok'          → 核銷成功
+--       'not_found'   → 查無此券（API 回 404 NOT_FOUND）
+--       'already_used'→ 已核銷／非 active（API 回 409 CONFLICT）
+--     重複核銷一律拒絕，且**不覆寫原本的 redeemed_at**。
+--     注意：CREATE OR REPLACE 不能改回傳型別，故先 DROP 再 CREATE。
 -- ------------------------------------------------------------
 alter table public.coupons
   add column if not exists redeemed_by uuid references public.profiles(id) on delete set null;
 
-create or replace function public.redeem_coupon(p_code text)
-returns void
+drop function if exists public.redeem_coupon(text);
+
+create function public.redeem_coupon(p_code text)
+returns table (
+  result       text,
+  coupon_id    uuid,
+  coupon_title text,
+  member_name  text
+)
 language plpgsql
 security definer
 set search_path = public
 as $$
+declare
+  v_code text := upper(btrim(coalesce(p_code, '')));
+  v_row  public.coupons%rowtype;
+  v_n    integer;
 begin
   if not public.is_admin() then
     raise exception '只有管理員可以核銷優惠券';
+  end if;
+
+  -- 空代碼：一律視為查無此券，不寫入任何資料
+  if v_code = '' then
+    return query select 'not_found'::text, null::uuid, null::text, null::text;
+    return;
+  end if;
+
+  -- 大小寫不敏感比對（會員出示的券碼為大寫，避免手誤大小寫造成查無）
+  select c.* into v_row
+    from public.coupons c
+   where upper(c.code) = v_code
+   limit 1;
+
+  if not found then
+    return query select 'not_found'::text, null::uuid, null::text, null::text;
+    return;
+  end if;
+
+  -- 已核銷／已失效：拒絕，保留原本的 redeemed_at 供稽核
+  if v_row.status <> 'active' then
+    return query
+      select 'already_used'::text,
+             v_row.id,
+             v_row.title,
+             (select p.display_name from public.profiles p where p.id = v_row.user_id);
+    return;
   end if;
 
   update public.coupons
      set status      = 'used',
          redeemed_at = now(),
          redeemed_by = auth.uid()
-   where code = p_code and status = 'active';
+   where id = v_row.id
+     and status = 'active';   -- 併發保護：期間若被他人核銷則不算成功
+
+  get diagnostics v_n = row_count;
+
+  if v_n = 0 then
+    return query
+      select 'already_used'::text,
+             v_row.id,
+             v_row.title,
+             (select p.display_name from public.profiles p where p.id = v_row.user_id);
+    return;
+  end if;
+
+  return query
+    select 'ok'::text,
+           v_row.id,
+           v_row.title,
+           (select p.display_name from public.profiles p where p.id = v_row.user_id);
 end;
 $$;
+
+-- 讓 PostgREST 立刻看到新的回傳型別（可重複執行，無副作用）
+notify pgrst, 'reload schema';
 
 -- ------------------------------------------------------------
 -- 5.6（低 #12）補齊 gen_coupon_code 的 search_path
