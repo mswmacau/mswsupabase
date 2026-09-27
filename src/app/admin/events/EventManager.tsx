@@ -242,7 +242,7 @@ export function EventManager({ events }: { events: Event[] }) {
 
       {/* 列表 */}
       {visible.length === 0 ? (
-        <div className="rounded-2xl border border-dashed border-white/15 px-6 py-14 text-center text-sm text-white/45">
+        <div className="rounded-2xl border border-dashed border-white/15 px-6 py-14 text-center text-sm text-white/70">
           {showArchived
             ? "目前沒有活動。"
             : "目前沒有上架中的活動，點擊「新增活動」開始建立。"}
@@ -586,7 +586,7 @@ function EventRow({
             {badge.label}
           </span>
         </div>
-        <div className="mt-1 text-xs text-white/45">
+        <div className="mt-1 text-xs text-white/70">
           {formatDate(ev.event_date)}
           {ev.location ? ` · ${ev.location}` : ""}
           {ev.registration_url || ev.registration_note
@@ -691,7 +691,7 @@ function EventRow({
       </div>
 
       {ev.status !== "archived" && (
-        <label className="flex w-full items-center gap-2 text-xs text-white/50 sm:w-auto">
+        <label className="flex w-full items-center gap-2 text-xs text-white/70 sm:w-auto">
           <input
             type="checkbox"
             checked={confirm}

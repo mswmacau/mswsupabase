@@ -12,7 +12,7 @@ export default async function AdminCheckinsPage() {
   return (
     <div>
       <h2 className="text-xl font-bold">訓練簽到確認</h2>
-      <p className="mt-2 text-sm text-white/50">
+      <p className="mt-2 text-sm text-white/70">
         確認後會員立即獲得 {RULES.CHECKIN_POINTS} 積分。
       </p>
 
@@ -31,13 +31,13 @@ export default async function AdminCheckinsPage() {
                 <div className="font-semibold">
                   {c.profile?.display_name ?? "（未具名會員）"}
                 </div>
-                <div className="mt-0.5 text-xs text-white/45">
+                <div className="mt-0.5 text-xs text-white/70">
                   {c.session?.session_date
                     ? `${c.session.session_date}（週${weekdayLabel(c.session.session_date)}）`
                     : "場次資料遺失"}{" "}
                   · {c.session?.title ?? ""} · {c.session?.location ?? ""}
                 </div>
-                <div className="mt-0.5 text-xs text-white/35">
+                <div className="mt-0.5 text-xs text-white/60">
                   簽到時間 {formatDateTime(c.created_at)}
                 </div>
               </div>
@@ -46,13 +46,13 @@ export default async function AdminCheckinsPage() {
             </div>
           ))
         ) : (
-          <div className="rounded-xl border border-dashed border-white/15 px-4 py-14 text-center text-sm text-white/45">
+          <div className="rounded-xl border border-dashed border-white/15 px-4 py-14 text-center text-sm text-white/70">
             目前沒有待確認的簽到。
           </div>
         )}
       </div>
 
-      <p className="mt-6 text-xs text-white/35">
+      <p className="mt-6 text-xs text-white/60">
         提示：訓練日期 {formatDate(new Date().toISOString())} 起算，會員報名後會出現在這裡。
       </p>
     </div>

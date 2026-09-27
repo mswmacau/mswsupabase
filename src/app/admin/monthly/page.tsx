@@ -27,7 +27,7 @@ export default async function AdminMonthlyPage({
     <div className="space-y-8">
       <div>
         <h2 className="text-xl font-bold">月度達標名單與發券</h2>
-        <p className="mt-2 text-sm text-white/50">
+        <p className="mt-2 text-sm text-white/70">
           當月累積達 {RULES.MONTHLY_GOAL_KM} 公里（僅計已確認）的會員會出現在這裡。
           達標時系統已自動發券並 +{RULES.MONTHLY_BONUS_POINTS} 分；若需補發，可用下方表單。
         </p>
@@ -40,7 +40,7 @@ export default async function AdminMonthlyPage({
               className={`rounded-full border px-3.5 py-1.5 text-xs font-semibold transition ${
                 mm === month
                   ? "border-vital bg-vital text-white"
-                  : "border-white/15 text-white/60 hover:border-white/40 hover:text-white"
+                  : "border-white/15 text-white/75 hover:border-white/40 hover:text-white"
               }`}
             >
               {monthLabel(mm)}
@@ -63,8 +63,8 @@ export default async function AdminMonthlyPage({
         />
       ) : (
         <div className="rounded-xl border border-dashed border-white/15 px-4 py-14 text-center">
-          <PartyPopper size={30} className="mx-auto text-white/25" />
-          <p className="mt-4 text-sm text-white/45">
+          <PartyPopper size={30} className="mx-auto text-white/60" />
+          <p className="mt-4 text-sm text-white/70">
             {monthLabel(month)}尚無會員達標（≥ {RULES.MONTHLY_GOAL_KM} km）。
           </p>
         </div>
@@ -77,7 +77,7 @@ export default async function AdminMonthlyPage({
           {overview.length ? (
             <table className="w-full min-w-[420px] text-sm">
               <thead>
-                <tr className="border-b border-ink-line text-left text-xs uppercase tracking-[0.14em] text-white/40">
+                <tr className="border-b border-ink-line text-left text-xs uppercase tracking-[0.14em] text-white/70">
                   <th className="py-3 pl-4 pr-4">會員</th>
                   <th className="py-3 pr-4">累積里程</th>
                   <th className="py-3 pr-4">提交次數</th>
@@ -91,8 +91,8 @@ export default async function AdminMonthlyPage({
                     <td className="py-3.5 pr-4 font-bold text-blue-300">
                       {Number(r.total_km).toFixed(1)} km
                     </td>
-                    <td className="py-3.5 pr-4 text-white/60">{r.runs}</td>
-                    <td className="py-3.5 pr-4 text-white/55">
+                    <td className="py-3.5 pr-4 text-white/75">{r.runs}</td>
+                    <td className="py-3.5 pr-4 text-white/75">
                       {Number(r.total_km) >= RULES.MONTHLY_GOAL_KM
                         ? "已達標"
                         : `還差 ${(RULES.MONTHLY_GOAL_KM - Number(r.total_km)).toFixed(1)} km`}
@@ -102,7 +102,7 @@ export default async function AdminMonthlyPage({
               </tbody>
             </table>
           ) : (
-            <div className="px-4 py-12 text-center text-sm text-white/45">
+            <div className="px-4 py-12 text-center text-sm text-white/70">
               本月尚無任何已確認紀錄。
             </div>
           )}

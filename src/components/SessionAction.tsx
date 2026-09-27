@@ -80,7 +80,7 @@ export function SessionAction({
             type="button"
             disabled={pending}
             onClick={() => act("leave")}
-            className="w-full text-center text-xs text-white/45 transition hover:text-red-300 disabled:opacity-50"
+            className="w-full text-center text-xs text-white/70 transition hover:text-red-300 disabled:opacity-50"
           >
             {pending ? "處理中…" : "取消報名"}
           </button>

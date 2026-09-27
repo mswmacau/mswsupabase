@@ -100,7 +100,7 @@ export function AssetUploader({
               type="button"
               disabled={isDisabled}
               onClick={() => fileRef.current?.click()}
-              className="inline-flex items-center gap-1.5 rounded-lg border border-white/20 px-3 py-1.5 text-xs font-semibold text-white/80 transition hover:border-white/40 disabled:opacity-50"
+              className="inline-flex min-h-11 items-center gap-1.5 rounded-lg border border-white/25 px-4 text-xs font-semibold text-white/85 transition hover:border-white/60 disabled:opacity-50"
             >
               <RefreshCw size={14} /> 更換
             </button>
@@ -108,7 +108,7 @@ export function AssetUploader({
               type="button"
               disabled={isDisabled}
               onClick={() => onChange(null)}
-              className="inline-flex items-center gap-1.5 rounded-lg border border-red-500/40 px-3 py-1.5 text-xs font-semibold text-red-300 transition hover:bg-red-500/10 disabled:opacity-50"
+              className="inline-flex min-h-11 items-center gap-1.5 rounded-lg border border-red-500/50 px-4 text-xs font-semibold text-red-300 transition hover:bg-red-500/15 disabled:opacity-50"
             >
               <Trash2 size={14} /> 移除
             </button>
@@ -122,9 +122,9 @@ export function AssetUploader({
           className="flex w-full flex-col items-center gap-2 rounded-xl border border-dashed border-white/25 bg-black/20 px-4 py-9 text-center transition hover:border-cobalt-bright hover:bg-black/40 disabled:opacity-50"
         >
           {pending ? (
-            <Loader2 size={28} className="animate-spin text-white/60" />
+            <Loader2 size={28} className="animate-spin text-white/75" />
           ) : (
-            <ImagePlus size={28} className="text-white/50" />
+            <ImagePlus size={28} className="text-white/70" />
           )}
           <span className="text-sm font-semibold text-white/75">
             {pending ? "上傳中…" : "點擊上傳圖片"}
@@ -133,10 +133,12 @@ export function AssetUploader({
       )}
 
       {hint && !preview && (
-        <p className="text-xs text-white/40">{hint}</p>
+        <p className="text-xs text-white/70">{hint}</p>
       )}
       {error && (
-        <p className="text-xs text-red-300">{error}</p>
+        <p role="alert" aria-live="polite" className="text-xs text-red-300">
+          {error}
+        </p>
       )}
     </div>
   );

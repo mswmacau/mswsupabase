@@ -21,7 +21,7 @@ export default async function AdminHome() {
       icon: <ClipboardCheck size={20} />,
       label: "待審核跑步提交",
       value: String(counts.pendingRuns),
-      accent: "text-vital",
+      accent: "text-vital-bright",
       desc: "確認後里程與積分才會入帳",
     },
     {
@@ -54,23 +54,23 @@ export default async function AdminHome() {
     <div className="space-y-8">
       <div className="grid gap-4 sm:grid-cols-2">
         <div className="card-dark p-6">
-          <div className="text-xs uppercase tracking-[0.18em] text-white/45">
+          <div className="text-xs uppercase tracking-[0.18em] text-white/70">
             全站累積里程
           </div>
           <div className="mt-2 text-4xl font-black text-blue-300">
             {formatKm(stats.total_km)}
-            <span className="ml-1 text-base text-white/40">km</span>
+            <span className="ml-1 text-base text-white/70">km</span>
           </div>
-          <div className="mt-1 text-xs text-white/40">
+          <div className="mt-1 text-xs text-white/70">
             已確認 {stats.total_runs} 次提交
           </div>
         </div>
         <div className="card-dark p-6">
-          <div className="text-xs uppercase tracking-[0.18em] text-white/45">
+          <div className="text-xs uppercase tracking-[0.18em] text-white/70">
             會員總數
           </div>
           <div className="mt-2 text-4xl font-black">{counts.members}</div>
-          <div className="mt-1 text-xs text-white/40">
+          <div className="mt-1 text-xs text-white/70">
             已開訓練場次 {stats.total_sessions} 場
           </div>
         </div>
@@ -87,13 +87,13 @@ export default async function AdminHome() {
               {c.icon}
             </span>
             <div className="min-w-0 flex-1">
-              <div className="text-sm text-white/55">{c.label}</div>
+              <div className="text-sm text-white/75">{c.label}</div>
               <div className="text-2xl font-black">{c.value}</div>
-              <div className="mt-0.5 text-xs text-white/40">{c.desc}</div>
+              <div className="mt-0.5 text-xs text-white/70">{c.desc}</div>
             </div>
             <ArrowRight
               size={18}
-              className="shrink-0 text-white/25 transition group-hover:translate-x-1 group-hover:text-white/60"
+              className="shrink-0 text-white/60 transition group-hover:translate-x-1 group-hover:text-white/75"
             />
           </Link>
         ))}

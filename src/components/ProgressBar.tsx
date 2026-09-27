@@ -17,16 +17,13 @@ export function ProgressBar({
       {(label || hint) && (
         <div className="mb-2 flex items-baseline justify-between gap-3">
           {label && <span className="text-sm font-semibold">{label}</span>}
-          {hint && <span className="text-xs text-white/45">{hint}</span>}
+          {hint && <span className="text-xs text-white/70">{hint}</span>}
         </div>
       )}
-      <div className="h-3 w-full overflow-hidden rounded-full bg-white/10">
+      {/* 進度軌：去膠囊化，2px 細軌 + 斜切填充（設計系統 .meter / .meter-fill） */}
+      <div className="meter h-1.5 w-full">
         <div
-          className={`h-full rounded-full transition-all duration-700 ${
-            done
-              ? "bg-gradient-to-r from-emerald-400 to-emerald-500"
-              : "bg-gradient-to-r from-cobalt to-vital"
-          }`}
+          className={`meter-fill ${done ? "bg-emerald-400" : ""}`}
           style={{ width: `${pct}%` }}
         />
       </div>

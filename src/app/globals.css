@@ -14,6 +14,9 @@
 
   --font-sans: "Inter", "PingFang TC", "PingFang SC", "Microsoft JhengHei",
     "Noto Sans TC", "Helvetica Neue", Helvetica, Arial, sans-serif;
+
+  /* 動效緩動：出場快、收尾沉（spring 感），全站互動統一來源 */
+  --ease-msw: cubic-bezier(0.22, 1, 0.36, 1);
 }
 
 html {
@@ -25,6 +28,48 @@ body {
   color: var(--color-white);
   font-family: var(--font-sans);
   -webkit-font-smoothing: antialiased;
+}
+
+/* ===== 2026 細膩描邊 / 玻璃 / 光暈：全部由 CSS 變數衍生，不含硬編碼 hex ===== */
+:root {
+  /* 頭髮絲描邊：白 8%–12% */
+  --line-hairline: color-mix(in srgb, var(--color-white) 10%, transparent);
+  --line-hairline-strong: color-mix(in srgb, var(--color-white) 16%, transparent);
+  /* 玻璃底：ink 72% + 半透明，搭配 backdrop-filter */
+  --glass-bg: color-mix(in srgb, var(--color-ink) 72%, transparent);
+  --glass-bg-strong: color-mix(in srgb, var(--color-ink-soft) 82%, transparent);
+  /* 次要文字：白 78%（對 ink ≈ 11:1，遠高於 WCAG AA 4.5:1） */
+  --text-muted: color-mix(in srgb, var(--color-white) 78%, var(--color-ink));
+  --text-faint: color-mix(in srgb, var(--color-white) 70%, var(--color-ink));
+}
+
+/* ===== 無障礙：鍵盤可見焦點（全站唯一來源） ===== */
+:focus-visible {
+  outline: 2px solid var(--color-cobalt-bright);
+  outline-offset: 2px;
+}
+
+/* 跳至主內容的落點本身不需要外框（非可 Tab 元素，僅程式化聚焦） */
+main:focus-visible {
+  outline: none;
+}
+
+/* ===== 無障礙：跳至主內容 ===== */
+.skip-link {
+  position: absolute;
+  left: 1rem;
+  top: -100px;
+  z-index: 100;
+  border-radius: var(--radius-btn, 9999px);
+  background: var(--color-cobalt-bright);
+  color: var(--color-white);
+  padding: 0.75rem 1.25rem;
+  font-size: 0.9rem;
+  font-weight: 700;
+  transition: top 0.2s ease;
+}
+.skip-link:focus-visible {
+  top: 1rem;
 }
 
 @layer components {
@@ -61,7 +106,8 @@ body {
   .btn-vital:hover:not(:disabled) {
     background-color: var(--color-vital-bright);
     transform: translateY(-2px);
-    box-shadow: 0 10px 24px -8px rgba(255, 45, 45, 0.7);
+    box-shadow: 0 10px 24px -8px
+      color-mix(in srgb, var(--color-vital-bright) 70%, transparent);
   }
 
   .btn-cobalt {
@@ -71,17 +117,19 @@ body {
   .btn-cobalt:hover:not(:disabled) {
     background-color: var(--color-cobalt-bright);
     transform: translateY(-2px);
-    box-shadow: 0 10px 24px -8px rgba(0, 87, 255, 0.7);
+    box-shadow: 0 10px 24px -8px
+      color-mix(in srgb, var(--color-cobalt-bright) 70%, transparent);
   }
 
   .btn-ghost {
-    border: 1px solid rgba(255, 255, 255, 0.35);
+    border: 1px solid var(--line-hairline-strong);
     color: var(--color-white);
-    background: transparent;
+    background: color-mix(in srgb, var(--color-white) 4%, transparent);
   }
   .btn-ghost:hover:not(:disabled) {
     border-color: var(--color-white);
-    background: rgba(255, 255, 255, 0.08);
+    background: color-mix(in srgb, var(--color-white) 10%, transparent);
+    transform: translateY(-2px);
   }
 
   .btn-base:disabled {
@@ -90,10 +138,27 @@ body {
     transform: none;
   }
 
+  /* 卡片：頭髮絲描邊 + 玻璃混色底 */
   .card-dark {
-    background-color: var(--color-ink-soft);
-    border: 1px solid var(--color-ink-line);
+    background-color: color-mix(in srgb, var(--color-ink-soft) 88%, transparent);
+    border: 1px solid var(--line-hairline);
     border-radius: var(--radius-card, 1rem);
+    backdrop-filter: blur(6px);
+    -webkit-backdrop-filter: blur(6px);
+  }
+
+  /* 卡片 hover 上浮 + 柔和陰影（微互動） */
+  .card-lift {
+    transition:
+      transform 0.25s ease,
+      box-shadow 0.25s ease,
+      border-color 0.25s ease;
+    will-change: transform;
+  }
+  .card-lift:hover {
+    transform: translateY(-2px);
+    border-color: color-mix(in srgb, var(--color-cobalt-bright) 45%, transparent);
+    box-shadow: 0 20px 44px -24px color-mix(in srgb, var(--color-ink) 95%, transparent);
   }
 
   .card-light {
@@ -109,40 +174,342 @@ body {
     letter-spacing: -0.02em;
   }
 
+  /* 大寫英文標籤：11px / 0.22em 字距 + 左側短線裝飾 */
   .eyebrow {
-    font-size: 0.78rem;
-    font-weight: 700;
-    letter-spacing: 0.32em;
+    display: inline-flex;
+    align-items: center;
+    gap: 0.6rem;
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 0.22em;
     text-transform: uppercase;
-    color: var(--color-vital);
+    /* 用亮紅：#e3001b 對近黑僅 3.85:1，未達 AA；亮紅 ≈ 5.1:1 */
+    color: var(--color-vital-bright);
+  }
+  .eyebrow::before {
+    content: "";
+    display: block;
+    width: 22px;
+    height: 1px;
+    flex: none;
+    background: currentColor;
+    opacity: 0.85;
+  }
+  .eyebrow-cobalt {
+    color: color-mix(in srgb, var(--color-cobalt-bright) 70%, var(--color-white));
   }
 
   .field {
     width: 100%;
     border-radius: var(--radius-field, 0.75rem);
-    border: 1px solid var(--color-ink-line);
-    background: #1c1c1c;
+    border: 1px solid var(--line-hairline);
+    background: color-mix(in srgb, var(--color-white) 7%, var(--color-ink));
     color: var(--color-white);
     padding: 0.7rem 0.9rem;
     font-size: 0.95rem;
-    outline: none;
     transition: border-color 0.2s, box-shadow 0.2s;
   }
   .field:focus {
     border-color: var(--color-cobalt-bright);
-    box-shadow: 0 0 0 3px rgba(0, 87, 255, 0.25);
+    box-shadow: 0 0 0 3px
+      color-mix(in srgb, var(--color-cobalt-bright) 25%, transparent);
   }
   .field::placeholder {
-    color: #8a8a8a;
+    color: color-mix(in srgb, var(--color-white) 58%, var(--color-ink));
   }
 
   .label {
     display: block;
     font-size: 0.82rem;
     font-weight: 600;
-    color: #b9b9b9;
+    color: var(--text-muted);
     margin-bottom: 0.4rem;
   }
+
+  /* ===== 2026：玻璃質感（sticky nav / 浮層） ===== */
+  .glass {
+    background: var(--glass-bg);
+    backdrop-filter: blur(16px) saturate(140%);
+    -webkit-backdrop-filter: blur(16px) saturate(140%);
+    border-bottom: 1px solid var(--line-hairline);
+  }
+
+  /* ===== 2026：氛圍光暈（裝飾層用，透明度 0.06–0.12） ===== */
+  .ambient {
+    position: absolute;
+    pointer-events: none;
+    border-radius: 9999px;
+    filter: blur(100px);
+  }
+  .ambient-cobalt {
+    background: radial-gradient(circle, var(--color-cobalt), transparent 68%);
+    opacity: 0.12;
+  }
+  .ambient-vital {
+    background: radial-gradient(circle, var(--color-vital), transparent 68%);
+    opacity: 0.1;
+  }
+
+  /* ===== 運動元素：斜向速度線（極低透明度，不搶主體） ===== */
+  .speed-lines {
+    background-image: repeating-linear-gradient(
+      115deg,
+      color-mix(in srgb, var(--color-white) 7%, transparent) 0 2px,
+      transparent 2px 26px
+    );
+    opacity: 0.5;
+    -webkit-mask-image: linear-gradient(100deg, transparent, #000 45%, transparent);
+    mask-image: linear-gradient(100deg, transparent, #000 45%, transparent);
+  }
+
+  /* ===== 運動元素：斜切 / 切角 ===== */
+  .clip-band {
+    clip-path: polygon(0 28px, 100% 0, 100% calc(100% - 28px), 0 100%);
+  }
+  .clip-card-corner {
+    clip-path: polygon(0 0, 100% 0, 100% calc(100% - 34px), 0 100%);
+  }
+
+  /* ===== 運動元素：數字英雄化（漸變文字） ===== */
+  .stat-hero {
+    background-image: linear-gradient(
+      135deg,
+      var(--color-white) 0%,
+      color-mix(in srgb, var(--color-cobalt-bright) 40%, var(--color-white)) 52%,
+      var(--color-vital-bright) 100%
+    );
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
+    font-variant-numeric: tabular-nums;
+  }
+
+  /* ===== 運動元素：強調標籤（大寫 + 寬字距 + 品牌描邊） ===== */
+  .tag-sport {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.4rem;
+    border-radius: var(--radius-btn, 9999px);
+    border: 1px solid color-mix(in srgb, var(--color-vital) 60%, transparent);
+    background: color-mix(in srgb, var(--color-vital) 12%, transparent);
+    color: var(--color-vital-bright);
+    padding: 0.3rem 0.75rem;
+    font-size: 0.68rem;
+    font-weight: 800;
+    text-transform: uppercase;
+    letter-spacing: 0.18em;
+  }
+
+  /* ===== 排版升級 ===== */
+  .tnum {
+    font-variant-numeric: tabular-nums;
+  }
+  .display-tight {
+    font-weight: 900;
+    letter-spacing: -0.02em;
+  }
+}
+
+/* =====================================================================
+ * 設計系統層 2.0：手工質感
+ * 噪點（feTurbulence）／細網格／斜切角／宣言式排版／跑馬燈
+ * 顏色一律由 --color-* 變數衍生，不含硬編碼 hex。
+ * ===================================================================== */
+:root {
+  /* 噪點：SVG feTurbulence（灰階化），data-URI，不新增任何依賴 */
+  --noise-img: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='180' height='180' viewBox='0 0 180 180'%3E%3Cfilter id='mswNoise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.82' numOctaves='4' stitchTiles='stitch'/%3E%3CfeColorMatrix type='saturate' values='0'/%3E%3C/filter%3E%3Crect width='180' height='180' filter='url(%23mswNoise)'/%3E%3C/svg%3E");
+  --noise-opacity: 0.045;
+  --grid-cell: 64px;
+  --grid-line: color-mix(in srgb, var(--color-white) 100%, transparent);
+  /* 細膩邊框：白 8%–10%，禁用粗邊框 */
+  --line-fine: color-mix(in srgb, var(--color-white) 9%, transparent);
+  --line-fine-strong: color-mix(in srgb, var(--color-white) 14%, transparent);
+  /* 斜切角尺寸 */
+  --cut: 22px;
+}
+
+/* 全站噪點覆蓋層：固定於最上層，pointer-events:none 不影響任何互動 */
+body::after {
+  content: "";
+  position: fixed;
+  inset: 0;
+  z-index: 95;
+  pointer-events: none;
+  background-image: var(--noise-img);
+  background-repeat: repeat;
+  background-size: 180px 180px;
+  opacity: var(--noise-opacity);
+}
+
+/* 也可手動掛在任何容器內（page.tsx 用它疊在單一區塊上） */
+.noise-overlay {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  pointer-events: none;
+  background-image: var(--noise-img);
+  background-size: 180px 180px;
+  opacity: var(--noise-opacity);
+}
+
+/* 1px 細網格：只給裝飾層使用（opacity 0.05 ≙ 白 5%） */
+.grid-lines {
+  pointer-events: none;
+  opacity: 0.05;
+  background-image:
+    repeating-linear-gradient(
+      to right,
+      var(--grid-line) 0 1px,
+      transparent 1px var(--grid-cell)
+    ),
+    repeating-linear-gradient(
+      to bottom,
+      var(--grid-line) 0 1px,
+      transparent 1px var(--grid-cell)
+    );
+}
+
+/* 細網格（較密，40px） */
+.grid-lines-fine {
+  --grid-cell: 40px;
+}
+
+/* ===== 斜切 / 切角工具類 ===== */
+/* 切掉右上角 */
+.clip-notch {
+  clip-path: polygon(
+    0 0,
+    calc(100% - var(--cut)) 0,
+    100% var(--cut),
+    100% 100%,
+    0 100%
+  );
+}
+/* 切掉右下角 */
+.clip-notch-br {
+  clip-path: polygon(
+    0 0,
+    100% 0,
+    100% calc(100% - var(--cut)),
+    calc(100% - var(--cut)) 100%,
+    0 100%
+  );
+}
+/* 斜切底邊 */
+.clip-slant {
+  clip-path: polygon(0 0, 100% 0, 100% calc(100% - 2.25rem), 0 100%);
+}
+/* 上下對角切（按鈕用） */
+.clip-slab {
+  clip-path: polygon(
+    0 0,
+    calc(100% - 12px) 0,
+    100% 12px,
+    100% 100%,
+    12px 100%,
+    0 calc(100% - 12px)
+  );
+}
+
+/* ===== 宣言式排版 ===== */
+.display-hero {
+  font-size: clamp(3.5rem, 12vw, 10rem);
+  font-weight: 900;
+  line-height: 0.85;
+  letter-spacing: -0.03em;
+}
+.display-xl {
+  font-size: clamp(2.25rem, 6vw, 4.5rem);
+  font-weight: 900;
+  line-height: 0.92;
+  letter-spacing: -0.03em;
+}
+/* 描邊字（大尺寸用，不承載可讀性關鍵資訊時） */
+.text-outline {
+  color: transparent;
+  -webkit-text-stroke: 1.5px
+    color-mix(in srgb, var(--color-white) 62%, transparent);
+}
+.text-outline-vital {
+  -webkit-text-stroke-color: color-mix(
+    in srgb,
+    var(--color-vital-bright) 75%,
+    transparent
+  );
+}
+/* 數字：等寬 + 極緊字距 */
+.stat-figure {
+  font-variant-numeric: tabular-nums;
+  font-weight: 900;
+  letter-spacing: -0.04em;
+  line-height: 0.9;
+}
+.tnum {
+  font-variant-numeric: tabular-nums;
+}
+/* 藍色強調文字：亮鈷藍直接用在近黑底僅 ≈3.4:1（只達大字標準），
+   混入 68% 白後 ≈5.6:1，小字也符合 WCAG AA */
+.text-accent-blue {
+  color: color-mix(in srgb, var(--color-cobalt-bright) 68%, var(--color-white));
+}
+
+/* 豎排標籤 */
+.vlabel {
+  writing-mode: vertical-rl;
+  text-orientation: mixed;
+  text-transform: uppercase;
+  letter-spacing: 0.32em;
+  font-size: 11px;
+  font-weight: 600;
+}
+
+/* ===== 按鈕：去膠囊化（斜切角 + 位移 + 強調色陰影） ===== */
+/* 圓角尊重後台 --radius-btn，但上限 6px，避免膠囊化 */
+.btn-slab {
+  border-radius: min(var(--radius-btn), 6px);
+  clip-path: polygon(
+    0 0,
+    calc(100% - 12px) 0,
+    100% 12px,
+    100% 100%,
+    12px 100%,
+    0 calc(100% - 12px)
+  );
+}
+.btn-slab:hover:not(:disabled) {
+  transform: translate(4px, -4px);
+  box-shadow:
+    -8px 10px 26px -14px
+      color-mix(in srgb, var(--color-cobalt-bright) 70%, transparent),
+    0 0 0 1px var(--line-fine-strong);
+}
+.btn-vital.btn-slab:hover:not(:disabled) {
+  box-shadow:
+    -8px 10px 26px -14px
+      color-mix(in srgb, var(--color-vital-bright) 70%, transparent),
+    0 0 0 1px var(--line-fine-strong);
+}
+
+/* ===== 跑馬燈 ===== */
+@keyframes msw-marquee {
+  from {
+    transform: translate3d(0, 0, 0);
+  }
+  to {
+    transform: translate3d(-50%, 0, 0);
+  }
+}
+.marquee {
+  overflow: hidden;
+}
+.marquee-track {
+  display: flex;
+  width: max-content;
+  animation: msw-marquee 42s linear infinite;
+  will-change: transform;
+}
+.marquee:hover .marquee-track {
+  animation-play-state: paused;
 }
 
 /* Hero 網格底紋 */
@@ -155,4 +522,258 @@ body {
 
 .text-balance {
   text-wrap: balance;
+}
+
+/* =====================================================================
+ * 設計系統層 2.1：滾動敘事 / 景深 / 榜單節奏
+ * 緩動統一走 --ease-msw（spring 感），顏色全部由 --color-* 變數衍生。
+ * ===================================================================== */
+
+/* ===== 景深：三個 z 軸層級的卡片互動 ===== */
+/* ink（最深） / ink-soft（中） / 透明 + 描邊（淺）都在頁面裡混用，
+   互動回饋統一為：位移 + 陰影 + 描邊亮起，緩動用 --ease-msw。 */
+.z-raise {
+  transition:
+    transform 0.55s var(--ease-msw),
+    box-shadow 0.55s var(--ease-msw),
+    border-color 0.55s var(--ease-msw),
+    background-color 0.55s var(--ease-msw);
+  will-change: transform;
+}
+.z-raise:hover {
+  transform: translate3d(0, -6px, 0);
+  border-color: var(--line-fine-strong);
+  box-shadow:
+    0 30px 64px -32px color-mix(in srgb, var(--color-ink) 98%, transparent),
+    0 0 0 1px color-mix(in srgb, var(--color-white) 7%, transparent);
+}
+/* 斜切位移版（速度感，配合 .clip-notch-br） */
+.z-raise-slant:hover {
+  transform: translate3d(4px, -6px, 0);
+}
+
+/* 卡片內的裝飾光暈：hover 時位移，營造光源移動 */
+.glow-drift {
+  transition: transform 0.7s var(--ease-msw);
+}
+.group:hover .glow-drift {
+  transform: translate3d(-18px, 14px, 0);
+}
+
+/* ===== 斜切徽章（狀態標籤去膠囊化） ===== */
+.slab {
+  border-radius: min(var(--radius-btn), 4px);
+  clip-path: polygon(
+    0 0,
+    calc(100% - 8px) 0,
+    100% 8px,
+    100% 100%,
+    8px 100%,
+    0 calc(100% - 8px)
+  );
+}
+
+/* ===== 榜單 / 紀錄：節奏式排版（取代預設表格樣式） ===== */
+.ledger {
+  width: 100%;
+  border-collapse: collapse;
+}
+.ledger thead th {
+  padding: 0 1rem 0.85rem;
+  border-bottom: 1px solid var(--line-fine-strong);
+  text-align: left;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  color: color-mix(in srgb, var(--color-white) 62%, var(--color-ink));
+  white-space: nowrap;
+}
+.ledger tbody td {
+  padding: 1.1rem 1rem;
+  border-bottom: 1px solid var(--line-fine);
+  vertical-align: middle;
+}
+.ledger tbody tr {
+  transition: background-color 0.4s var(--ease-msw);
+}
+.ledger tbody tr:hover {
+  background-color: color-mix(in srgb, var(--color-white) 4%, transparent);
+}
+
+/* 榜單行：名次為超大等寬數字，hover 亮起強調色 */
+.rank-figure {
+  font-variant-numeric: tabular-nums;
+  font-weight: 900;
+  letter-spacing: -0.04em;
+  line-height: 0.85;
+  transition: color 0.4s var(--ease-msw);
+}
+.row-em:hover .rank-figure {
+  color: var(--color-vital-bright);
+}
+
+/* 進度軌（月度達標） */
+.meter {
+  height: 2px;
+  overflow: hidden;
+  background: color-mix(in srgb, var(--color-white) 12%, transparent);
+}
+.meter-fill {
+  height: 100%;
+  background: linear-gradient(
+    90deg,
+    var(--color-cobalt-bright),
+    var(--color-vital-bright)
+  );
+  transition: width 0.8s var(--ease-msw);
+}
+
+/* ===== 2026：純 CSS 滾動漸入（progressive enhancement） =====
+   硬規則：這組 keyframes 裡的 opacity 永遠是 1，進場效果完全交給
+   transform（位移 + 微縮放）表現。理由：scroll-driven animation 會
+   依捲動進度 scrub，任何「opacity: 0 → 1」的淡入都會讓折疊線下方的
+   元素永久停在透明狀態（截圖、列印、另存 PDF 全空白）。
+   改由 transform 驅動後，不論瀏覽器是否支援、元素是否已捲入視野、
+   或使用者關閉 JS，拿到的都是完整可見的靜態版式。 */
+@keyframes msw-reveal {
+  from {
+    opacity: 1;
+    transform: translate3d(0, 18px, 0);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+/* 方向變體：讓元素錯位入場，而不是整排同時平移 */
+@keyframes msw-reveal-up {
+  from {
+    opacity: 1;
+    transform: translate3d(0, 46px, 0) scale(0.965);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+@keyframes msw-reveal-left {
+  from {
+    opacity: 1;
+    transform: translate3d(-38px, 16px, 0) scale(0.98);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+@keyframes msw-reveal-right {
+  from {
+    opacity: 1;
+    transform: translate3d(38px, 16px, 0) scale(0.98);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+@keyframes msw-reveal-soft {
+  from {
+    opacity: 1;
+    transform: translate3d(0, 14px, 0) scale(0.985);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+/* 只在支援 scroll-driven animation 且未要求減少動態時啟用；
+   不支援的瀏覽器（含截圖／列印工具）不會套用 animation，
+   元素維持完全可見的靜態版式。
+   fill-mode 一律用 forwards，不用 both／backwards：
+   元素尚未進入視野時處於 before phase，forwards 不回填任何樣式，
+   因此維持原始樣式（完全可見、零位移），往回捲也不會倒帶成隱形。 */
+@supports (animation-timeline: view()) {
+  @media (prefers-reduced-motion: no-preference) {
+    /* 位移為主的進場：範圍沿用原本的 entry → cover 設計，
+       捲動時約有 250px 的滑行距離，節奏與原本一致。 */
+    .reveal,
+    .reveal-up,
+    .reveal-left,
+    .reveal-right,
+    .reveal-soft {
+      animation: msw-reveal linear forwards;
+      animation-timeline: view();
+      animation-range: entry 5% cover 30%;
+    }
+    .reveal-up {
+      animation-name: msw-reveal-up;
+      animation-range: entry 6% cover 30%;
+    }
+    .reveal-left {
+      animation-name: msw-reveal-left;
+      animation-range: entry 6% cover 32%;
+    }
+    .reveal-right {
+      animation-name: msw-reveal-right;
+      animation-range: entry 6% cover 32%;
+    }
+    .reveal-soft {
+      animation-name: msw-reveal-soft;
+      animation-range: entry 4% cover 26%;
+    }
+
+    /* 錯位入場：同一排的元素結束點依序往後推，形成瀑布式節奏。
+       結束範圍越大＝越晚走完，因此自然產生時間差。 */
+    .stagger > * {
+      animation: msw-reveal-up linear forwards;
+      animation-timeline: view();
+      animation-range: entry 4% cover 26%;
+    }
+    .stagger > *:nth-child(2) {
+      animation-range: entry 8% cover 30%;
+    }
+    .stagger > *:nth-child(3) {
+      animation-range: entry 12% cover 34%;
+    }
+    .stagger > *:nth-child(4) {
+      animation-range: entry 16% cover 38%;
+    }
+    .stagger > *:nth-child(n + 5) {
+      animation-range: entry 20% cover 42%;
+    }
+  }
+}
+
+/* 尊重系統「減少動態效果」設定 */
+@media (prefers-reduced-motion: reduce) {
+  html {
+    scroll-behavior: auto;
+  }
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+  /* 跑馬燈：完全停止，不做位移 */
+  .marquee-track {
+    animation: none !important;
+    transform: none !important;
+  }
+  /* 滾動漸入：直接回歸靜態版式（完全可見、零位移），不做任何進場動畫 */
+  .reveal,
+  .reveal-up,
+  .reveal-left,
+  .reveal-right,
+  .reveal-soft,
+  .stagger > * {
+    animation: none !important;
+    animation-timeline: none !important;
+    opacity: 1 !important;
+    transform: none !important;
+  }
 }

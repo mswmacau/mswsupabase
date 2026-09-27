@@ -38,7 +38,7 @@ export default async function AdminRunsPage({
               className={`rounded-full border px-3.5 py-1.5 text-xs font-semibold transition ${
                 active === t.key
                   ? "border-vital bg-vital text-white"
-                  : "border-white/15 text-white/60 hover:border-white/40 hover:text-white"
+                  : "border-white/15 text-white/75 hover:border-white/40 hover:text-white"
               }`}
             >
               {t.label}
@@ -47,7 +47,7 @@ export default async function AdminRunsPage({
         </div>
       </div>
 
-      <p className="mt-2 text-sm text-white/50">
+      <p className="mt-2 text-sm text-white/70">
         通過後系統會自動：累加會員總里程 → 每公里 +1 積分 →
         檢查該月是否滿 300 公里，達標則額外 +200 分並自動發放優惠券。
       </p>
@@ -56,7 +56,7 @@ export default async function AdminRunsPage({
         {items.length ? (
           items.map((s) => <ReviewCard key={s.id} submission={s} />)
         ) : (
-          <div className="rounded-xl border border-dashed border-white/15 px-4 py-14 text-center text-sm text-white/45">
+          <div className="rounded-xl border border-dashed border-white/15 px-4 py-14 text-center text-sm text-white/70">
             沒有{active === "pending" ? "待確認" : active === "approved" ? "已確認" : "已駁回"}的提交。
           </div>
         )}
@@ -93,7 +93,7 @@ function ReviewCard({ submission: s }: { submission: RunSubmission }) {
               </span>
             </>
           ) : (
-            <div className="flex h-full items-center justify-center text-xs text-white/40">
+            <div className="flex h-full items-center justify-center text-xs text-white/70">
               圖片無法載入
             </div>
           )}
@@ -104,9 +104,9 @@ function ReviewCard({ submission: s }: { submission: RunSubmission }) {
           <div className="flex flex-wrap items-center gap-3">
             <span className="text-2xl font-black text-blue-300">
               {formatKm(s.km)}
-              <span className="ml-1 text-sm text-white/45">km</span>
+              <span className="ml-1 text-sm text-white/70">km</span>
             </span>
-            <span className="rounded-full bg-white/5 px-2.5 py-0.5 text-xs text-white/55">
+            <span className="rounded-full bg-white/5 px-2.5 py-0.5 text-xs text-white/75">
               {s.period_month}
             </span>
           </div>
@@ -115,13 +115,13 @@ function ReviewCard({ submission: s }: { submission: RunSubmission }) {
             <span className="font-semibold">
               {s.profile?.display_name ?? "（未具名會員）"}
             </span>
-            <span className="ml-2 text-xs text-white/40">
+            <span className="ml-2 text-xs text-white/70">
               提交於 {formatDateTime(s.created_at)}
             </span>
           </div>
 
           {s.note && (
-            <p className="mt-2 rounded-lg bg-black/30 px-3 py-2 text-xs text-white/60">
+            <p className="mt-2 rounded-lg bg-black/30 px-3 py-2 text-xs text-white/75">
               會員備註：{s.note}
             </p>
           )}

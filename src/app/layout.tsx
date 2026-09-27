@@ -16,20 +16,36 @@ const SITE_URL =
 const SITE_DESCRIPTION =
   "MSW 街健館是澳門街頭健身社群平台。每週定期訓練、每月 300 公里跑步挑戰、積分與優惠券獎勵，讓訓練變成看得見的累積。";
 
+const OG_TITLE = "MSW 街健館 | Macau Street Workout";
+const OG_IMAGE = {
+  url: "/og-image.png",
+  width: 1200,
+  height: 630,
+  alt: "MSW 街健館 — 用自身的重量，練出澳門最強的街頭力量",
+} as const;
+
 export const metadata: Metadata = {
   metadataBase: new URL(SITE_URL),
   title: {
-    default: "MSW 街健館 | Macau Street Workout",
+    default: OG_TITLE,
     template: `%s | MSW 街健館`,
   },
   description: SITE_DESCRIPTION,
   openGraph: {
-    title: "MSW 街健館 | Macau Street Workout",
+    title: OG_TITLE,
     description: SITE_DESCRIPTION,
     type: "website",
     locale: "zh_HK",
     url: "/",
     siteName: "MSW 街健館",
+    // 相對路徑由 metadataBase（NEXT_PUBLIC_SITE_URL）補全為絕對網址
+    images: [OG_IMAGE],
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: OG_TITLE,
+    description: SITE_DESCRIPTION,
+    images: [OG_IMAGE.url],
   },
 };
 
@@ -53,6 +69,9 @@ export default async function RootLayout({
       style={cssVars as React.CSSProperties}
     >
       <body className="flex min-h-full flex-col bg-ink text-white">
+        <a href="#main" className="skip-link">
+          跳至主要內容
+        </a>
         <Suspense fallback={null}>
           <NavProgress />
         </Suspense>
@@ -66,7 +85,9 @@ export default async function RootLayout({
           brandName={theme.brand_name}
           brandNameEn={theme.brand_name_en}
         />
-        <main className="flex-1">{children}</main>
+        <main id="main" tabIndex={-1} className="flex-1">
+          {children}
+        </main>
         <Footer
           isLoggedIn={Boolean(profile)}
           isAdmin={profile?.role === "admin"}

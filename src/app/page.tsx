@@ -8,6 +8,7 @@ import {
   Timer,
   Trophy,
 } from "lucide-react";
+import { BrandIntro } from "@/components/BrandIntro";
 import { HeroVisual } from "@/components/HeroVisual";
 import {
   getCachedMonthlyLeaderboard,
@@ -22,6 +23,58 @@ import { isSupabaseConfigured } from "@/lib/supabase/env";
 import { getCurrentProfile } from "@/lib/supabase/server";
 
 export const dynamic = "force-dynamic";
+
+/** 訓練開始時間（"20:00 – 21:00" → "20:00"），Hero / Bento 大字用 */
+const TRAINING_START = RULES.TRAINING_TIME.split("–")[0].trim();
+
+const MARQUEE_ITEMS = [
+  "Street Workout",
+  "街頭健身",
+  "Calisthenics",
+  "澳門 Macau",
+  `Mon ${TRAINING_START}`,
+  `${RULES.MONTHLY_GOAL_KM}km / Month`,
+];
+
+const TRAINING_ROWS = [
+  { icon: <Timer size={15} />, text: "每週固定，可隨時報名當週場次" },
+  { icon: <Medal size={15} />, text: `簽到一次 +${RULES.CHECKIN_POINTS} 分` },
+  { icon: <CalendarDays size={15} />, text: "適合任何程度，教練現場調整強度" },
+];
+
+const RUN_ROWS = [
+  { icon: <Route size={15} />, text: `每公里 +${RULES.POINTS_PER_KM} 積分` },
+  { icon: <Trophy size={15} />, text: `達標額外 +${RULES.MONTHLY_BONUS_POINTS} 分` },
+  { icon: <Medal size={15} />, text: "月底結算，發放電子優惠券（含 QR Code）" },
+];
+
+const FEATURES = [
+  {
+    no: "01",
+    title: "打破時間地區限制",
+    desc: "每週固定有教練帶領的團體訓練；跑步任務則不限時間地點，隨時上傳紀錄。",
+  },
+  {
+    no: "02",
+    title: "贏得專屬優惠券",
+    desc: "月度達標即獲電子優惠券，用汗水換來的獎勵，在 MSW 街健館直接兌換。",
+  },
+  {
+    no: "03",
+    title: "與澳門的街健夥伴一起練",
+    desc: "一群人練比一個人練走得遠。排行榜、積分、共同目標，讓訓練不再孤單。",
+  },
+];
+
+/** 不規則 Bento：每行總和 12 欄，但寬度各不相同 */
+const DISCIPLINE_SPANS = [
+  "lg:col-span-5",
+  "lg:col-span-4 lg:mt-12",
+  "lg:col-span-3",
+  "lg:col-span-4",
+  "lg:col-span-3 lg:mt-10",
+  "lg:col-span-5",
+];
 
 export default async function HomePage() {
   const month = currentMonth();
@@ -40,25 +93,32 @@ export default async function HomePage() {
   const heroBgUrl = publicAssetUrl(theme.hero_bg_path);
   const heroOverlayOpacity = theme.hero_overlay_opacity;
 
+  const statItems = [
+    {
+      value: formatKm(stats.total_km),
+      unit: "km",
+      label: "累積跑步里程",
+      accent: true,
+    },
+    { value: String(stats.members), unit: "人", label: "MSW 會員", accent: false },
+    {
+      value: String(stats.total_sessions),
+      unit: "場",
+      label: "已開訓練場次",
+      accent: false,
+    },
+    {
+      value: String(RULES.MONTHLY_GOAL_KM),
+      unit: "km",
+      label: "月度跑步目標",
+      accent: false,
+    },
+  ];
+
   return (
     <>
-      {/* ============ HERO ============ */}
+      {/* ============ HERO：宣言式超大排版 ============ */}
       <section className="relative overflow-hidden border-b border-ink-line">
-        <div className="hero-grid absolute inset-0 opacity-70" />
-        <div
-          className="pointer-events-none absolute -left-40 top-10 h-[520px] w-[520px] rounded-full blur-[120px]"
-          style={{
-            background:
-              "radial-gradient(circle, rgba(0,71,171,0.55), transparent 65%)",
-          }}
-        />
-        <div
-          className="pointer-events-none absolute -right-32 bottom-0 h-[460px] w-[460px] rounded-full blur-[130px]"
-          style={{
-            background:
-              "radial-gradient(circle, rgba(227,0,27,0.4), transparent 65%)",
-          }}
-        />
         {heroBgUrl && (
           <>
             <div
@@ -72,126 +132,233 @@ export default async function HomePage() {
           </>
         )}
 
-        <div className="container-msw relative grid items-center gap-10 pb-20 pt-32 md:pb-28 md:pt-40 lg:grid-cols-[1.05fr_0.95fr]">
-          <div>
-            <span className="eyebrow">Macau Street Workout</span>
-            <h1 className="mt-5 text-balance text-[2.7rem] font-black leading-[1.05] tracking-tight sm:text-6xl lg:text-[4.2rem]">
-              MSW
-              <span className="relative mx-2 inline-block text-vital">
-                街健館
-                <svg
-                  viewBox="0 0 200 12"
-                  className="absolute -bottom-2 left-0 w-full"
-                  preserveAspectRatio="none"
-                >
-                  <path
-                    d="M2 8 C 50 2, 150 2, 198 7"
-                    stroke="#E3001B"
-                    strokeWidth="4"
-                    fill="none"
-                    strokeLinecap="round"
-                  />
-                </svg>
-              </span>
-            </h1>
-            <p className="mt-7 max-w-xl text-lg leading-relaxed text-white/70 sm:text-xl">
-              {BRAND.tagline}。每週一晚固定訓練、每月 {RULES.MONTHLY_GOAL_KM}{" "}
-              公里跑步挑戰，每一次汗水都換算成積分與專屬優惠券。
-            </p>
+        {/* 單側大光暈（只在右上，刻意不對稱） */}
+        <div
+          className="pointer-events-none absolute -right-[22%] -top-[32%] h-[760px] w-[760px] rounded-full blur-[140px]"
+          style={{
+            background:
+              "radial-gradient(circle, color-mix(in srgb, var(--color-cobalt) 78%, transparent), transparent 66%)",
+            opacity: 0.5,
+          }}
+        />
+        {/* 左下用幾何色塊代替第二顆光暈，避免左右對稱 */}
+        <div className="clip-notch pointer-events-none absolute -bottom-10 -left-20 h-72 w-72 bg-vital/10" />
 
-            <div className="mt-9 flex flex-wrap items-center gap-4">
-              {isLoggedIn ? (
-                <>
-                  <Link href="/dashboard" className="btn-base btn-vital">
-                    我的帳戶 <ArrowRight size={18} />
-                  </Link>
-                  <Link href="/run" className="btn-base btn-ghost">
-                    上傳跑步紀錄
-                  </Link>
-                </>
-              ) : (
-                <>
-                  <Link href="/signup" className="btn-base btn-vital">
-                    立即加入會員 <ArrowRight size={18} />
-                  </Link>
-                  <Link href="/events" className="btn-base btn-ghost">
-                    查看活動
-                  </Link>
-                </>
-              )}
+        {/* 手工質感：細網格 + 噪點 */}
+        <div className="grid-lines absolute inset-0" />
+        <div className="noise-overlay" />
+
+        <div className="container-msw relative z-10">
+          <div className="relative pb-16 pt-24 md:pt-32 lg:pb-20 lg:pt-36">
+            {/* 豎排小標籤 */}
+            <div className="absolute left-0 top-44 hidden lg:block">
+              <span className="vlabel text-white/50">Macau · Est. 2026</span>
             </div>
 
-            {nextSession && (
-              <div className="mt-10 inline-flex flex-wrap items-center gap-x-5 gap-y-2 rounded-2xl border border-white/10 bg-white/[0.04] px-5 py-4">
-                <CalendarDays size={20} className="text-vital" />
-                <div>
-                  <div className="text-xs text-white/50">下一場定期訓練</div>
-                  <div className="font-semibold">
-                    {nextSession.session_date}（週
-                    {weekdayLabel(nextSession.session_date)}）{" "}
-                    {RULES.TRAINING_TIME}
+            <div className="lg:pl-14">
+              <span className="eyebrow">Macau Street Workout</span>
+
+              <h1 className="mt-6 lg:-ml-[3vw] lg:w-[112%]">
+                <span className="display-hero block text-white">MSW</span>
+                <span className="relative mt-1 block">
+                  {/* 錯位描邊副本：純裝飾 */}
+                  <span
+                    aria-hidden
+                    className="display-hero text-outline text-outline-vital absolute left-[0.05em] top-[0.05em] block"
+                  >
+                    街健館
+                  </span>
+                  <span className="display-hero relative block text-vital-bright">
+                    街健館
+                  </span>
+                </span>
+              </h1>
+
+              <div className="mt-12 grid gap-10 lg:grid-cols-12 lg:gap-8">
+                <p className="text-base leading-relaxed text-white/70 sm:text-lg lg:col-span-5">
+                  {BRAND.tagline}。每週一晚固定訓練、每月{" "}
+                  <span className="font-semibold text-white">
+                    {RULES.MONTHLY_GOAL_KM}
+                  </span>{" "}
+                  公里跑步挑戰，每一次汗水都換算成積分與專屬優惠券。
+                </p>
+
+                <div className="lg:col-span-5 lg:col-start-8 lg:border-l lg:border-white/10 lg:pl-8">
+                  <div className="flex flex-wrap items-center gap-4">
+                    {isLoggedIn ? (
+                      <>
+                        <Link
+                          href="/dashboard"
+                          className="btn-base btn-vital btn-slab"
+                        >
+                          我的帳戶 <ArrowRight size={18} />
+                        </Link>
+                        <Link
+                          href="/run"
+                          className="btn-base btn-ghost btn-slab"
+                        >
+                          上傳跑步紀錄
+                        </Link>
+                      </>
+                    ) : (
+                      <>
+                        <Link
+                          href="/signup"
+                          className="btn-base btn-vital btn-slab"
+                        >
+                          立即加入會員 <ArrowRight size={18} />
+                        </Link>
+                        <Link
+                          href="/events"
+                          className="btn-base btn-ghost btn-slab"
+                        >
+                          查看活動
+                        </Link>
+                      </>
+                    )}
                   </div>
+
+                  {nextSession && (
+                    <div className="mt-8 border-l-2 border-vital bg-white/[0.03] px-5 py-4">
+                      <div className="flex items-center gap-2 text-[11px] font-semibold uppercase tracking-[0.22em] text-white/55">
+                        <CalendarDays size={14} className="text-vital-bright" />
+                        下一場定期訓練
+                      </div>
+                      <div className="mt-2 flex flex-wrap items-baseline gap-x-3 gap-y-1">
+                        <span className="stat-figure text-2xl text-white">
+                          {nextSession.session_date}
+                        </span>
+                        <span className="text-sm text-white/70">
+                          （週
+                          {weekdayLabel(nextSession.session_date)}）{" "}
+                          {RULES.TRAINING_TIME}
+                        </span>
+                      </div>
+                      <Link
+                        href="/training"
+                        className="mt-3 inline-flex items-center gap-1 text-sm font-semibold text-accent-blue hover:text-white"
+                      >
+                        報名 <ChevronRight size={15} />
+                      </Link>
+                    </div>
+                  )}
                 </div>
-                <Link
-                  href="/training"
-                  className="ml-auto inline-flex items-center gap-1 text-sm font-semibold text-blue-300 hover:text-blue-200"
-                >
-                  報名 <ChevronRight size={15} />
-                </Link>
               </div>
-            )}
-          </div>
+            </div>
 
-          <div className="relative mx-auto w-full max-w-lg">
-            <HeroVisual />
+            {/* Hero 視覺：放大並出血出邊界 */}
+            <div className="pointer-events-none relative mt-14 w-full lg:absolute lg:-right-[12%] lg:top-[2%] lg:mt-0 lg:w-[62%]">
+              <div className="clip-slant opacity-90">
+                <HeroVisual />
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* 跑馬燈：細邊框上下包夾 */}
+        <div className="relative z-10 border-y border-white/10 py-3">
+          <div className="marquee" aria-hidden>
+            <div className="marquee-track">
+              {[0, 1].map((copy) => (
+                <div key={copy} className="flex shrink-0 items-center">
+                  {MARQUEE_ITEMS.map((w) => (
+                    <span
+                      key={`${copy}-${w}`}
+                      className="flex items-center whitespace-nowrap px-6 text-[11px] font-semibold uppercase tracking-[0.28em] text-white/55"
+                    >
+                      {w}
+                      <span className="ml-6 inline-block h-1 w-1 rotate-45 bg-vital-bright" />
+                    </span>
+                  ))}
+                </div>
+              ))}
+            </div>
           </div>
         </div>
       </section>
 
-      {/* ============ 累積數據 ============ */}
-      <section className="border-b border-ink-line bg-ink-soft">
-        <div className="container-msw grid grid-cols-2 gap-6 py-12 md:grid-cols-4">
-          <StatBlock
-            value={formatKm(stats.total_km)}
-            unit="km"
-            label="累積跑步里程"
-          />
-          <StatBlock value={String(stats.members)} unit="人" label="MSW 會員" />
-          <StatBlock
-            value={String(stats.total_sessions)}
-            unit="場"
-            label="已開訓練場次"
-          />
-          <StatBlock
-            value={String(RULES.MONTHLY_GOAL_KM)}
-            unit="km"
-            label="月度跑步目標"
-          />
+      {/* ============ 累積數據：大數字錯位，不用卡片 ============ */}
+      <section className="relative border-b border-ink-line bg-ink-soft">
+        <div className="grid-lines absolute inset-0" />
+        <div className="container-msw relative">
+          <div className="grid grid-cols-2 gap-y-12 py-14 md:py-20 lg:grid-cols-4">
+            {statItems.map((s, i) => (
+              <div
+                key={s.label}
+                className={`px-5 ${i > 0 ? "md:border-l md:border-white/10" : ""} ${
+                  i % 2 === 1 ? "lg:mt-12" : ""
+                } ${i === 2 ? "lg:mt-6" : ""}`}
+              >
+                <div className="flex items-start gap-2">
+                  <span
+                    className={`stat-figure text-5xl leading-none md:text-6xl lg:text-7xl ${
+                      s.accent ? "text-vital-bright" : "text-white"
+                    }`}
+                  >
+                    {s.value}
+                  </span>
+                  <span className="text-accent-blue mt-2 text-[11px] font-semibold uppercase tracking-[0.22em]">
+                    {s.unit}
+                  </span>
+                </div>
+                <div className="mt-4 text-[11px] font-semibold uppercase tracking-[0.22em] text-white/55">
+                  {s.label}
+                </div>
+                <div className="mt-4 h-px w-10 bg-white/20" />
+              </div>
+            ))}
+          </div>
         </div>
       </section>
 
-      {/* ============ 兩大核心活動 ============ */}
-      <section className="container-msw py-20 md:py-28">
-        <div className="max-w-2xl">
-          <span className="eyebrow">Core Programs</span>
-          <h2 className="section-title mt-4">兩大核心活動</h2>
-          <p className="mt-4 leading-relaxed text-white/60">
+      {/* ============ 關於我們：宣言式大字 + 不對稱雙欄 ============ */}
+      <BrandIntro />
+
+      {/* ============ 兩大核心活動：不對稱 Bento ============ */}
+      <section className="container-msw section-pad">
+        <div className="flex flex-wrap items-end justify-between gap-6 border-b border-white/10 pb-8">
+          <div>
+            <span className="eyebrow">Core Programs</span>
+            <h2 className="display-xl mt-5">兩大核心活動</h2>
+          </div>
+          <p className="max-w-md text-sm leading-relaxed text-white/65">
             固定時間的團體訓練，加上可累積的月度跑步任務。前者建立紀律，後者累積成果。
           </p>
         </div>
 
-        <div className="mt-12 grid gap-6 lg:grid-cols-2">
-          <div className="card-dark relative overflow-hidden p-8">
-            <div className="absolute right-0 top-0 h-40 w-40 rounded-bl-[100px] bg-cobalt/15" />
+        <div className="mt-14 grid gap-8 lg:grid-cols-12">
+          {/* 01 定期訓練：7/12，斜切角 */}
+          <article className="clip-notch group relative overflow-hidden border border-white/10 bg-ink-soft p-8 lg:col-span-7">
+            <div className="pointer-events-none absolute -right-20 -top-20 h-56 w-56 rounded-full bg-cobalt/25 blur-2xl transition-transform duration-500 group-hover:-translate-x-4 group-hover:translate-y-4" />
             <div className="relative">
-              <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-cobalt text-xl">
-                💪
+              <div className="flex items-center justify-between gap-4">
+                <span className="text-[11px] font-semibold uppercase tracking-[0.22em] text-white/50">
+                  Program 01
+                </span>
+                <span className="text-accent-blue text-[11px] font-semibold uppercase tracking-[0.22em]">
+                  Weekly Training
+                </span>
               </div>
-              <h3 className="mt-6 text-2xl font-bold">定期訓練活動</h3>
-              <p className="mt-3 leading-relaxed text-white/60">
+
+              <div className="mt-8 flex flex-wrap items-end gap-x-6 gap-y-2">
+                <span className="stat-figure text-6xl leading-none text-white md:text-7xl">
+                  MON
+                </span>
+                <span className="stat-figure text-outline text-5xl leading-none md:text-6xl">
+                  {TRAINING_START}
+                </span>
+                <span className="mb-2 text-sm text-white/55">
+                  – {RULES.TRAINING_TIME.split("–")[1]?.trim()} · 澳門街健館
+                </span>
+              </div>
+
+              <h3 className="mt-8 text-2xl font-black tracking-tight md:text-3xl">
+                定期訓練活動
+              </h3>
+              <p className="mt-3 max-w-lg text-sm leading-relaxed text-white/70">
                 逢
                 <span className="font-semibold text-white">星期一</span>{" "}
-                <span className="font-semibold text-vital">
+                <span className="font-semibold text-vital-bright">
                   {RULES.TRAINING_TIME}
                 </span>
                 ，於澳門街健館進行團體街頭健身訓練。現場簽到，後台確認後即可獲得{" "}
@@ -200,94 +367,107 @@ export default async function HomePage() {
                 </span>
                 。
               </p>
-              <ul className="mt-6 space-y-2.5 text-sm text-white/70">
-                <li className="flex gap-2.5">
-                  <Timer size={17} className="mt-0.5 shrink-0 text-vital" />{" "}
-                  每週固定，可隨時報名當週場次
-                </li>
-                <li className="flex gap-2.5">
-                  <Medal size={17} className="mt-0.5 shrink-0 text-vital" />{" "}
-                  簽到一次 +{RULES.CHECKIN_POINTS} 分
-                </li>
-                <li className="flex gap-2.5">
-                  <CalendarDays size={17} className="mt-0.5 shrink-0 text-vital" />{" "}
-                  適合任何程度，教練現場調整強度
-                </li>
+
+              <ul className="mt-8 border-t border-white/10">
+                {TRAINING_ROWS.map((row) => (
+                  <li
+                    key={row.text}
+                    className="flex items-center gap-3 border-b border-white/10 py-3 text-sm text-white/70"
+                  >
+                    <span className="text-vital-bright">{row.icon}</span>
+                    {row.text}
+                  </li>
+                ))}
               </ul>
-              <Link href="/training" className="btn-base btn-cobalt mt-8">
+
+              <Link
+                href="/training"
+                className="btn-base btn-cobalt btn-slab mt-8"
+              >
                 查看訓練場次 <ArrowRight size={17} />
               </Link>
             </div>
-          </div>
+          </article>
 
-          <div className="card-dark relative overflow-hidden p-8">
-            <div className="absolute right-0 top-0 h-40 w-40 rounded-bl-[100px] bg-vital/15" />
-            <div className="relative">
-              <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-vital text-xl">
-                🏃
-              </div>
-              <h3 className="mt-6 text-2xl font-bold">月度跑步挑戰</h3>
-              <p className="mt-3 leading-relaxed text-white/60">
-                上傳跑步 app 截圖並填寫公里數，後台人工確認後計入累積。當月滿{" "}
-                <span className="font-semibold text-vital">
-                  {RULES.MONTHLY_GOAL_KM} 公里
-                </span>
-                ，即完成任務並獲得專屬優惠券。
-              </p>
-              <ul className="mt-6 space-y-2.5 text-sm text-white/70">
-                <li className="flex gap-2.5">
-                  <Route size={17} className="mt-0.5 shrink-0 text-cobalt-bright" />{" "}
-                  每公里 +{RULES.POINTS_PER_KM} 積分
-                </li>
-                <li className="flex gap-2.5">
-                  <Trophy size={17} className="mt-0.5 shrink-0 text-cobalt-bright" />{" "}
-                  達標額外 +{RULES.MONTHLY_BONUS_POINTS} 分
-                </li>
-                <li className="flex gap-2.5">
-                  <Medal size={17} className="mt-0.5 shrink-0 text-cobalt-bright" />{" "}
-                  月底結算，發放電子優惠券（含 QR Code）
-                </li>
-              </ul>
-              <Link href="/run" className="btn-base btn-vital mt-8">
-                上傳跑步紀錄 <ArrowRight size={17} />
-              </Link>
+          {/* 02 月度跑步：5/12，下沉錯位，透明底 + 上粗線 */}
+          <article className="group relative border-t-2 border-vital bg-transparent p-8 lg:col-span-5 lg:mt-24">
+            <div className="flex items-center justify-between gap-4">
+              <span className="text-[11px] font-semibold uppercase tracking-[0.22em] text-white/50">
+                Program 02
+              </span>
+              <span className="text-[11px] font-semibold uppercase tracking-[0.22em] text-vital-bright">
+                Monthly Challenge
+              </span>
             </div>
-          </div>
+
+            <div className="mt-8 flex items-end gap-3">
+              <span className="stat-figure text-6xl leading-none text-vital-bright md:text-7xl">
+                {RULES.MONTHLY_GOAL_KM}
+              </span>
+              <span className="text-accent-blue mb-2 text-[11px] font-semibold uppercase tracking-[0.22em]">
+                km / month
+              </span>
+            </div>
+
+            <h3 className="mt-8 text-2xl font-black tracking-tight md:text-3xl">
+              月度跑步挑戰
+            </h3>
+            <p className="mt-3 text-sm leading-relaxed text-white/70">
+              上傳跑步 app 截圖並填寫公里數，後台人工確認後計入累積。當月滿{" "}
+              <span className="font-semibold text-vital-bright">
+                {RULES.MONTHLY_GOAL_KM} 公里
+              </span>
+              ，即完成任務並獲得專屬優惠券。
+            </p>
+
+            <ul className="mt-8 border-t border-white/10">
+              {RUN_ROWS.map((row) => (
+                <li
+                  key={row.text}
+                  className="flex items-center gap-3 border-b border-white/10 py-3 text-sm text-white/70"
+                >
+                  <span className="text-accent-blue">{row.icon}</span>
+                  {row.text}
+                </li>
+              ))}
+            </ul>
+
+            <Link href="/run" className="btn-base btn-vital btn-slab mt-8">
+              上傳跑步紀錄 <ArrowRight size={17} />
+            </Link>
+          </article>
         </div>
       </section>
 
-      {/* ============ 打破界限 ============ */}
-      <section className="bg-paper py-20 text-ink md:py-24">
-        <div className="container-msw">
-          <div className="max-w-2xl">
-            <span className="eyebrow">Why MSW</span>
-            <h2 className="section-title mt-4 text-ink">
-              超越界限，讓訓練增加驅動力
-            </h2>
+      {/* ============ Why MSW：01/02/03 編號橫行 ============ */}
+      <section className="relative border-y border-ink-line bg-ink-soft">
+        <div className="noise-overlay" />
+        <div className="container-msw section-pad relative">
+          <div className="flex flex-wrap items-end justify-between gap-6">
+            <div>
+              <span className="eyebrow">Why MSW</span>
+              <h2 className="display-xl mt-5 max-w-2xl">
+                超越界限，讓訓練增加驅動力
+              </h2>
+            </div>
+            <span className="hidden text-[11px] font-semibold uppercase tracking-[0.22em] text-white/45 md:block">
+              Three Reasons
+            </span>
           </div>
 
-          <div className="mt-12 grid gap-8 md:grid-cols-3">
-            {[
-              {
-                icon: "🕐",
-                title: "打破時間地區限制",
-                desc: "每週固定有教練帶領的團體訓練；跑步任務則不限時間地點，隨時上傳紀錄。",
-              },
-              {
-                icon: "🎁",
-                title: "贏得專屬優惠券",
-                desc: "月度達標即獲電子優惠券，用汗水換來的獎勵，在 MSW 街健館直接兌換。",
-              },
-              {
-                icon: "👥",
-                title: "與澳門的街健夥伴一起練",
-                desc: "一群人練比一個人練走得遠。排行榜、積分、共同目標，讓訓練不再孤單。",
-              },
-            ].map((f) => (
-              <div key={f.title} className="card-light p-7">
-                <div className="text-3xl">{f.icon}</div>
-                <h3 className="mt-5 text-lg font-bold">{f.title}</h3>
-                <p className="mt-3 text-sm leading-relaxed text-ink/65">
+          <div className="mt-12 border-t border-white/10">
+            {FEATURES.map((f) => (
+              <div
+                key={f.no}
+                className="group -mx-4 border-b border-white/10 px-4 py-8 transition-colors hover:bg-white/[0.03] lg:grid lg:grid-cols-[7rem_1fr_1.1fr] lg:items-center lg:gap-10 lg:py-12"
+              >
+                <div className="stat-figure text-5xl text-white/25 transition-colors group-hover:text-vital-bright lg:text-6xl">
+                  {f.no}
+                </div>
+                <h3 className="mt-4 text-2xl font-black tracking-tight md:text-3xl lg:mt-0">
+                  {f.title}
+                </h3>
+                <p className="mt-3 text-sm leading-relaxed text-white/70 lg:mt-0 lg:max-w-md">
                   {f.desc}
                 </p>
               </div>
@@ -296,81 +476,99 @@ export default async function HomePage() {
         </div>
       </section>
 
-      {/* ============ 各類訓練 ============ */}
-      <section className="container-msw py-20 md:py-28">
-        <div className="max-w-2xl">
-          <span className="eyebrow">Disciplines</span>
-          <h2 className="section-title mt-4">各類訓練項目</h2>
+      {/* ============ 各類訓練：不規則 Bento 網格 ============ */}
+      <section className="container-msw section-pad">
+        <div className="flex flex-wrap items-end justify-between gap-6 border-b border-white/10 pb-8">
+          <div>
+            <span className="eyebrow">Disciplines</span>
+            <h2 className="display-xl mt-5">各類訓練項目</h2>
+          </div>
+          <span className="text-[11px] font-semibold uppercase tracking-[0.22em] text-white/45">
+            {String(DISCIPLINES.length).padStart(2, "0")} Disciplines
+          </span>
         </div>
 
-        <div className="mt-12 grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
-          {DISCIPLINES.map((d) => (
-            <div
+        <div className="mt-12 grid gap-5 sm:grid-cols-2 lg:grid-cols-12">
+          {DISCIPLINES.map((d, i) => (
+            <article
               key={d.title}
-              className="card-dark p-7 transition duration-300 hover:-translate-y-1 hover:border-cobalt/50"
+              className={`group relative overflow-hidden border border-white/10 bg-ink-soft/70 p-6 transition-colors hover:border-cobalt/60 hover:bg-ink-soft ${
+                DISCIPLINE_SPANS[i] ?? ""
+              } ${i === 0 ? "lg:min-h-[260px]" : ""}`}
             >
-              <div className="text-3xl">{d.icon}</div>
-              <h3 className="mt-5 text-lg font-bold">{d.title}</h3>
-              <div className="mt-1 text-[11px] font-semibold uppercase tracking-[0.18em] text-white/40">
-                {d.sub}
+              <span className="stat-figure pointer-events-none absolute -top-2 right-4 text-6xl text-white/[0.07] transition-colors group-hover:text-vital/25 md:text-7xl">
+                {String(i + 1).padStart(2, "0")}
+              </span>
+              <div className="relative">
+                <div className="text-accent-blue text-[11px] font-semibold uppercase tracking-[0.22em]">
+                  {d.sub}
+                </div>
+                <h3 className="mt-3 text-xl font-black tracking-tight md:text-2xl">
+                  {d.title}
+                </h3>
+                <p className="mt-3 max-w-sm text-sm leading-relaxed text-white/70">
+                  {d.desc}
+                </p>
               </div>
-              <p className="mt-3 text-sm leading-relaxed text-white/60">
-                {d.desc}
-              </p>
-            </div>
+            </article>
           ))}
         </div>
       </section>
 
       {/* ============ 本月排行榜 ============ */}
-      <section className="border-y border-ink-line bg-ink-soft py-20 md:py-24">
-        <div className="container-msw grid gap-10 lg:grid-cols-[1fr_1fr]">
-          <div>
+      <section className="relative border-t border-ink-line">
+        <div className="container-msw section-pad grid gap-12 lg:grid-cols-12">
+          <div className="lg:col-span-5">
             <span className="eyebrow">Leaderboard</span>
-            <h2 className="section-title mt-4">{monthLabel(month)}排行榜</h2>
-            <p className="mt-4 max-w-md leading-relaxed text-white/60">
+            <h2 className="display-xl mt-5">
+              <span className="text-accent-blue block text-[0.4em] font-semibold uppercase tracking-[0.22em]">
+                {monthLabel(month)}
+              </span>
+              <span className="block">排行榜</span>
+            </h2>
+            <p className="mt-6 max-w-sm text-sm leading-relaxed text-white/70">
               依當月已確認的跑步里程排序。提交紀錄經後台確認後才會計入排名。
             </p>
-            <Link href="/leaderboard" className="btn-base btn-ghost mt-8">
+            <Link
+              href="/leaderboard"
+              className="btn-base btn-ghost btn-slab mt-8"
+            >
               查看完整排行榜 <ArrowRight size={17} />
             </Link>
           </div>
 
-          <div className="card-dark overflow-hidden">
+          <div className="lg:col-span-7">
             {leaders.length ? (
-              <ol className="divide-y divide-ink-line">
+              <ol className="border-t border-white/10">
                 {leaders.map((l, i) => (
-                  <li key={l.user_id} className="flex items-center gap-4 px-5 py-4">
-                    <span
-                      className={`flex h-8 w-8 items-center justify-center rounded-lg text-sm font-black ${
-                        i === 0
-                          ? "bg-vital text-white"
-                          : i === 1
-                            ? "bg-white/20 text-white"
-                            : i === 2
-                              ? "bg-amber-700/60 text-white"
-                              : "bg-white/5 text-white/50"
-                      }`}
-                    >
-                      {i + 1}
+                  <li
+                    key={l.user_id}
+                    className="group flex items-center gap-5 border-b border-white/10 py-5"
+                  >
+                    <span className="stat-figure w-12 text-3xl text-white/25 transition-colors group-hover:text-vital-bright md:text-4xl">
+                      {String(i + 1).padStart(2, "0")}
                     </span>
                     <div className="min-w-0 flex-1">
-                      <div className="truncate font-semibold">{l.name}</div>
-                      <div className="text-xs text-white/45">
+                      <div className="truncate text-base font-semibold">
+                        {l.name}
+                      </div>
+                      <div className="mt-1 text-[11px] font-semibold uppercase tracking-[0.18em] text-white/50">
                         {l.runs} 次提交 · {l.points} 積分
                       </div>
                     </div>
                     <div className="text-right">
-                      <div className="text-lg font-bold text-blue-300">
+                      <div className="stat-figure text-2xl text-white md:text-3xl">
                         {formatKm(l.total_km)}
                       </div>
-                      <div className="text-[11px] text-white/40">km</div>
+                      <div className="text-accent-blue text-[11px] font-semibold uppercase tracking-[0.22em]">
+                        km
+                      </div>
                     </div>
                   </li>
                 ))}
               </ol>
             ) : (
-              <div className="px-6 py-14 text-center text-sm text-white/45">
+              <div className="border-y border-white/10 px-6 py-14 text-center text-sm text-white/70">
                 {isSupabaseConfigured
                   ? "本月尚無已確認的跑步紀錄，成為第一位上榜者！"
                   : "尚未連接 Supabase，連接後這裡會顯示排行榜。"}
@@ -380,71 +578,66 @@ export default async function HomePage() {
         </div>
       </section>
 
-      {/* ============ CTA ============ */}
-      <section className="relative overflow-hidden py-24">
+      {/* ============ CTA：超大宣言（單側光暈，不居中） ============ */}
+      <section className="relative overflow-hidden border-t border-ink-line">
+        <div className="grid-lines absolute inset-0" />
         <div
-          className="pointer-events-none absolute inset-0"
+          className="pointer-events-none absolute -bottom-72 -right-24 h-[620px] w-[620px] rounded-full blur-[130px]"
           style={{
             background:
-              "radial-gradient(120% 90% at 50% 0%, rgba(0,71,171,0.35), transparent 60%)",
+              "radial-gradient(circle, var(--color-vital), transparent 68%)",
+            opacity: 0.16,
           }}
         />
-        <div className="container-msw relative text-center">
-          <h2 className="section-title text-balance">
-            {isLoggedIn ? "繼續把汗水換成積分" : "準備好開始累積了嗎？"}
-          </h2>
-          <p className="mx-auto mt-5 max-w-xl leading-relaxed text-white/60">
-            {isLoggedIn
-              ? "本月里程與積分持續累積中，記得定期上傳跑步紀錄與報名訓練。"
-              : "註冊只需一分鐘。加入後即可報名訓練、上傳跑步紀錄、追蹤積分與優惠券。"}
-          </p>
-          <div className="mt-9 flex flex-wrap justify-center gap-4">
-            {isLoggedIn ? (
-              <>
-                <Link href="/run" className="btn-base btn-vital">
-                  上傳跑步紀錄 <ArrowRight size={18} />
-                </Link>
-                <Link href="/training" className="btn-base btn-ghost">
-                  報名訓練場次
-                </Link>
-              </>
-            ) : (
-              <>
-                <Link href="/signup" className="btn-base btn-vital">
-                  免費註冊會員 <ArrowRight size={18} />
-                </Link>
-                <Link href="/login" className="btn-base btn-ghost">
-                  我已有帳號
-                </Link>
-              </>
-            )}
+        {/* 巨型描邊字：裝飾 */}
+        <span
+          aria-hidden
+          className="display-hero text-outline pointer-events-none absolute -bottom-6 left-[-4%] select-none opacity-40"
+        >
+          MSW
+        </span>
+
+        <div className="container-msw section-pad relative">
+          <div className="grid gap-12 lg:grid-cols-12">
+            <div className="lg:col-span-8">
+              <span className="eyebrow">Join The Crew</span>
+              <h2 className="mt-6 text-5xl font-black leading-[0.95] tracking-[-0.03em] sm:text-6xl lg:text-7xl">
+                {isLoggedIn ? "繼續把汗水換成積分" : "準備好開始累積了嗎？"}
+              </h2>
+              <p className="mt-7 max-w-xl text-base leading-relaxed text-white/70">
+                {isLoggedIn
+                  ? "本月里程與積分持續累積中，記得定期上傳跑步紀錄與報名訓練。"
+                  : "註冊只需一分鐘。加入後即可報名訓練、上傳跑步紀錄、追蹤積分與優惠券。"}
+              </p>
+            </div>
+
+            <div className="flex flex-col items-start gap-4 lg:col-span-4 lg:pt-20">
+              {isLoggedIn ? (
+                <>
+                  <Link href="/run" className="btn-base btn-vital btn-slab">
+                    上傳跑步紀錄 <ArrowRight size={18} />
+                  </Link>
+                  <Link
+                    href="/training"
+                    className="btn-base btn-ghost btn-slab"
+                  >
+                    報名訓練場次
+                  </Link>
+                </>
+              ) : (
+                <>
+                  <Link href="/signup" className="btn-base btn-vital btn-slab">
+                    免費註冊會員 <ArrowRight size={18} />
+                  </Link>
+                  <Link href="/login" className="btn-base btn-ghost btn-slab">
+                    我已有帳號
+                  </Link>
+                </>
+              )}
+            </div>
           </div>
         </div>
       </section>
     </>
-  );
-}
-
-function StatBlock({
-  value,
-  unit,
-  label,
-}: {
-  value: string;
-  unit: string;
-  label: string;
-}) {
-  return (
-    <div className="px-2 py-4 text-center md:text-left">
-      <div className="flex items-baseline justify-center gap-1.5 md:justify-start">
-        <span className="text-4xl font-black tracking-tight md:text-5xl">
-          {value}
-        </span>
-        <span className="text-sm font-semibold text-vital">{unit}</span>
-      </div>
-      <div className="mt-2 text-xs uppercase tracking-[0.18em] text-white/45">
-        {label}
-      </div>
-    </div>
   );
 }

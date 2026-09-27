@@ -10,7 +10,7 @@ export default async function SiteSettingsPage() {
     <div className="space-y-6">
       <div>
         <h2 className="text-2xl font-bold">網站設定</h2>
-        <p className="mt-2 text-sm text-white/55">
+        <p className="mt-2 text-sm text-white/75">
           調整品牌名稱、Logo、主色、字體與版面密度。所有修改會即時套用至全站，
           也可隨時「回復原廠設定」。
         </p>

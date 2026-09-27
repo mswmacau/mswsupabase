@@ -50,7 +50,11 @@ export function LoginForm({ next }: { next: string }) {
   return (
     <form onSubmit={onSubmit} className="space-y-5">
       {error && (
-        <div className="flex items-start gap-2.5 rounded-xl border border-red-500/40 bg-red-500/10 px-4 py-3 text-sm text-red-200">
+        <div
+          role="alert"
+          aria-live="polite"
+          className="slab flex items-start gap-2.5 border border-red-500/40 bg-red-500/10 px-4 py-3 text-sm text-red-200"
+        >
           <AlertCircle size={17} className="mt-0.5 shrink-0" />
           <span>{error}</span>
         </div>
@@ -86,7 +90,11 @@ export function LoginForm({ next }: { next: string }) {
         />
       </div>
 
-      <button type="submit" disabled={pending} className="btn-base btn-vital w-full">
+      <button
+        type="submit"
+        disabled={pending}
+        className="btn-base btn-vital btn-slab min-h-11 w-full"
+      >
         {pending ? (
           <>
             <Loader2 size={17} className="animate-spin" /> 登入中…
@@ -98,9 +106,12 @@ export function LoginForm({ next }: { next: string }) {
         )}
       </button>
 
-      <p className="text-center text-sm text-white/50">
+      <p className="border-t border-[var(--line-fine)] pt-5 text-center text-sm text-white/70">
         還沒有帳號？{" "}
-        <Link href="/signup" className="font-semibold text-blue-300 hover:underline">
+        <Link
+          href="/signup"
+          className="font-semibold text-accent-blue hover:underline"
+        >
           立即註冊
         </Link>
       </p>

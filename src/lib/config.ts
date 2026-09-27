@@ -8,7 +8,32 @@ export const BRAND = {
     "MSW 街健館是澳門街頭健身社群平台。每週定期訓練、每月 300 公里跑步挑戰、積分與優惠券獎勵，讓訓練變成看得見的累積。",
   location: "澳門",
   email: "hello@mswstreetworkout.com",
-  instagram: "@msw.streetworkout",
+  instagram: "@msw_street_workout",
+  instagramUrl: "https://www.instagram.com/msw_street_workout",
+  /**
+   * 站主提供的品牌介紹，順序即為頁尾宣言的排版順序。
+   * 唯讀陣列：任何頁面都只能讀取，不能在執行期被 push / splice 改動。
+   */
+  intro: [
+    "首間以街頭健身為主題的訓練俱樂部",
+    "HYROX 官方認證訓練場館",
+    "Street Workout ｜ Calisthenics ｜ 斯巴達 ｜ HYROX",
+    "以積極正面態度面對所有困難",
+  ] as readonly string[],
+} as const;
+
+/**
+ * 首頁「關於我們／About」區塊文案（站主提供，用字不可改動）。
+ * lead：定位宣言（大字主敘述）／philosophy：訓練理念／cta：號召。
+ * 三段皆以完整段落存放，強調詞由頁面另行指定（不在這裡切段），
+ * 避免為了排版而動到任何一個字。
+ */
+export const ABOUT = {
+  eyebrow: "About / 關於我們",
+  lead: "我們是澳門首間以街頭健身（Street Workout）為主題的訓練俱樂部，同時亦是 HYROX官方認證訓練場館。",
+  philosophy:
+    "我們相信，健身不只是提升體能，更是一種生活態度。透過科學化訓練系統、功能性體能訓練、HYROX專項課程及街頭健身訓練，我們致力協助每一位會員挑戰自身極限，發掘更好的自己。",
+  cta: "無論你是健身新手、運動愛好者，還是準備挑戰 HYROX 賽事的運動員，我們都能為你提供專業指導及完善的訓練環境。",
 } as const;
 
 /** 積分與獎勵規則（預設方案） */

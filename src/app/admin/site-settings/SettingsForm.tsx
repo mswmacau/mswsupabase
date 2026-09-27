@@ -206,7 +206,7 @@ export function SettingsForm({ initialTheme }: { initialTheme: SiteTheme }) {
         </div>
       )}
       {error && (
-        <div className="rounded-xl border border-red-500/40 bg-red-500/10 px-4 py-3 text-sm text-red-200">
+        <div role="alert" aria-live="polite" className="rounded-xl border border-red-500/40 bg-red-500/10 px-4 py-3 text-sm text-red-200">
           {error}
         </div>
       )}
@@ -316,7 +316,7 @@ export function SettingsForm({ initialTheme }: { initialTheme: SiteTheme }) {
 
         {/* 顏色 */}
         <section>
-          <h3 className="mb-4 text-sm font-bold uppercase tracking-[0.18em] text-white/45">
+          <h3 className="mb-4 text-sm font-bold uppercase tracking-[0.18em] text-white/70">
             品牌顏色
           </h3>
           <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
@@ -333,7 +333,7 @@ export function SettingsForm({ initialTheme }: { initialTheme: SiteTheme }) {
 
         {/* 字體 */}
         <section>
-          <h3 className="mb-4 text-sm font-bold uppercase tracking-[0.18em] text-white/45">
+          <h3 className="mb-4 text-sm font-bold uppercase tracking-[0.18em] text-white/70">
             字體
           </h3>
           <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
@@ -432,7 +432,7 @@ export function SettingsForm({ initialTheme }: { initialTheme: SiteTheme }) {
           />
         </section>
 
-        <p className="text-xs leading-relaxed text-white/40">
+        <p className="text-xs leading-relaxed text-white/70">
           儲存後自己重整頁面即時看到；其他訪客最遲 60 秒後看到新設定。
         </p>
       </div>

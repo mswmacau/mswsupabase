@@ -13,15 +13,32 @@
 
 import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { AlertCircle, CheckCircle2, ImagePlus, Loader2, UploadCloud, X } from "lucide-react";
+import {
+  AlertCircle,
+  CheckCircle2,
+  ImagePlus,
+  Loader2,
+  UploadCloud,
+  X,
+} from "lucide-react";
 import { RULES } from "@/lib/config";
 import { currentMonth, monthLabel, recentMonths } from "@/lib/utils";
 import { uploadImageFile } from "@/lib/upload";
 import { postJson } from "@/lib/fetch-json";
 
+/** 上傳階段：讓進度有層次，而不是只有一個轉圈 */
+type Stage = "idle" | "upload" | "submit";
+
+const STAGE_TEXT: Record<Exclude<Stage, "idle">, { step: string; title: string }> = {
+  upload: { step: "Step 01 / 02", title: "壓縮並上傳截圖" },
+  submit: { step: "Step 02 / 02", title: "送出紀錄至後台" },
+};
+
 export function RunUploadForm() {
   const router = useRouter();
   const [pending, setPending] = useState(false);
+  const [stage, setStage] = useState<Stage>("idle");
+  const [slow, setSlow] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
   const [preview, setPreview] = useState<string | null>(null);
@@ -36,6 +53,13 @@ export function RunUploadForm() {
       if (preview) URL.revokeObjectURL(preview);
     };
   }, [preview]);
+
+  // 超過 3 秒改給文字說明，而不是讓使用者只看轉圈（重設在事件處理器裡做）
+  useEffect(() => {
+    if (!pending) return;
+    const t = setTimeout(() => setSlow(true), 3000);
+    return () => clearTimeout(t);
+  }, [pending]);
 
   async function onSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
@@ -58,11 +82,14 @@ export function RunUploadForm() {
     }
 
     setPending(true);
+    setSlow(false);
+    setStage("upload");
     try {
       // 1) 壓縮 → 直傳 Storage，回傳 image_path（失敗會拋出中文錯誤）
       const imagePath = await uploadImageFile(selectedFile, "run");
 
       // 2) 只把 path 以 JSON 送 API（不再送整張圖）
+      setStage("submit");
       const res = await postJson<{ ok: true; message?: string }>("/api/runs", {
         km,
         period_month: periodMonth,
@@ -82,6 +109,8 @@ export function RunUploadForm() {
       setError(err instanceof Error ? err.message : "提交失敗，請稍後再試。");
     } finally {
       setPending(false);
+      setSlow(false);
+      setStage("idle");
     }
   }
 
@@ -90,16 +119,68 @@ export function RunUploadForm() {
 
   return (
     <form ref={formRef} onSubmit={onSubmit} className="space-y-5">
+      {/* 錯誤：斜切徽章標頭 + 訊息，層次分明 */}
       {error && (
-        <div className="flex items-start gap-2.5 rounded-xl border border-red-500/40 bg-red-500/10 px-4 py-3 text-sm text-red-200">
-          <AlertCircle size={17} className="mt-0.5 shrink-0" />
-          <span>{error}</span>
+        <div
+          role="alert"
+          aria-live="polite"
+          className="slab border border-red-500/40 bg-red-500/10 px-4 py-3"
+        >
+          <div className="flex items-center gap-2 text-[11px] font-bold uppercase tracking-[0.18em] text-red-300">
+            <AlertCircle size={14} /> 提交失敗
+          </div>
+          <p className="mt-2 text-sm leading-relaxed text-red-200">{error}</p>
+          <p className="mt-2 text-xs text-red-200/70">
+            請修正後重新提交；若持續失敗請稍後再試。
+          </p>
         </div>
       )}
+
+      {/* 成功：斜切徽章標頭 + ledger 狀態列 */}
       {success && (
-        <div className="flex items-start gap-2.5 rounded-xl border border-emerald-500/40 bg-emerald-500/10 px-4 py-3 text-sm text-emerald-200">
-          <CheckCircle2 size={17} className="mt-0.5 shrink-0" />
-          <span>{success}</span>
+        <div
+          role="status"
+          aria-live="polite"
+          className="slab border border-emerald-500/40 bg-emerald-500/10 px-4 py-3"
+        >
+          <div className="flex items-center gap-2 text-[11px] font-bold uppercase tracking-[0.18em] text-emerald-300">
+            <CheckCircle2 size={14} /> 已送出
+          </div>
+          <p className="mt-2 text-sm leading-relaxed text-emerald-200">
+            {success}
+          </p>
+          <div className="mt-3 flex items-baseline justify-between gap-3 border-t border-emerald-500/25 pt-2 text-xs text-emerald-200/80">
+            <span>目前狀態</span>
+            <span className="stat-figure text-xs">待後台確認</span>
+          </div>
+        </div>
+      )}
+
+      {/* 載入：階段式進度，附文字說明 */}
+      {pending && (
+        <div
+          role="status"
+          aria-live="polite"
+          className="slab border border-cobalt/40 bg-cobalt/10 px-4 py-3"
+        >
+          <div className="flex items-center gap-2 text-[11px] font-bold uppercase tracking-[0.18em] text-blue-200">
+            <Loader2 size={14} className="animate-spin" />
+            {stage === "idle" ? "準備中" : STAGE_TEXT[stage].step}
+          </div>
+          <div className="mt-2 text-sm text-blue-100">
+            {stage === "idle" ? "正在準備檔案…" : STAGE_TEXT[stage].title}
+          </div>
+          <div className="meter mt-3">
+            <div
+              className="meter-fill"
+              style={{ width: stage === "submit" ? "88%" : "45%" }}
+            />
+          </div>
+          {slow && (
+            <p className="mt-2 text-xs text-blue-200/80">
+              照片較大或網路較慢時會需要多一點時間，請保持頁面開啟不要關閉。
+            </p>
+          )}
         </div>
       )}
 
@@ -168,41 +249,43 @@ export function RunUploadForm() {
         />
 
         {preview ? (
-          <div className="relative overflow-hidden rounded-xl border border-ink-line bg-black/30">
+          <div className="slab overflow-hidden border border-[var(--line-fine)] bg-black/30">
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img
               src={preview}
               alt="截圖預覽"
               className="max-h-64 w-full object-contain"
             />
-            <button
-              type="button"
-              onClick={() => {
-                setPreview(null);
-                setSelectedFile(null);
-                setFileName("");
-                if (fileRef.current) fileRef.current.value = "";
-              }}
-              className="absolute right-2 top-2 rounded-lg bg-black/70 p-1.5 text-white/80 transition hover:bg-black"
-              aria-label="移除圖片"
-            >
-              <X size={16} />
-            </button>
-            <div className="border-t border-ink-line px-3 py-2 text-xs text-white/50">
-              {fileName}
+            <div className="flex items-center justify-between gap-3 border-t border-[var(--line-fine)] px-3 py-2">
+              <span className="min-w-0 truncate text-xs text-white/70">
+                {fileName}
+              </span>
+              <button
+                type="button"
+                onClick={() => {
+                  setPreview(null);
+                  setSelectedFile(null);
+                  setFileName("");
+                  if (fileRef.current) fileRef.current.value = "";
+                }}
+                className="clip-slab inline-flex min-h-11 flex-none items-center gap-1 bg-white/5 px-3 text-xs text-white/80 transition hover:bg-white/10"
+                aria-label="移除圖片"
+              >
+                <X size={14} /> 移除
+              </button>
             </div>
           </div>
         ) : (
           <button
             type="button"
             onClick={() => fileRef.current?.click()}
-            className="flex w-full flex-col items-center gap-2 rounded-xl border border-dashed border-white/25 bg-black/20 px-4 py-9 text-center transition hover:border-cobalt-bright hover:bg-black/40"
+            className="slab flex w-full flex-col items-center gap-2 border border-dashed border-white/25 bg-black/20 px-4 py-9 text-center transition hover:border-cobalt-bright hover:bg-black/40"
           >
-            <ImagePlus size={28} className="text-white/50" />
+            <ImagePlus size={28} className="text-white/70" />
             <span className="text-sm font-semibold text-white/75">
               點擊上傳跑步 app 截圖
             </span>
-            <span className="text-xs text-white/40">
+            <span className="text-xs text-white/60">
               支援 JPG / PNG / WEBP，長邊超過 1600px 會自動壓縮；不支援 iPhone HEIC
             </span>
           </button>
@@ -222,7 +305,11 @@ export function RunUploadForm() {
         />
       </div>
 
-      <button type="submit" disabled={pending} className="btn-base btn-vital w-full">
+      <button
+        type="submit"
+        disabled={pending}
+        className="btn-base btn-vital btn-slab min-h-11 w-full"
+      >
         {pending ? (
           <>
             <Loader2 size={17} className="animate-spin" /> 上傳中…
@@ -234,7 +321,7 @@ export function RunUploadForm() {
         )}
       </button>
 
-      <p className="text-xs leading-relaxed text-white/40">
+      <p className="border-t border-[var(--line-fine)] pt-4 text-xs leading-relaxed text-white/60">
         提交後狀態為「待確認」，由管理員核對截圖與里程。確認後才會計入當月累積里程，
         每公里可獲得 {RULES.POINTS_PER_KM} 積分。
       </p>

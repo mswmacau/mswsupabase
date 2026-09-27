@@ -67,7 +67,7 @@ export function SessionForm() {
   return (
     <div className="space-y-4">
       {error && (
-        <div className="flex items-start gap-2.5 rounded-xl border border-red-500/40 bg-red-500/10 px-4 py-3 text-sm text-red-200">
+        <div role="alert" aria-live="polite" className="flex items-start gap-2.5 rounded-xl border border-red-500/40 bg-red-500/10 px-4 py-3 text-sm text-red-200">
           <AlertCircle size={17} className="mt-0.5 shrink-0" />
           <span>{error}</span>
         </div>

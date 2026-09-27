@@ -107,7 +107,7 @@ export function MonthlyIssueForm({
       <div className="overflow-x-auto rounded-xl border border-ink-line">
         <table className="w-full min-w-[560px] text-sm">
           <thead>
-            <tr className="border-b border-ink-line text-left text-xs uppercase tracking-[0.14em] text-white/40">
+            <tr className="border-b border-ink-line text-left text-xs uppercase tracking-[0.14em] text-white/70">
               <th className="w-12 py-3 pl-4">
                 <input
                   type="checkbox"
@@ -140,13 +140,13 @@ export function MonthlyIssueForm({
                 <td className="py-3.5 pr-4">
                   <div className="font-semibold">{r.name ?? "匿名會員"}</div>
                   {r.email && (
-                    <div className="text-xs text-white/40">{r.email}</div>
+                    <div className="text-xs text-white/70">{r.email}</div>
                   )}
                 </td>
                 <td className="py-3.5 pr-4 font-bold text-blue-300">
                   {r.total_km.toFixed(1)} km
                 </td>
-                <td className="py-3.5 pr-4 text-white/60">{r.runs}</td>
+                <td className="py-3.5 pr-4 text-white/75">{r.runs}</td>
                 <td className="py-3.5 pr-4">
                   {r.has_coupon ? (
                     <span className="rounded-full border border-emerald-500/40 bg-emerald-500/15 px-2.5 py-0.5 text-xs font-semibold text-emerald-300">

@@ -17,7 +17,7 @@ export default async function AdminCouponsPage() {
     <div className="space-y-8">
       <div>
         <h2 className="text-xl font-bold">優惠券核銷</h2>
-        <p className="mt-2 text-sm text-white/50">
+        <p className="mt-2 text-sm text-white/70">
           輸入會員出示的券碼即可標記為已使用。
         </p>
         <div className="mt-5 max-w-xl">
@@ -27,7 +27,7 @@ export default async function AdminCouponsPage() {
 
       <div className="rounded-2xl border border-ink-line bg-black/20 p-6">
         <h3 className="text-lg font-bold">手動發放優惠券</h3>
-        <p className="mt-1.5 text-sm text-white/50">
+        <p className="mt-1.5 text-sm text-white/70">
           不限於月度達標會員，可自由選人發券（例如活動獎勵、補發）。
         </p>
         <div className="mt-5">
@@ -41,7 +41,7 @@ export default async function AdminCouponsPage() {
           {coupons.length ? (
             <table className="w-full min-w-[640px] text-sm">
               <thead>
-                <tr className="border-b border-ink-line text-left text-xs uppercase tracking-[0.14em] text-white/40">
+                <tr className="border-b border-ink-line text-left text-xs uppercase tracking-[0.14em] text-white/70">
                   <th className="py-3 pl-4 pr-4">券碼</th>
                   <th className="py-3 pr-4">會員</th>
                   <th className="py-3 pr-4">名稱</th>
@@ -61,10 +61,10 @@ export default async function AdminCouponsPage() {
                         .profile?.display_name ?? "—"}
                     </td>
                     <td className="py-3.5 pr-4 text-white/70">{c.title}</td>
-                    <td className="py-3.5 pr-4 text-white/55">
+                    <td className="py-3.5 pr-4 text-white/75">
                       {c.month_awarded ?? "—"}
                     </td>
-                    <td className="py-3.5 pr-4 text-white/55">
+                    <td className="py-3.5 pr-4 text-white/75">
                       {formatDate(c.expires_at)}
                     </td>
                     <td className="py-3.5 pr-4">
@@ -75,7 +75,7 @@ export default async function AdminCouponsPage() {
               </tbody>
             </table>
           ) : (
-            <div className="px-4 py-12 text-center text-sm text-white/45">
+            <div className="px-4 py-12 text-center text-sm text-white/70">
               尚未發放任何優惠券。
             </div>
           )}

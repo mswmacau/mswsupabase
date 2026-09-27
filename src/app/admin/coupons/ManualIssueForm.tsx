@@ -99,7 +99,7 @@ export function ManualIssueForm({ members }: { members: Member[] }) {
             </ul>
           </div>
         ) : (
-          <div className="rounded-xl border border-dashed border-white/15 px-4 py-8 text-center text-sm text-white/45">
+          <div className="rounded-xl border border-dashed border-white/15 px-4 py-8 text-center text-sm text-white/70">
             尚無會員。
           </div>
         )}

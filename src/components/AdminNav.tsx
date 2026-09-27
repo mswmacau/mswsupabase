@@ -41,7 +41,7 @@ export function AdminNav() {
             className={`flex shrink-0 items-center gap-2.5 rounded-xl px-4 py-2.5 text-sm font-semibold transition ${
               active
                 ? "bg-vital text-white"
-                : "text-white/60 hover:bg-white/5 hover:text-white"
+                : "text-white/75 hover:bg-white/5 hover:text-white"
             }`}
           >
             <Icon size={17} />

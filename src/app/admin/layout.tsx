@@ -20,7 +20,7 @@ export default async function AdminLayout({
         <div className="container-msw max-w-lg text-center">
           <ShieldAlert size={40} className="mx-auto text-amber-400" />
           <h1 className="mt-5 text-2xl font-bold">後台尚未啟用</h1>
-          <p className="mt-3 text-sm leading-relaxed text-white/55">
+          <p className="mt-3 text-sm leading-relaxed text-white/75">
             請先在 <code className="font-mono">.env.local</code> 填入 Supabase 的
             URL 與 anon key，並執行{" "}
             <code className="font-mono">supabase/schema.sql</code>
@@ -52,9 +52,9 @@ where id = (select id from auth.users where email = 'you@example.com');`}
     return (
       <section className="pt-32 pb-20 text-center">
         <div className="container-msw max-w-md">
-          <ShieldAlert size={40} className="mx-auto text-vital" />
+          <ShieldAlert size={40} className="mx-auto text-vital-bright" />
           <h1 className="mt-5 text-2xl font-bold">權限不足</h1>
-          <p className="mt-3 text-sm leading-relaxed text-white/55">
+          <p className="mt-3 text-sm leading-relaxed text-white/75">
             目前登入的是「{profile.display_name ?? "會員"}」，此帳號不是管理員。
             請登出後改用管理員帳號登入，或在 Supabase 把這個帳號的 role 設為 admin。
           </p>
