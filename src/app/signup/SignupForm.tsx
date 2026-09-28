@@ -6,11 +6,65 @@ import { useRouter } from "next/navigation";
 import { AlertCircle, ArrowRight, CheckCircle2, Loader2, MailCheck } from "lucide-react";
 import { RULES } from "@/lib/config";
 
+/** F-S1：密碼最短長度（同 /api/auth/signup 嘅檢查一致） */
+const PASSWORD_MIN = 6;
+const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+type FieldKey = "email" | "password" | "confirm_password";
+type FieldErrors = Partial<Record<FieldKey, string>>;
+
+/** 電郵格式、密碼長度、兩次密碼一致（錯誤文案沿用既有 API 訊息） */
+function validateFields(values: {
+  email: string;
+  password: string;
+  confirmPassword: string;
+}): FieldErrors {
+  const found: FieldErrors = {};
+
+  if (!EMAIL_PATTERN.test(values.email.trim())) {
+    found.email = "請輸入有效的電郵地址。";
+  }
+  if (values.password.length < PASSWORD_MIN) {
+    found.password = "密碼至少需要 6 個字元。";
+  }
+  if (values.confirmPassword !== values.password) {
+    found.confirm_password = "兩次輸入的密碼不一致，請重新輸入。";
+  }
+
+  return found;
+}
+
 export function SignupForm() {
   const router = useRouter();
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [done, setDone] = useState<string | null>(null);
+  /** F-S1：blur 即時驗證嘅欄位錯誤 */
+  const [fieldErrors, setFieldErrors] = useState<FieldErrors>({});
+
+  /** 直接用 FormData 讀現有欄位，唔改 input 嘅受控／非受控行為 */
+  function readFields(form: HTMLFormElement) {
+    const fd = new FormData(form);
+    return {
+      email: String(fd.get("email") ?? ""),
+      password: String(fd.get("password") ?? ""),
+      confirmPassword: String(fd.get("confirm_password") ?? ""),
+    };
+  }
+
+  /** blur 時只更新嗰個欄位（避免仲未填 confirm 就彈錯） */
+  function handleBlur(e: React.FocusEvent<HTMLFormElement>) {
+    const name = (e.target as HTMLElement).getAttribute("name");
+    if (
+      name !== "email" &&
+      name !== "password" &&
+      name !== "confirm_password"
+    ) {
+      return;
+    }
+    const found = validateFields(readFields(e.currentTarget));
+    setFieldErrors((prev) => ({ ...prev, [name]: found[name] }));
+  }
 
   async function onSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
@@ -22,6 +76,21 @@ export function SignupForm() {
     const confirmPassword = String(fd.get("confirm_password") ?? "");
     if (password !== confirmPassword) {
       setError("兩次輸入的密碼不一致，請重新輸入。");
+      setFieldErrors((prev) => ({
+        ...prev,
+        confirm_password: "兩次輸入的密碼不一致，請重新輸入。",
+      }));
+      return;
+    }
+
+    // F-S1：送出前先跑一次即時驗證，有錯就唔好送 request
+    const found = validateFields({
+      email: String(fd.get("email") ?? ""),
+      password,
+      confirmPassword,
+    });
+    if (Object.keys(found).length > 0) {
+      setFieldErrors(found);
       return;
     }
 
@@ -90,7 +159,7 @@ export function SignupForm() {
   }
 
   return (
-    <form onSubmit={onSubmit} className="space-y-5">
+    <form onSubmit={onSubmit} onBlur={handleBlur} className="space-y-5">
       {error && (
         <div
           role="alert"
@@ -126,8 +195,15 @@ export function SignupForm() {
           autoComplete="email"
           required
           placeholder="you@example.com"
-          className="field"
+          aria-invalid={fieldErrors.email ? true : undefined}
+          aria-describedby={fieldErrors.email ? "email-error" : undefined}
+          className={`field ${fieldErrors.email ? "border-red-500/70" : ""}`}
         />
+        {fieldErrors.email && (
+          <p id="email-error" className="mt-1.5 text-xs text-red-300">
+            {fieldErrors.email}
+          </p>
+        )}
       </div>
 
       <div>
@@ -140,10 +216,17 @@ export function SignupForm() {
           type="password"
           autoComplete="new-password"
           required
-          minLength={6}
+          minLength={PASSWORD_MIN}
           placeholder="••••••••"
-          className="field"
+          aria-invalid={fieldErrors.password ? true : undefined}
+          aria-describedby={fieldErrors.password ? "password-error" : undefined}
+          className={`field ${fieldErrors.password ? "border-red-500/70" : ""}`}
         />
+        {fieldErrors.password && (
+          <p id="password-error" className="mt-1.5 text-xs text-red-300">
+            {fieldErrors.password}
+          </p>
+        )}
       </div>
 
       <div>
@@ -157,9 +240,24 @@ export function SignupForm() {
           autoComplete="new-password"
           required
           placeholder="••••••••"
-          aria-describedby="confirm-password-hint"
-          className="field"
+          aria-describedby={
+            fieldErrors.confirm_password
+              ? "confirm-password-hint confirm-password-error"
+              : "confirm-password-hint"
+          }
+          aria-invalid={fieldErrors.confirm_password ? true : undefined}
+          className={`field ${
+            fieldErrors.confirm_password ? "border-red-500/70" : ""
+          }`}
         />
+        {fieldErrors.confirm_password && (
+          <p
+            id="confirm-password-error"
+            className="mt-1.5 text-xs text-red-300"
+          >
+            {fieldErrors.confirm_password}
+          </p>
+        )}
         <p id="confirm-password-hint" className="mt-1.5 text-xs text-white/55">
           請再次輸入相同密碼，兩次不一致時無法提交。
         </p>

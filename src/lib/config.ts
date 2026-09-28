@@ -106,4 +106,5 @@ export const NAV_LINKS = [
   { href: "/training", label: "定期訓練" },
   { href: "/run", label: "月度跑步挑戰" },
   { href: "/leaderboard", label: "排行榜" },
+  { href: "/about", label: "關於我們" },
 ] as const;

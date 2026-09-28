@@ -14,9 +14,16 @@ import { getCurrentProfile } from "@/lib/supabase/server";
 import { getUserMonthKm, getUserSubmissions } from "@/lib/queries";
 import { RULES } from "@/lib/config";
 import { currentMonth, daysLeftInMonth, formatKm, monthLabel } from "@/lib/utils";
+import { CountUp } from "@/components/fx/CountUp";
+import { GoalCalculator } from "@/components/fx/GoalCalculator";
+import { GoalRoute } from "@/components/fx/GoalRoute";
 
 export const metadata = { title: "月度跑步挑戰" };
 export const dynamic = "force-dynamic";
+
+/** F-R1 拉桿範圍（Brief §2.4：每日 1–20 km），以 props 傳落 client component */
+const PER_DAY_MIN = 1;
+const PER_DAY_MAX = 20;
 
 export default async function RunPage() {
   const profile = await getCurrentProfile();
@@ -30,6 +37,22 @@ export default async function RunPage() {
   const goal = RULES.MONTHLY_GOAL_KM;
   const remaining = Math.max(0, goal - monthData.km);
   const pct = Math.round((monthData.km / goal) * 100);
+
+  /** 本月剩餘天數（既有 daysLeftInMonth()，唔另計） */
+  const daysLeft = daysLeftInMonth();
+
+  /**
+   * F-R1 拉桿初始值：剩餘里程 ÷ 剩餘天數，夾喺拉桿範圍內。
+   * 全部由現有數字推導，無 hardcode；喺 server 計好傳落去，
+   * 所以 SSR 同 hydration 會係同一個值（唔會 mismatch）。
+   */
+  const suggestedPerDay =
+    remaining > 0
+      ? Math.min(
+          PER_DAY_MAX,
+          Math.max(PER_DAY_MIN, Math.ceil(remaining / Math.max(1, daysLeft)))
+        )
+      : PER_DAY_MIN;
 
   /** 上傳流程：節奏式排版（01–04），不使用小卡片堆砌 */
   const STEPS = [
@@ -95,8 +118,9 @@ export default async function RunPage() {
                     {monthLabel(month)} 累積里程
                   </div>
                   <div className="mt-3 flex items-baseline gap-2">
+                    {/* F-G2：累積里程用 CountUp（另一個 component，只讀用） */}
                     <span className="stat-figure text-5xl text-accent-blue md:text-6xl">
-                      {formatKm(monthData.km)}
+                      <CountUp value={monthData.km} />
                     </span>
                     <span className="text-lg font-semibold text-white/60">
                       / {goal} km
@@ -105,7 +129,7 @@ export default async function RunPage() {
                 </div>
                 <div className="text-right text-sm text-white/75">
                   <div className="stat-figure text-sm">
-                    {daysLeftInMonth()}{" "}
+                    {daysLeft}{" "}
                     <span className="font-sans text-xs font-medium text-white/55">
                       天 · 本月剩餘
                     </span>
@@ -149,6 +173,21 @@ export default async function RunPage() {
                   icon={<CalendarClock size={16} />}
                   title="月底結算"
                   desc="發放電子優惠券"
+                />
+              </div>
+
+              {/* F-R2：0 → goal 路線圖 */}
+              <GoalRoute km={monthData.km} goal={goal} />
+
+              {/* F-R1：達標計算機（純前端，放喺進度卡下面） */}
+              <div className="mt-8 border-t border-white/10 pt-7">
+                <GoalCalculator
+                  currentKm={monthData.km}
+                  goalKm={goal}
+                  daysLeft={daysLeft}
+                  initialPerDay={suggestedPerDay}
+                  minPerDay={PER_DAY_MIN}
+                  maxPerDay={PER_DAY_MAX}
                 />
               </div>
             </div>

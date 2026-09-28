@@ -20,6 +20,12 @@ export interface Event {
   registration_note: string | null;
   cover_path: string | null;
   status: EventStatus;
+  /**
+   * 活動分類（訓練 / 跑步 / 比賽 / 聚會）。
+   * F-E2 階段一：只做 UI 準備。DB 尚未建立此欄位，故為 optional，
+   * 現有 `.select("*")` 查詢唔使改、唔會影響既有資料。
+   */
+  category?: string | null;
   sort_order: number;
   created_by: string | null;
   created_at: string;

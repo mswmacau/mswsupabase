@@ -11,7 +11,7 @@ import { RULES } from "@/lib/config";
 import { currentMonth, monthLabel } from "@/lib/utils";
 import { getCurrentProfile } from "@/lib/supabase/server";
 import { getCachedPublishedEvents } from "@/lib/queries";
-import { EventCard } from "@/components/EventCard";
+import { EventCalendar } from "@/components/fx/EventCalendar";
 
 export const metadata = { title: "活動總覽" };
 export const dynamic = "force-dynamic";
@@ -189,24 +189,8 @@ export default async function EventsPage() {
       </section>
 
       {events.length > 0 ? (
-        /* ============ 已發佈活動：編輯式大卡網格，錯位入場 ============ */
-        <section className="container-msw section-pad">
-          <div className="flex flex-wrap items-end justify-between gap-6 border-b border-white/10 pb-8">
-            <div>
-              <span className="eyebrow">Published Events</span>
-              <h2 className="display-xl mt-5">最新活動</h2>
-            </div>
-            <span className="text-[11px] font-semibold uppercase tracking-[0.22em] text-white/45">
-              {String(events.length).padStart(2, "0")} Events
-            </span>
-          </div>
-
-          <div className="stagger mt-12 grid gap-6 md:grid-cols-2 lg:grid-cols-3">
-            {events.map((e) => (
-              <EventCard key={e.id} event={e} />
-            ))}
-          </div>
-        </section>
+        /* ============ 已發佈活動：F-E1 列表 / 月曆 切換（預設 = 列表） ============ */
+        <EventCalendar events={events} />
       ) : (
         <>
           {/* ====== 常設兩條主線：不對稱 Bento（7/5 分欄，佐欄下沉） ====== */}

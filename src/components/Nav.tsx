@@ -6,6 +6,7 @@ import { usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
 import { ChevronDown, Shield, Ticket, User } from "lucide-react";
 import { BRAND, NAV_LINKS } from "@/lib/config";
+import { useSmartNav } from "./fx/useSmartNav";
 import { MobileNav } from "./MobileNav";
 import { LogoutButton } from "./LogoutButton";
 
@@ -33,6 +34,8 @@ export function Nav({
   brandNameEn = BRAND.nameEn,
 }: Props) {
   const [scrolled, setScrolled] = useState(false);
+  // F-G1：向下碌收起、向上碌／碌返頂部重現（reduced-motion 時恆為 false）
+  const hidden = useSmartNav();
   // 以「開啟時的路徑」推導選單狀態：換頁後自動關閉，不需要在 effect 裡 setState
   const [menuOpenPath, setMenuOpenPath] = useState<string | null>(null);
   const pathname = usePathname();
@@ -50,6 +53,8 @@ export function Nav({
   return (
     <header
       className={`fixed inset-x-0 top-0 z-50 border-b transition-all duration-300 ${
+        hidden ? "-translate-y-full" : "translate-y-0"
+      } ${
         scrolled
           ? "glass"
           : "border-b-transparent bg-gradient-to-b from-black/70 to-transparent backdrop-blur-[14px] backdrop-saturate-[130%]"

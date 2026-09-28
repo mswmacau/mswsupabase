@@ -140,6 +140,13 @@ export function Footer({
                 {l.label}
               </Link>
             ))}
+            {/* F-G3：站主要求額外加嘅獨立連結（內部連結，唔開新視窗） */}
+            <Link
+              href="/about"
+              className="inline-flex min-h-11 items-center text-sm font-semibold text-white/75 transition hover:text-vital-bright"
+            >
+              聯絡我們
+            </Link>
           </div>
 
           <div className="flex flex-wrap items-center gap-x-7 gap-y-2 md:border-l md:border-[var(--line-fine)] md:pl-7">

@@ -3,6 +3,8 @@ import { ArrowRight, CalendarDays, Clock, MapPin, Users } from "lucide-react";
 import { getCurrentProfile } from "@/lib/supabase/server";
 import { getCachedAllSessions, getUserCheckins } from "@/lib/queries";
 import { SessionAction } from "@/components/SessionAction";
+import { NextSessionCard } from "@/components/fx/NextSessionCard";
+import { SessionFilter } from "@/components/fx/SessionFilter";
 import { BRAND, RULES } from "@/lib/config";
 import { formatDate, weekdayLabel } from "@/lib/utils";
 import type { TrainingSession } from "@/lib/types";
@@ -184,6 +186,9 @@ export default async function TrainingPage() {
 
       {/* ============ 近期場次：標題 sticky，內容滾動覆蓋 ============ */}
       <section className="container-msw section-pad">
+        {/* F-T1 / F-T2：下場訓練倒數卡（無場次時完全唔 render） */}
+        {upcoming.length > 0 && <NextSessionCard session={upcoming[0]} />}
+
         <div className="grid gap-12 lg:grid-cols-12">
           {/* 左欄：sticky，隨右側內容滾動而停留在畫面中 */}
           <div className="lg:col-span-4">
@@ -209,16 +214,21 @@ export default async function TrainingPage() {
           {/* 右欄：場次網格，錯位入場 */}
           <div className="lg:col-span-8">
             {upcoming.length ? (
-              <div className="stagger grid gap-5 sm:grid-cols-2">
-                {upcoming.map((s) => (
-                  <SessionCard
-                    key={s.id}
-                    session={s}
-                    myStatus={myMap.get(s.id) ?? null}
-                    isLoggedIn={Boolean(profile)}
-                  />
-                ))}
-              </div>
+              // F-T3：月份篩選；SessionCard 原封不動，只係喺 client 端搬到 SessionFilter 內 render
+              <SessionFilter
+                items={upcoming.map((s) => ({
+                  id: s.id,
+                  sessionDate: s.session_date,
+                  card: (
+                    <SessionCard
+                      key={s.id}
+                      session={s}
+                      myStatus={myMap.get(s.id) ?? null}
+                      isLoggedIn={Boolean(profile)}
+                    />
+                  ),
+                }))}
+              />
             ) : (
               <div className="border-y border-white/10 px-6 py-16 text-center">
                 <CalendarDays size={30} className="mx-auto text-white/45" />
