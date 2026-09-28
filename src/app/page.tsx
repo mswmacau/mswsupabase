@@ -1,3 +1,4 @@
+import type { CSSProperties } from "react";
 import Link from "next/link";
 import {
   ArrowRight,
@@ -22,10 +23,37 @@ import { currentMonth, formatKm, monthLabel, weekdayLabel } from "@/lib/utils";
 import { isSupabaseConfigured } from "@/lib/supabase/env";
 import { getCurrentProfile } from "@/lib/supabase/server";
 
+/* ===== 首頁動效（只喺首頁掛載，唔影響其他頁） ===== */
+import "./home-fx.css";
+import { ScrollProgress } from "@/components/fx/home/ScrollProgress";
+import { BackToTop } from "@/components/fx/home/BackToTop";
+import { RevealHome } from "@/components/fx/home/RevealHome";
+import { MarqueeBoost } from "@/components/fx/home/MarqueeBoost";
+import { CursorFx } from "@/components/fx/home/CursorFx";
+import { HeroSpotlight } from "@/components/fx/home/HeroSpotlight";
+import { HoverFx } from "@/components/fx/home/HoverFx";
+import { ScrubText } from "@/components/fx/home/ScrubText";
+import { DriftWord } from "@/components/fx/home/DriftWord";
+import { StatCountUp } from "@/components/fx/home/StatCountUp";
+import { Countdown } from "@/components/fx/home/Countdown";
+
 export const dynamic = "force-dynamic";
 
 /** 訓練開始時間（"20:00 – 21:00" → "20:00"），Hero / Bento 大字用 */
-const TRAINING_START = RULES.TRAINING_TIME.split("–")[0].trim();
+const TRAINING_START = (RULES.TRAINING_TIME.split("–")[0] ?? "").trim();
+
+/**
+ * H-09 倒數目標時間：由 TRAINING_TIME 反推小時／分鐘，
+ * 改 config 嘅訓練時間就會跟住改，唔使改元件。
+ * 用 split(":") 而唔係 slice(3,5) 硬切：config 若寫 "9:30"（得 4 個字元）
+ * 硬切會切錯，split 先至穩。
+ */
+const [TRAINING_HOUR_RAW, TRAINING_MINUTE_RAW] = TRAINING_START.split(":");
+const TRAINING_HOUR = Number.parseInt(TRAINING_HOUR_RAW ?? "", 10) || 20;
+const TRAINING_MINUTE = Number.parseInt(TRAINING_MINUTE_RAW ?? "", 10) || 0;
+
+/** H-15 背景漂移大字：用既有品牌字串做裝飾（aria-hidden，唔新增文案） */
+const DRIFT_TEXT = `${BRAND.nameEn} ・ ${BRAND.nameEn}`;
 
 const MARQUEE_ITEMS = [
   "Street Workout",
@@ -76,6 +104,14 @@ const DISCIPLINE_SPANS = [
   "lg:col-span-5",
 ];
 
+/**
+ * H-03 reveal 交錯延遲。
+ * 純 CSS 變數、server 端就輸出，唔涉及任何 client state，所以冇 hydration 風險。
+ */
+function fxDelay(seconds: number): CSSProperties {
+  return { "--fx-d": `${seconds}s` } as CSSProperties;
+}
+
 export default async function HomePage() {
   const month = currentMonth();
   const [stats, sessions, leaders, profile, theme] = await Promise.all([
@@ -117,8 +153,20 @@ export default async function HomePage() {
 
   return (
     <>
+      {/* ===== 首頁動效：純 client 掛載點，唔改變任何既有版面與文案 ===== */}
+      <ScrollProgress />
+      <RevealHome />
+      <MarqueeBoost />
+      <HoverFx />
+      <HeroSpotlight />
+      <CursorFx />
+      <BackToTop />
+
       {/* ============ HERO：宣言式超大排版 ============ */}
-      <section className="relative overflow-hidden border-b border-ink-line">
+      <section
+        className="relative overflow-hidden border-b border-ink-line"
+        data-fx-hero
+      >
         {heroBgUrl && (
           <>
             <div
@@ -144,6 +192,10 @@ export default async function HomePage() {
         {/* 左下用幾何色塊代替第二顆光暈，避免左右對稱 */}
         <div className="clip-notch pointer-events-none absolute -bottom-10 -left-20 h-72 w-72 bg-vital/10" />
 
+        {/* H-17 hero 滑鼠聚光燈：--fx-mx / --fx-my 由 HeroSpotlight 寫入，
+            冇 JS 時用 CSS 預設嘅 72% / 22% 靜態光暈 */}
+        <div className="fx-spot" aria-hidden />
+
         {/* 手工質感：細網格 + 噪點 */}
         <div className="grid-lines absolute inset-0" />
         <div className="noise-overlay" />
@@ -156,9 +208,15 @@ export default async function HomePage() {
             </div>
 
             <div className="lg:pl-14">
-              <span className="eyebrow">Macau Street Workout</span>
+              <span className="eyebrow" data-fx-reveal style={fxDelay(0.05)}>
+                Macau Street Workout
+              </span>
 
-              <h1 className="mt-6 lg:-ml-[3vw] lg:w-[112%]">
+              <h1
+                className="mt-6 lg:-ml-[3vw] lg:w-[112%]"
+                data-fx-reveal
+                style={fxDelay(0.18)}
+              >
                 <span className="display-hero block text-white">MSW</span>
                 <span className="relative mt-1 block">
                   {/* 錯位描邊副本：純裝飾 */}
@@ -175,7 +233,11 @@ export default async function HomePage() {
               </h1>
 
               <div className="mt-12 grid gap-10 lg:grid-cols-12 lg:gap-8">
-                <p className="text-base leading-relaxed text-white/70 sm:text-lg lg:col-span-5">
+                <p
+                  className="text-base leading-relaxed text-white/70 sm:text-lg lg:col-span-5"
+                  data-fx-reveal
+                  style={fxDelay(0.34)}
+                >
                   {BRAND.tagline}。每週一晚固定訓練、每月{" "}
                   <span className="font-semibold text-white">
                     {RULES.MONTHLY_GOAL_KM}
@@ -183,19 +245,27 @@ export default async function HomePage() {
                   公里跑步挑戰，每一次汗水都換算成積分與專屬優惠券。
                 </p>
 
-                <div className="lg:col-span-5 lg:col-start-8 lg:border-l lg:border-white/10 lg:pl-8">
+                <div
+                  className="lg:col-span-5 lg:col-start-8 lg:border-l lg:border-white/10 lg:pl-8"
+                  data-fx-reveal
+                  style={fxDelay(0.48)}
+                >
                   <div className="flex flex-wrap items-center gap-4">
                     {isLoggedIn ? (
                       <>
                         <Link
                           href="/dashboard"
                           className="btn-base btn-vital btn-slab"
+                          data-fx-sheen
+                          data-fx-magnet
                         >
                           我的帳戶 <ArrowRight size={18} />
                         </Link>
                         <Link
                           href="/run"
                           className="btn-base btn-ghost btn-slab"
+                          data-fx-sheen
+                          data-fx-magnet
                         >
                           上傳跑步紀錄
                         </Link>
@@ -205,12 +275,16 @@ export default async function HomePage() {
                         <Link
                           href="/signup"
                           className="btn-base btn-vital btn-slab"
+                          data-fx-sheen
+                          data-fx-magnet
                         >
                           立即加入會員 <ArrowRight size={18} />
                         </Link>
                         <Link
                           href="/events"
                           className="btn-base btn-ghost btn-slab"
+                          data-fx-sheen
+                          data-fx-magnet
                         >
                           查看活動
                         </Link>
@@ -233,6 +307,14 @@ export default async function HomePage() {
                           {weekdayLabel(nextSession.session_date)}）{" "}
                           {RULES.TRAINING_TIME}
                         </span>
+                      </div>
+                      {/* H-09 倒數到下個週一訓練時間（首次 render 係 "--"，mount 後先計） */}
+                      <div className="mt-2 text-sm text-white/70">
+                        倒數{" "}
+                        <Countdown
+                          hour={TRAINING_HOUR}
+                          minute={TRAINING_MINUTE}
+                        />
                       </div>
                       <Link
                         href="/training"
@@ -258,7 +340,8 @@ export default async function HomePage() {
         {/* 跑馬燈：細邊框上下包夾 */}
         <div className="relative z-10 border-y border-white/10 py-3">
           <div className="marquee" aria-hidden>
-            <div className="marquee-track">
+            {/* H-10：data-fx-marquee 會由 MarqueeBoost 接管（含捲動加速） */}
+            <div className="marquee-track" data-fx-marquee>
               {[0, 1].map((copy) => (
                 <div key={copy} className="flex shrink-0 items-center">
                   {MARQUEE_ITEMS.map((w) => (
@@ -278,8 +361,13 @@ export default async function HomePage() {
       </section>
 
       {/* ============ 累積數據：大數字錯位，不用卡片 ============ */}
-      <section className="relative border-b border-ink-line bg-ink-soft">
+      <section
+        className="relative overflow-hidden border-b border-ink-line bg-ink-soft"
+        data-fx-drift-scope
+      >
         <div className="grid-lines absolute inset-0" />
+        {/* H-15 背景漂移大字（純裝飾，aria-hidden） */}
+        <DriftWord text={DRIFT_TEXT} />
         <div className="container-msw relative">
           <div className="grid grid-cols-2 gap-y-12 py-14 md:py-20 lg:grid-cols-4">
             {statItems.map((s, i) => (
@@ -288,15 +376,17 @@ export default async function HomePage() {
                 className={`px-5 ${i > 0 ? "md:border-l md:border-white/10" : ""} ${
                   i % 2 === 1 ? "lg:mt-12" : ""
                 } ${i === 2 ? "lg:mt-6" : ""}`}
+                data-fx-reveal
+                style={fxDelay(0.06 * i)}
               >
                 <div className="flex items-start gap-2">
-                  <span
+                  {/* H-08 CountUp：終值同原本字串完全一致 */}
+                  <StatCountUp
+                    text={s.value}
                     className={`stat-figure text-5xl leading-none md:text-6xl lg:text-7xl ${
                       s.accent ? "text-vital-bright" : "text-white"
                     }`}
-                  >
-                    {s.value}
-                  </span>
+                  />
                   <span className="text-accent-blue mt-2 text-[11px] font-semibold uppercase tracking-[0.22em]">
                     {s.unit}
                   </span>
@@ -316,7 +406,10 @@ export default async function HomePage() {
 
       {/* ============ 兩大核心活動：不對稱 Bento ============ */}
       <section className="container-msw section-pad">
-        <div className="flex flex-wrap items-end justify-between gap-6 border-b border-white/10 pb-8">
+        <div
+          className="flex flex-wrap items-end justify-between gap-6 border-b border-white/10 pb-8"
+          data-fx-reveal
+        >
           <div>
             <span className="eyebrow">Core Programs</span>
             <h2 className="display-xl mt-5">兩大核心活動</h2>
@@ -328,7 +421,12 @@ export default async function HomePage() {
 
         <div className="mt-14 grid gap-8 lg:grid-cols-12">
           {/* 01 定期訓練：7/12，斜切角 */}
-          <article className="clip-notch group relative overflow-hidden border border-white/10 bg-ink-soft p-8 lg:col-span-7">
+          <article
+            className="clip-notch group relative overflow-hidden border border-white/10 bg-ink-soft p-8 lg:col-span-7"
+            data-fx-reveal
+            data-fx-tilt
+            style={fxDelay(0.1)}
+          >
             <div className="pointer-events-none absolute -right-20 -top-20 h-56 w-56 rounded-full bg-cobalt/25 blur-2xl transition-transform duration-500 group-hover:-translate-x-4 group-hover:translate-y-4" />
             <div className="relative">
               <div className="flex items-center justify-between gap-4">
@@ -383,6 +481,8 @@ export default async function HomePage() {
               <Link
                 href="/training"
                 className="btn-base btn-cobalt btn-slab mt-8"
+                data-fx-sheen
+                data-fx-magnet
               >
                 查看訓練場次 <ArrowRight size={17} />
               </Link>
@@ -390,7 +490,12 @@ export default async function HomePage() {
           </article>
 
           {/* 02 月度跑步：5/12，下沉錯位，透明底 + 上粗線 */}
-          <article className="group relative border-t-2 border-vital bg-transparent p-8 lg:col-span-5 lg:mt-24">
+          <article
+            className="group relative border-t-2 border-vital bg-transparent p-8 lg:col-span-5 lg:mt-24"
+            data-fx-reveal
+            data-fx-tilt
+            style={fxDelay(0.2)}
+          >
             <div className="flex items-center justify-between gap-4">
               <span className="text-[11px] font-semibold uppercase tracking-[0.22em] text-white/50">
                 Program 02
@@ -432,7 +537,12 @@ export default async function HomePage() {
               ))}
             </ul>
 
-            <Link href="/run" className="btn-base btn-vital btn-slab mt-8">
+            <Link
+              href="/run"
+              className="btn-base btn-vital btn-slab mt-8"
+              data-fx-sheen
+              data-fx-magnet
+            >
               上傳跑步紀錄 <ArrowRight size={17} />
             </Link>
           </article>
@@ -443,11 +553,15 @@ export default async function HomePage() {
       <section className="relative border-y border-ink-line bg-ink-soft">
         <div className="noise-overlay" />
         <div className="container-msw section-pad relative">
-          <div className="flex flex-wrap items-end justify-between gap-6">
+          <div
+            className="flex flex-wrap items-end justify-between gap-6"
+            data-fx-reveal
+          >
             <div>
               <span className="eyebrow">Why MSW</span>
+              {/* H-13 逐字點亮 scrub（文字內容完全不變，只係拆成逐字 span） */}
               <h2 className="display-xl mt-5 max-w-2xl">
-                超越界限，讓訓練增加驅動力
+                <ScrubText text="超越界限，讓訓練增加驅動力" />
               </h2>
             </div>
             <span className="hidden text-[11px] font-semibold uppercase tracking-[0.22em] text-white/45 md:block">
@@ -456,10 +570,12 @@ export default async function HomePage() {
           </div>
 
           <div className="mt-12 border-t border-white/10">
-            {FEATURES.map((f) => (
+            {FEATURES.map((f, i) => (
               <div
                 key={f.no}
                 className="group -mx-4 border-b border-white/10 px-4 py-8 transition-colors hover:bg-white/[0.03] lg:grid lg:grid-cols-[7rem_1fr_1.1fr] lg:items-center lg:gap-10 lg:py-12"
+                data-fx-reveal
+                style={fxDelay(0.06 * i)}
               >
                 <div className="stat-figure text-5xl text-white/25 transition-colors group-hover:text-vital-bright lg:text-6xl">
                   {f.no}
@@ -478,7 +594,10 @@ export default async function HomePage() {
 
       {/* ============ 各類訓練：不規則 Bento 網格 ============ */}
       <section className="container-msw section-pad">
-        <div className="flex flex-wrap items-end justify-between gap-6 border-b border-white/10 pb-8">
+        <div
+          className="flex flex-wrap items-end justify-between gap-6 border-b border-white/10 pb-8"
+          data-fx-reveal
+        >
           <div>
             <span className="eyebrow">Disciplines</span>
             <h2 className="display-xl mt-5">各類訓練項目</h2>
@@ -495,6 +614,9 @@ export default async function HomePage() {
               className={`group relative overflow-hidden border border-white/10 bg-ink-soft/70 p-6 transition-colors hover:border-cobalt/60 hover:bg-ink-soft ${
                 DISCIPLINE_SPANS[i] ?? ""
               } ${i === 0 ? "lg:min-h-[260px]" : ""}`}
+              data-fx-reveal
+              data-fx-tilt
+              style={fxDelay(0.06 * i)}
             >
               <span className="stat-figure pointer-events-none absolute -top-2 right-4 text-6xl text-white/[0.07] transition-colors group-hover:text-vital/25 md:text-7xl">
                 {String(i + 1).padStart(2, "0")}
@@ -518,7 +640,7 @@ export default async function HomePage() {
       {/* ============ 本月排行榜 ============ */}
       <section className="relative border-t border-ink-line">
         <div className="container-msw section-pad grid gap-12 lg:grid-cols-12">
-          <div className="lg:col-span-5">
+          <div className="lg:col-span-5" data-fx-reveal>
             <span className="eyebrow">Leaderboard</span>
             <h2 className="display-xl mt-5">
               <span className="text-accent-blue block text-[0.4em] font-semibold uppercase tracking-[0.22em]">
@@ -532,12 +654,14 @@ export default async function HomePage() {
             <Link
               href="/leaderboard"
               className="btn-base btn-ghost btn-slab mt-8"
+              data-fx-sheen
+              data-fx-magnet
             >
               查看完整排行榜 <ArrowRight size={17} />
             </Link>
           </div>
 
-          <div className="lg:col-span-7">
+          <div className="lg:col-span-7" data-fx-reveal style={fxDelay(0.12)}>
             {leaders.length ? (
               <ol className="border-t border-white/10">
                 {leaders.map((l, i) => (
@@ -599,7 +723,7 @@ export default async function HomePage() {
 
         <div className="container-msw section-pad relative">
           <div className="grid gap-12 lg:grid-cols-12">
-            <div className="lg:col-span-8">
+            <div className="lg:col-span-8" data-fx-reveal>
               <span className="eyebrow">Join The Crew</span>
               <h2 className="mt-6 text-5xl font-black leading-[0.95] tracking-[-0.03em] sm:text-6xl lg:text-7xl">
                 {isLoggedIn ? "繼續把汗水換成積分" : "準備好開始累積了嗎？"}
@@ -611,25 +735,46 @@ export default async function HomePage() {
               </p>
             </div>
 
-            <div className="flex flex-col items-start gap-4 lg:col-span-4 lg:pt-20">
+            <div
+              className="flex flex-col items-start gap-4 lg:col-span-4 lg:pt-20"
+              data-fx-reveal
+              style={fxDelay(0.15)}
+            >
               {isLoggedIn ? (
                 <>
-                  <Link href="/run" className="btn-base btn-vital btn-slab">
+                  <Link
+                    href="/run"
+                    className="btn-base btn-vital btn-slab"
+                    data-fx-sheen
+                    data-fx-magnet
+                  >
                     上傳跑步紀錄 <ArrowRight size={18} />
                   </Link>
                   <Link
                     href="/training"
                     className="btn-base btn-ghost btn-slab"
+                    data-fx-sheen
+                    data-fx-magnet
                   >
                     報名訓練場次
                   </Link>
                 </>
               ) : (
                 <>
-                  <Link href="/signup" className="btn-base btn-vital btn-slab">
+                  <Link
+                    href="/signup"
+                    className="btn-base btn-vital btn-slab"
+                    data-fx-sheen
+                    data-fx-magnet
+                  >
                     免費註冊會員 <ArrowRight size={18} />
                   </Link>
-                  <Link href="/login" className="btn-base btn-ghost btn-slab">
+                  <Link
+                    href="/login"
+                    className="btn-base btn-ghost btn-slab"
+                    data-fx-sheen
+                    data-fx-magnet
+                  >
                     我已有帳號
                   </Link>
                 </>
