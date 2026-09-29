@@ -1,0 +1,314 @@
+/* =====================================================================
+ * MSW 首頁動效樣式（home-fx.css）
+ *
+ * 呢份檔只由 `src/app/page.tsx` 匯入，所以只會喺首頁路由載入，
+ * 唔會影響 training / leaderboard / run / events / about / signup。
+ * 顏色一律由 globals.css 嘅 --color-* 變數衍生，唔含硬編碼 hex。
+ *
+ * ⚠️ 共同鐵則（所有效果都要遵守）：
+ *   任何「位移／透明度」效果嘅初始態，都係 JS 喺 mount 成功後
+ *   先透過 <html>/<body> 上加嘅 class 打開。JS 冇跑、報錯、
+ *   或者瀏覽器唔支援 → class 唔存在 → 內容維持 100% 可見、零位移。
+ * ===================================================================== */
+
+/* ---------------------------------------------------------------------
+ * H-01 頂部閱讀進度條
+ * ------------------------------------------------------------------- */
+.fx-progress {
+  position: fixed;
+  top: 0;
+  left: 0;
+  height: 3px;
+  width: 0;
+  /* 壓喺 Nav（z-50）之上，但要俾行動選單遮罩（z-[60]）冚住，所以揀 55 */
+  z-index: 55;
+  pointer-events: none;
+  background: var(--color-vital-bright);
+}
+
+/* ---------------------------------------------------------------------
+ * H-03 reveal 進場
+ * 初始態（隱藏）只喺 JS 加咗 .fx-reveal-armed 之後先存在。
+ * ------------------------------------------------------------------- */
+html.fx-reveal-armed [data-fx-reveal] {
+  opacity: 0;
+  transform: translate3d(0, 36px, 0);
+}
+html.fx-reveal-armed [data-fx-reveal].fx-in {
+  opacity: 1;
+  transform: none;
+}
+/* ARMING 嗰一幀唔要 transition，避免「先淡出再淡入」嘅多餘抖動。
+   逐條寫 transition-property／duration／delay：交錯延遲只畀 opacity 同 transform，
+   顏色 hover 過渡維持 0.35s、唔會被 --fx-d 拖慢。 */
+html.fx-reveal-armed:not(.fx-reveal-arming) [data-fx-reveal] {
+  transition-property: opacity, transform, border-color, background-color;
+  transition-duration: 0.9s, 0.9s, 0.35s, 0.35s;
+  transition-timing-function: cubic-bezier(0.2, 0.6, 0.2, 1),
+    cubic-bezier(0.2, 0.6, 0.2, 1), ease, ease;
+  transition-delay: var(--fx-d, 0s), var(--fx-d, 0s), 0s, 0s;
+}
+
+/* ---------------------------------------------------------------------
+ * H-05 按鈕 hover 掃光（純 CSS，冇 JS 都唔影響任何嘢）
+ * ------------------------------------------------------------------- */
+[data-fx-sheen] {
+  position: relative;
+  overflow: hidden;
+}
+[data-fx-sheen]::after {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: -80%;
+  width: 45%;
+  height: 100%;
+  background: linear-gradient(
+    100deg,
+    transparent,
+    rgba(255, 255, 255, 0.4),
+    transparent
+  );
+  transform: skewX(-20deg);
+  transition: left 0.65s ease;
+  pointer-events: none;
+}
+[data-fx-sheen]:hover::after,
+[data-fx-sheen]:focus-visible::after {
+  left: 135%;
+}
+@media (hover: none) {
+  [data-fx-sheen]::after {
+    display: none;
+  }
+}
+
+/* ---------------------------------------------------------------------
+ * H-09 hero 倒數（等寬數字，避免每秒跳動時闊度抖動）
+ * ------------------------------------------------------------------- */
+.fx-countdown {
+  font-variant-numeric: tabular-nums;
+  font-weight: 700;
+  color: var(--color-white);
+}
+
+/* ---------------------------------------------------------------------
+ * H-10 marquee：JS 接管後關掉 CSS animation
+ * ------------------------------------------------------------------- */
+.marquee-track.fx-mq-js {
+  animation: none;
+}
+
+/* ---------------------------------------------------------------------
+ * H-11 磁吸 / H-12 3D tilt
+ * ------------------------------------------------------------------- */
+[data-fx-magnet],
+[data-fx-tilt] {
+  will-change: transform;
+}
+/* 留意：同時有 data-fx-reveal 嘅元素，進場嗰 0.9s 會贏（特異性較高），
+   HoverFx 會喺第一次 hover 用 inline transition 覆蓋返 0.35s。 */
+/* 呢條係冇 @layer 嘅 CSS，喺 Tailwind v4 會壓過 @layer utilities 嘅
+   `transition-colors`，所以要把 color 都寫返入去，
+   否則 Disciplines 卡片嘅文字顏色過渡會失效。 */
+[data-fx-tilt] {
+  transition:
+    transform 0.35s var(--ease-msw),
+    color 0.35s ease,
+    border-color 0.35s ease,
+    background-color 0.35s ease;
+}
+@media (hover: none) {
+  [data-fx-tilt] {
+    transition: none;
+  }
+}
+
+/* ---------------------------------------------------------------------
+ * H-13 逐字 scrub
+ * 未 armed 之前，所有字 opacity 都係 1（JS 冇跑 = 完整可讀）
+ * ------------------------------------------------------------------- */
+.fx-scrub {
+  display: inline;
+}
+.fx-scrub [data-fx-w] {
+  opacity: 1;
+}
+.fx-scrub.fx-scrub-armed [data-fx-w] {
+  opacity: 0.13;
+}
+/* 螢幕閱讀器用嘅原文（逐字 span 嗰份已經 aria-hidden） */
+.fx-sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+/* ---------------------------------------------------------------------
+ * H-15 背景漂移大字
+ * ------------------------------------------------------------------- */
+.fx-drift {
+  position: absolute;
+  top: 50%;
+  left: 0;
+  z-index: 0;
+  transform: translate3d(0, -50%, 0); /* 靜止態：JS 冇跑都唔會遮內容 */
+  font-size: 21vw;
+  font-weight: 900;
+  line-height: 1;
+  white-space: nowrap;
+  color: transparent;
+  -webkit-text-stroke: 1px color-mix(in srgb, var(--color-white) 8%, transparent);
+  pointer-events: none;
+  user-select: none;
+  will-change: transform;
+}
+@media (max-width: 760px) {
+  .fx-drift {
+    font-size: 34vw;
+  }
+}
+
+/* ---------------------------------------------------------------------
+ * H-16 自訂游標
+ * ------------------------------------------------------------------- */
+body.fx-has-cursor,
+body.fx-has-cursor a,
+body.fx-has-cursor button,
+body.fx-has-cursor .btn-base,
+body.fx-has-cursor [data-fx-magnet],
+body.fx-has-cursor [data-fx-tilt] {
+  cursor: none;
+}
+.fx-cdot {
+  position: fixed;
+  left: 0;
+  top: 0;
+  width: 8px;
+  height: 8px;
+  margin: -4px 0 0 -4px;
+  border-radius: 50%;
+  background: var(--color-vital-bright);
+  z-index: 200;
+  pointer-events: none;
+}
+.fx-cring {
+  position: fixed;
+  left: 0;
+  top: 0;
+  width: 38px;
+  height: 38px;
+  margin: -19px 0 0 -19px;
+  border: 1.5px solid color-mix(in srgb, var(--color-white) 45%, transparent);
+  border-radius: 50%;
+  z-index: 200;
+  pointer-events: none;
+  transition:
+    width 0.25s ease,
+    height 0.25s ease,
+    margin 0.25s ease,
+    border-color 0.25s ease,
+    background-color 0.25s ease;
+}
+.fx-cring.big {
+  width: 70px;
+  height: 70px;
+  margin: -35px 0 0 -35px;
+  border-color: var(--color-vital-bright);
+  background-color: color-mix(in srgb, var(--color-vital) 10%, transparent);
+}
+@media (hover: none) {
+  .fx-cdot,
+  .fx-cring {
+    display: none;
+  }
+}
+
+/* ---------------------------------------------------------------------
+ * H-17 hero 滑鼠聚光燈
+ * 冇 JS 時用預設 72% / 22% 嘅靜態光暈
+ * ------------------------------------------------------------------- */
+.fx-spot {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  background: radial-gradient(
+    560px circle at var(--fx-mx, 72%) var(--fx-my, 22%),
+    color-mix(in srgb, var(--color-vital) 16%, transparent),
+    transparent 62%
+  );
+}
+
+/* ---------------------------------------------------------------------
+ * H-19 回頂部鈕 + 環形進度
+ * SSR 固定輸出 data-fx-top="off"（隱形），JS 先會變 "on"
+ * ------------------------------------------------------------------- */
+.fx-top {
+  position: fixed;
+  right: 26px;
+  bottom: 26px;
+  width: 58px;
+  height: 58px;
+  border-radius: 50%;
+  border: 1px solid var(--line-fine-strong);
+  background: color-mix(in srgb, var(--color-ink) 82%, transparent);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  color: var(--color-white);
+  font-size: 18px;
+  /* 同上：要高過 Nav（z-50），但要俾行動選單遮罩（z-[60]）冚住 */
+  z-index: 55;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  transition:
+    opacity 0.3s ease,
+    transform 0.3s ease;
+}
+.fx-top:hover {
+  transform: scale(1.12);
+}
+.fx-top[data-fx-top="off"] {
+  opacity: 0;
+  pointer-events: none;
+  transform: translateY(10px) scale(0.9);
+}
+.fx-top svg {
+  position: absolute;
+  inset: 4px;
+  width: 50px;
+  height: 50px;
+}
+.fx-top span {
+  position: relative;
+  z-index: 1;
+}
+
+/* ---------------------------------------------------------------------
+ * 觸控裝置：呢啲效果一律唔會啟用（JS 亦唔會 mount），CSS 再兜一層底
+ * ------------------------------------------------------------------- */
+@media (prefers-reduced-motion: reduce) {
+  html.fx-reveal-armed [data-fx-reveal] {
+    opacity: 1;
+    transform: none;
+    transition: none;
+  }
+  .fx-top {
+    transition: none;
+  }
+  /* reduced-motion 下 MarqueeBoost 會直接 return（唔加 `.fx-mq-js`），
+     所以要喺 CSS 呢邊停咗條 CSS animation。
+     ⚠️ 必須帶 [data-fx-marquee] 限定：events / leaderboard / training
+     三頁都有 .marquee-track，裸寫會波及佢哋。 */
+  .marquee-track[data-fx-marquee] {
+    animation: none;
+  }
+}
