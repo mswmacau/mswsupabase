@@ -4,6 +4,7 @@ import { useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { AlertCircle, ArrowRight, Loader2 } from "lucide-react";
+import { safeNext } from "@/lib/safe-next";
 
 export function LoginForm({ next }: { next: string }) {
   const router = useRouter();
@@ -39,7 +40,7 @@ export function LoginForm({ next }: { next: string }) {
         return;
       }
 
-      router.push(data.next ?? "/dashboard");
+      router.push(safeNext(data.next, "/dashboard"));
       router.refresh();
     } catch {
       setError("網路錯誤，請稍後再試。");

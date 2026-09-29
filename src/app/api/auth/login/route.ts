@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { isSupabaseConfigured } from "@/lib/supabase/env";
 import { jsonBadJson, jsonInternal, readJson } from "@/lib/api";
+import { safeNext } from "@/lib/safe-next";
 
 /**
  * 會員登入（API Route 而非 Server Action）
@@ -58,9 +59,9 @@ export async function POST(request: Request) {
       .eq("id", data.user.id)
       .maybeSingle();
 
-    let target = next && next.startsWith("/") && !next.startsWith("/admin")
-      ? next
-      : "/dashboard";
+    // 防開放重定向：只放行單一斜線開頭的站內相對路徑，擋 //evil.com、/\evil.com、/api/*
+    const requested = safeNext(next, "");
+    let target = requested && !requested.startsWith("/admin") ? requested : "/dashboard";
     if (!next && profile?.role === "admin") target = "/admin";
 
     return NextResponse.json({ ok: true, next: target });

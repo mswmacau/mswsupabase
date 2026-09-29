@@ -1,5 +1,6 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { createClient } from "@/lib/supabase/server";
+import { safeNext } from "@/lib/safe-next";
 
 /**
  * 電郵驗證連結 / OAuth 回調：把 code 換成 session。
@@ -9,7 +10,8 @@ export async function GET(request: NextRequest) {
   const { searchParams } = new URL(request.url);
   const code = searchParams.get("code");
   const rawNext = searchParams.get("next") ?? "/dashboard";
-  const next = rawNext.startsWith("/") ? rawNext : "/dashboard";
+  // 防開放重定向：本值會直接寫進 Location 標頭，必須過白名單（擋 //evil.com、/\evil.com、/api/*）
+  const next = safeNext(rawNext, "/dashboard");
 
   if (code) {
     const supabase = await createClient();

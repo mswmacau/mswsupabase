@@ -46,6 +46,18 @@ const nextConfig: NextConfig = {
         key: "Permissions-Policy",
         value: "camera=(), microphone=(), geolocation=()",
       },
+      // HSTS：強制瀏覽器後續一律走 HTTPS（max-age=63072000 = 2 年）。
+      // 刻意【不加 preload】：
+      //   1. 撤銷週期不對等——一旦進了瀏覽器內建的 HSTS preload list，
+      //      移除申請到各瀏覽器版本生效是以「月」計，期間無法降級，
+      //      但加上的成本只有一次部署，風險與收益不成比例。
+      //   2. includeSubDomains 會連帶把舊子域一併鎖死，本站仍有部分
+      //      歷史子域未完成 HTTPS 整備，貿然 preload 可能直接讓它們連不上。
+      //   先用 max-age 讓真實流量自行記住，觀察穩定後再另行評估 preload。
+      {
+        key: "Strict-Transport-Security",
+        value: "max-age=63072000; includeSubDomains",
+      },
     ];
 
     return [{ source: "/(.*)", headers: securityHeaders }];
