@@ -777,3 +777,138 @@ body::after {
     transform: none !important;
   }
 }
+
+/* =============================================================
+   微信內建瀏覽器相容性（2026-09-29）
+   -------------------------------------------------------------
+   目標：微信（iOS / Android X5）內開網站時，排版不錯位、內容不消失。
+   原則：全部採「能支援才覆蓋」的漸進式寫法，不支援時退回既有行為，
+         絕不讓元素變成不可見。
+   ============================================================= */
+
+/* 1. 視窗高度：100vh 在 iOS Safari 與微信瀏覽器會把網址列／工具列後方
+      的區域也算進去，導致底部內容被遮住。改用 svh（small viewport height），
+      並用 @supports 確保不支援的瀏覽器仍退回原本的 vh 行為。 */
+.min-h-screen-safe {
+  min-height: calc(100vh - 4rem);
+}
+
+@supports (height: 100svh) {
+  .min-h-screen-safe {
+    min-height: calc(100svh - 4rem);
+  }
+}
+
+/* 2. backdrop-filter 降級：部分 Android 微信（X5 核心）與舊版瀏覽器
+      不支援 backdrop-filter。此時玻璃質感會失效，背景可能變得過透、
+      文字對比不足。這裡在不支援時改用實色底，確保可讀性。
+      注意：不做反過來的寫法（不能用 @supports 支援時才給樣式），
+      以免不支援時連底色都沒有。 */
+@supports not ((backdrop-filter: blur(2px)) or (-webkit-backdrop-filter: blur(2px))) {
+  .glass {
+    background: #0f0f0f;
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
+  }
+}
+
+/* 3. 固定定位抖動：微信內捲動時 position:fixed 元素可能抖動。
+      對導覽列與回頂部鈕加上 GPU 合成層，降低抖動感受。
+      僅加 transform 提示，不改變任何版面尺寸。 */
+header.fixed,
+.fx-top,
+.fx-progress {
+  -webkit-backface-visibility: hidden;
+  backface-visibility: hidden;
+}
+
+/* 4. 微信內點擊延遲與灰色底：避免 iOS 微信把可點擊元素加上半透明灰底 */
+a,
+button {
+  -webkit-tap-highlight-color: transparent;
+}
+
+/* =============================================================
+   動效優化（2026-09-29）— 以「使用者感受」為出發點
+   -------------------------------------------------------------
+   共通原則：
+   1. 觸控裝置（hover:none）一律停用 hover 類效果
+   2. 開啟 prefers-reduced-motion 時全部靜止
+   3. 效果只加視覺層次，不改變任何版面尺寸，
+      因此 JS 沒跑或效果失效時畫面依然完整
+   ============================================================= */
+
+/* ① 卡片「重量感」：街健主題是重量，hover 時下沉而非浮起，
+      並帶一道斜向掃光。與一般網站的「上浮」相反，刻意為之。 */
+@media (hover: hover) {
+  .fx-weight-card {
+    position: relative;
+    overflow: hidden;
+    transition: transform 0.28s cubic-bezier(0.2, 0.7, 0.2, 1), box-shadow 0.28s, border-color 0.28s;
+  }
+  .fx-weight-card::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(115deg, transparent 38%, rgba(255, 255, 255, 0.1) 50%, transparent 62%);
+    transform: translateX(-120%);
+    transition: transform 0.6s ease;
+    pointer-events: none;
+  }
+  .fx-weight-card:hover {
+    transform: translateY(7px);
+    box-shadow: 0 14px 26px -12px rgba(0, 0, 0, 0.9);
+    border-color: rgba(227, 0, 27, 0.5);
+  }
+  .fx-weight-card:hover::after {
+    transform: translateX(120%);
+  }
+}
+
+/* ② 節拍脈動：把「每週固定訓練」變成有生命感的提醒。
+      頻率刻意放慢（1.15 秒一次），避免變成干擾。 */
+.fx-beat {
+  animation: fx-beat 1.15s ease-in-out infinite;
+}
+@keyframes fx-beat {
+  0%,
+  100% {
+    transform: scale(1);
+    box-shadow: 0 0 0 0 rgba(227, 0, 27, 0.4);
+  }
+  18% {
+    transform: scale(1.13);
+    box-shadow: 0 0 0 12px rgba(227, 0, 27, 0);
+  }
+}
+
+/* ③ 里程碑達陣：進度達標時讓數字彈一下，讓「我進步了」被看見。 */
+.fx-milestone {
+  animation: fx-milestone 0.5s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+@keyframes fx-milestone {
+  0% {
+    transform: scale(1);
+  }
+  40% {
+    transform: scale(1.22);
+  }
+  100% {
+    transform: scale(1);
+  }
+}
+
+/* 安全網：減少動態偏好時，上述效果全部靜止（內容仍完整可見） */
+@media (prefers-reduced-motion: reduce) {
+  .fx-weight-card,
+  .fx-weight-card::after {
+    transition: none;
+  }
+  .fx-weight-card:hover {
+    transform: none;
+  }
+  .fx-beat,
+  .fx-milestone {
+    animation: none !important;
+  }
+}

@@ -28,8 +28,9 @@ export default async function SignupPage() {
   const profile = await getCurrentProfile();
   if (profile) redirect("/dashboard");
 
+  // min-h-screen-safe：微信／iOS Safari 改用 svh，避免網址列遮住底部（定義見 globals.css）
   return (
-    <section className="relative min-h-[calc(100vh-4rem)] overflow-hidden pb-20 pt-24 md:pt-28">
+    <section className="relative min-h-screen-safe overflow-hidden pb-20 pt-24 md:pt-28">
       {/* 單側光暈（只在左上，刻意與登入頁相反） */}
       <div
         className="pointer-events-none absolute -left-[15%] -top-[28%] h-[560px] w-[560px] rounded-full blur-[130px]"

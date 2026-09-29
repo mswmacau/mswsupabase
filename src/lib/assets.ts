@@ -15,7 +15,7 @@ export const ASSET_PREFIX = {
   hero: "hero",
 } as const;
 
-export type AssetKind = "event" | "logo" | "hero" | "run";
+export type AssetKind = "event" | "logo" | "hero" | "run" | "coach";
 
 /** 把 site-assets 內部的 path 轉成可公開存取的完整網址；未設定 env 或無 path 回傳 null */
 export function publicAssetUrl(path: string | null | undefined): string | null {

@@ -68,7 +68,9 @@ export function EventCard({ event }: { event: Event }) {
   const showNote = selfPointing || Boolean(event.registration_note);
 
   return (
-    <article className="group relative flex flex-col overflow-hidden border border-white/10 bg-ink-soft z-raise clip-notch-br">
+    // fx-weight-card：hover 時下沉＋斜向掃光（街健＝重量感，故意不用上浮）
+    // 觸控裝置與 reduced-motion 會自動停用，見 globals.css
+    <article className="group relative flex flex-col overflow-hidden border border-white/10 bg-ink-soft z-raise clip-notch-br fx-weight-card">
       <div className="relative aspect-[16/9] overflow-hidden border-b border-white/10 bg-gradient-to-br from-cobalt/40 via-ink-soft to-ink">
         {cover ? (
           // eslint-disable-next-line @next/next/no-img-element

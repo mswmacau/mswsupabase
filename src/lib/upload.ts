@@ -16,6 +16,7 @@ const BUCKET: Record<AssetKind, string> = {
   logo: "site-assets",
   hero: "site-assets",
   run: "run-screenshots",
+  coach: "site-assets",
 };
 
 /** 由 Storage 錯誤映射到給終端客戶看的中文訊息（SPEC §3.2） */
@@ -57,6 +58,8 @@ function buildPath(kind: AssetKind, ext: string, uid?: string): string {
       return `hero/${base}`;
     case "run":
       return `${uid}/${base}`;
+    case "coach":
+      return `coaches/${base}`;
   }
 }
 

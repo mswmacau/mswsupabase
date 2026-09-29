@@ -2,6 +2,7 @@
 
 import type { CSSProperties } from "react";
 import { useEffect, useState } from "react";
+import { createPortal } from "react-dom";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { Menu, Shield, Ticket, User, X } from "lucide-react";
@@ -36,6 +37,22 @@ export function MobileNav({
   const pathname = usePathname();
   const open = openPath !== null && openPath === pathname;
 
+  /**
+   * 是否已掛載（client-only）。
+   *
+   * ⚠️ 修復重點：遮罩必須用 createPortal 渲染到 <body>，不能留在 <header> 內。
+   * 原因：<header> 帶有 backdrop-filter（未捲動 backdrop-blur-[14px]、捲動後 .glass
+   * 的 blur(16px) saturate(140%)），而帶 filter / backdrop-filter 的元素會成為其
+   * position:fixed 後代的 containing block。若遮罩留在 header 內，它的 inset-0
+   * 就只對齊那個 64px 高的導覽列，而非整個視窗 → 使用者點開選單卻看不到任何內容。
+   * 實測（Chromium 390×844）：留在 header 內時遮罩高度僅 64px；portal 到 body 後
+   * 變為 844×390，正常顯示。
+   *
+   * mounted 只在 client mount 後才為 true，確保 SSR 與首次 hydration 輸出一致。
+   */
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => setMounted(true), []);
+
   useEffect(() => {
     document.body.style.overflow = open ? "hidden" : "";
     return () => {
@@ -55,8 +72,9 @@ export function MobileNav({
         <Menu size={22} />
       </button>
 
-      {open && (
-        <div className="fixed inset-0 z-[60] overflow-y-auto bg-ink/95 backdrop-blur-xl md:hidden">
+      {open && mounted ? (
+        createPortal(
+          <div className="fixed inset-0 z-[60] overflow-y-auto bg-ink/95 backdrop-blur-xl md:hidden">
           {/* 手工質感：細網格 + 噪點 */}
           <div className="grid-lines absolute inset-0" />
           <div className="noise-overlay" />
@@ -156,8 +174,10 @@ export function MobileNav({
               </div>
             </div>
           </nav>
-        </div>
-      )}
+          </div>,
+          document.body,
+        )
+      ) : null}
     </>
   );
 }

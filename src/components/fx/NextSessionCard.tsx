@@ -155,9 +155,29 @@ export function NextSessionCard({ session }: { session: TrainingSession }) {
     { unit: "分", value: Math.floor(ms / MINUTE_MS) % 60 },
   ];
 
+  /**
+   * 微信內建瀏覽器（iOS / Android X5）會忽略 <a download>，
+   * 直接觸發下載不會有任何反應。這裡改用剪貼簿作為替代路徑。
+   */
+  function isWeChatBrowser(): boolean {
+    if (typeof navigator === "undefined") return false;
+    return /micromessenger/i.test(navigator.userAgent ?? "");
+  }
+
   function handleAddToCalendar() {
     const ics = buildIcs(session, start, end);
     if (!ics) return;
+
+    // 微信內：改為複製 .ics 內容到剪貼簿，使用者可貼到行事曆 app。
+    // 注意：此分支刻意不新增任何頁面文案（遵守文案凍結）。
+    // TODO(站主確認)：若希望在微信內顯示一行提示（例如「已複製，請到行事曆貼上」），
+    // 需由站主提供文案後再補。
+    if (isWeChatBrowser()) {
+      void navigator.clipboard?.writeText(ics).catch(() => {
+        /* 剪貼簿不可用時靜默失敗，不影響其他功能 */
+      });
+      return;
+    }
 
     const blob = new Blob([ics], { type: "text/calendar;charset=utf-8" });
     const href = URL.createObjectURL(blob);

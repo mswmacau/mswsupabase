@@ -128,8 +128,22 @@ export function Footer({
           </div>
         </div>
 
-        {/* ===== 細分隔線 + 必要連結（橫向節奏，非欄位堆砌） ===== */}
-        <div className="grid gap-6 border-t border-[var(--line-fine)] py-7 md:grid-cols-[1fr_auto] md:items-center">
+        {/*
+          ===== 頁尾連結分層（2026-09-29 重構）=====
+          站主反映「下拉到底部時分類不清」。原本三種性質不同的連結
+          （導覽／會員動作／管理）全部平鋪在同一條水平線上、權重相同。
+
+          重構做法：拆成三個獨立區塊，各自有分隔線與不同的視覺權重：
+            ① 導覽類   — 正常權重
+            ② 會員類   — 左側紅色標記線，凸顯這是「動作」不是「瀏覽」
+            ③ 管理類   — 最低權重（僅管理員可見），且下沈到最底部
+
+          ⚠️ 文案凍結：本區塊**沒有新增任何一個字**，全部沿用既有文案，
+             只調整分組、間距與視覺權重。
+        */}
+
+        {/* ① 導覽類 */}
+        <div className="border-t border-[var(--line-fine)] py-6">
           <div className="flex flex-wrap items-center gap-x-7 gap-y-2">
             {NAV_LINKS.map((l) => (
               <Link
@@ -148,8 +162,11 @@ export function Footer({
               聯絡我們
             </Link>
           </div>
+        </div>
 
-          <div className="flex flex-wrap items-center gap-x-7 gap-y-2 md:border-l md:border-[var(--line-fine)] md:pl-7">
+        {/* ② 會員類：左側紅色標記線，與導覽區做出區隔 */}
+        <div className="border-t border-[var(--line-fine)] py-6">
+          <div className="flex flex-wrap items-center gap-x-7 gap-y-2 md:border-l-2 md:border-vital/45 md:pl-6">
             {!isLoggedIn && (
               <>
                 <Link
@@ -182,16 +199,22 @@ export function Footer({
                 </Link>
               </>
             )}
-            {isAdmin && (
+          </div>
+        </div>
+
+        {/* ③ 管理類：僅管理員可見，刻意用最低視覺權重並下沈到最底 */}
+        {isAdmin && (
+          <div className="border-t border-[var(--line-fine)] py-5">
+            <div className="flex flex-wrap items-center gap-x-6 gap-y-2 md:border-l md:border-[var(--line-fine)] md:pl-6">
               <Link
                 href="/admin"
-                className="inline-flex min-h-11 items-center text-sm font-semibold text-white/75 transition hover:text-vital-bright"
+                className="inline-flex min-h-11 items-center text-xs font-semibold text-white/45 transition hover:text-white/75"
               >
                 後台管理
               </Link>
-            )}
+            </div>
           </div>
-        </div>
+        )}
 
         {/* ===== 底欄 ===== */}
         <div className="flex flex-col items-start justify-between gap-3 border-t border-[var(--line-fine)] py-6 text-xs text-white/60 sm:flex-row sm:items-center">

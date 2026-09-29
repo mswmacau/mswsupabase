@@ -102,9 +102,22 @@ export const DISCIPLINES = [
 ] as const;
 
 export const NAV_LINKS = [
+  /**
+   * 「主頁」：站主反映手機選單缺少回首頁的入口（原本只能點左上角 Logo）。
+   * 同時套用到桌面導覽列與手機選單，兩邊共用同一份來源。
+   * 若要改成「首頁」，只需改這一處 label。
+   */
+  { href: "/", label: "主頁" },
   { href: "/events", label: "活動" },
   { href: "/training", label: "定期訓練" },
   { href: "/run", label: "月度跑步挑戰" },
   { href: "/leaderboard", label: "排行榜" },
   { href: "/about", label: "關於我們" },
+  /**
+   * 「教練團隊」：新增導覽項（對應教練介紹頁 /coaches）。
+   * ⚠️ 這是新增的顯示文案，請站主確認用詞。
+   * 另外：頁面內容由後台 /admin/coaches 填入，尚未填寫時該頁是空的；
+   *      若不想在資料備妥前就顯示這個入口，把這一行刪掉即可。
+   */
+  { href: "/coaches", label: "教練團隊" },
 ] as const;

@@ -18,7 +18,7 @@ import { uploadImageFile } from "@/lib/upload";
 import { publicAssetUrl } from "@/lib/assets";
 
 export interface AssetUploaderProps {
-  kind: "event" | "logo" | "hero";
+  kind: "event" | "logo" | "hero" | "coach";
   value: string | null;
   onChange: (path: string | null) => void;
   disabled?: boolean;

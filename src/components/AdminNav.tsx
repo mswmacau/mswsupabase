@@ -6,6 +6,7 @@ import {
   CalendarDays,
   CalendarPlus,
   ClipboardCheck,
+  Dumbbell,
   Gift,
   LayoutDashboard,
   Palette,
@@ -20,6 +21,7 @@ const LINKS = [
   { href: "/admin/monthly", label: "月度名單 / 發券", icon: Gift },
   { href: "/admin/coupons", label: "優惠券", icon: TicketCheck },
   { href: "/admin/sessions", label: "訓練場次", icon: CalendarPlus },
+  { href: "/admin/coaches", label: "教練管理", icon: Dumbbell },
   { href: "/admin/events", label: "活動管理", icon: CalendarDays },
   { href: "/admin/site-settings", label: "網站設定", icon: Palette },
 ];

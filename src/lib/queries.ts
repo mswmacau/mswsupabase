@@ -635,3 +635,51 @@ export async function getAdminCounts() {
 }
 
 export { monthLabel };
+
+/* =============================================================
+   教練資料（2026-09-29）
+   ⚠️ 需先執行 supabase/migration-coaches.sql 建立 coaches 表
+   ============================================================= */
+
+export interface Coach {
+  id: string;
+  name: string;
+  specialty: string | null;
+  bio: string | null;
+  photo_path: string | null;
+  sort_order: number;
+  is_visible: boolean;
+}
+
+/**
+ * 前台用：只取 is_visible = true 的教練，依 sort_order 排序。
+ * 用 anonClient（RLS 的 coaches_select_public 政策保證只讀得到已顯示的）。
+ * 若表尚未建立或查詢失敗，回傳空陣列（頁面會顯示「待補充」而不會壞掉）。
+ */
+export function getVisibleCoaches(limit = 50): Promise<Coach[]> {
+  return unstable_cache(
+    cache(async (): Promise<Coach[]> => {
+      const supabase = anonClient();
+      if (!supabase) return [];
+      const { data, error } = await supabase
+        .from("coaches")
+        .select("id, name, specialty, bio, photo_path, sort_order, is_visible")
+        .eq("is_visible", true)
+        .order("sort_order", { ascending: true })
+        .order("created_at", { ascending: true })
+        .limit(limit);
+      if (error || !data?.length) return [];
+      return (data as Coach[]).map((c) => ({
+        id: c.id,
+        name: c.name,
+        specialty: c.specialty ?? null,
+        bio: c.bio ?? null,
+        photo_path: c.photo_path ?? null,
+        sort_order: Number(c.sort_order ?? 0),
+        is_visible: true,
+      }));
+    }),
+    ["visible-coaches", String(limit)],
+    { revalidate: 60 }
+  )();
+}
