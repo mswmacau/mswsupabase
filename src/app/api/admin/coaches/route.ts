@@ -98,7 +98,7 @@ export async function POST(request: Request) {
         .from("coaches")
         .update(payload)
         .eq("id", id);
-      if (error) return jsonErr(error.message, "DB", 500);
+      if (error) return jsonErr(error.message, "INTERNAL", 500);
       revalidateCoachPages();
       return jsonOk({ message: "教練資料已更新。", id });
     }
@@ -109,7 +109,7 @@ export async function POST(request: Request) {
       .insert(payload)
       .select("id")
       .maybeSingle();
-    if (error) return jsonErr(error.message, "DB", 500);
+    if (error) return jsonErr(error.message, "INTERNAL", 500);
     revalidateCoachPages();
     return jsonOk({ message: "教練已新增。", id: data?.id ?? null });
   } catch {
@@ -127,7 +127,7 @@ export async function DELETE(request: Request) {
     if (!id) return jsonValidation({}, "缺少教練 id。");
 
     const { error } = await supabase.from("coaches").delete().eq("id", id);
-    if (error) return jsonErr(error.message, "DB", 500);
+    if (error) return jsonErr(error.message, "INTERNAL", 500);
 
     revalidateCoachPages();
     return jsonOk({ message: "教練已刪除。" });
