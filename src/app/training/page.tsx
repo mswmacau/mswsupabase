@@ -1,15 +1,27 @@
 import Link from "next/link";
+import type { Metadata } from "next";
 import { ArrowRight, CalendarDays, Clock, MapPin, Users } from "lucide-react";
 import { getCurrentProfile } from "@/lib/supabase/server";
-import { getCachedAllSessions, getUserCheckins } from "@/lib/queries";
+import {
+  getCachedAllSessions,
+  getUserCheckins,
+  getSitePages,
+  getSiteTheme,
+} from "@/lib/queries";
 import { SessionAction } from "@/components/SessionAction";
 import { NextSessionCard } from "@/components/fx/NextSessionCard";
 import { SessionFilter } from "@/components/fx/SessionFilter";
 import { BRAND, RULES } from "@/lib/config";
+import type { SitePageTraining } from "@/lib/content";
 import { formatDate, weekdayLabel } from "@/lib/utils";
 import type { TrainingSession } from "@/lib/types";
 
-export const metadata = { title: "定期訓練" };
+/** T-19：頁面標題改讀 site_pages.training（DB 無值 → 回落預設＝現有硬編碼） */
+export async function generateMetadata(): Promise<Metadata> {
+  const pages = await getSitePages();
+  return { title: pages.training.page_title };
+}
+
 export const dynamic = "force-dynamic";
 
 /** 訓練開始 / 結束時間（"20:00 – 21:00" → "20:00" / "21:00"） */
@@ -26,25 +38,34 @@ const MARQUEE_ITEMS = [
   "Calisthenics",
 ];
 
-/** Hero 數字三聯：大數字主導，不用小圖標堆砌 */
-const HERO_FACTS = [
-  { value: "01", unit: "Day / Week", label: "每週固定訓練日", accent: false },
-  { value: TRAINING_START, unit: `To ${TRAINING_END}`, label: "訓練時段", accent: false },
-  {
-    value: `+${RULES.CHECKIN_POINTS}`,
-    unit: "Points",
-    label: "簽到一次入帳",
-    accent: true,
-  },
-];
+/** Hero 數字三聯：大數字主導，不用小圖標堆砌（「簽到一次入帳」讀 site_pages.training） */
+function heroFacts(t: SitePageTraining) {
+  return [
+    { value: "01", unit: "Day / Week", label: "每週固定訓練日", accent: false },
+    { value: TRAINING_START, unit: `To ${TRAINING_END}`, label: "訓練時段", accent: false },
+    {
+      value: `+${RULES.CHECKIN_POINTS}`,
+      unit: "Points",
+      label: t.fact_checkin_label,
+      accent: true,
+    },
+  ];
+}
 
 export default async function TrainingPage() {
   // FE-17：profile 與 sessions 平行發出，wall-clock 由加總變最大值
-  const [profile, supabaseSessions] = await Promise.all([
+  const [profile, supabaseSessions, theme, pages] = await Promise.all([
     getCurrentProfile(),
     getCachedAllSessions(60),
+    getSiteTheme(),
+    getSitePages(),
   ]);
   const checkins = profile ? await getUserCheckins(profile.id, 60) : [];
+
+  // T-4：品牌中文名改讀 site_theme.brand_name（回落 BRAND.name）
+  const brandName = theme.brand_name;
+  const t = pages.training;
+  const HERO_FACTS = heroFacts(t);
 
   const myMap = new Map(checkins.map((c) => [c.session_id, c.status]));
 
@@ -81,10 +102,8 @@ export default async function TrainingPage() {
             </div>
 
             <div className="lg:pl-14">
-              <span className="eyebrow">Weekly Training</span>
-
               <h1 className="mt-6 lg:-ml-[3vw] lg:w-[112%]">
-                <span className="display-xl block text-white">定期訓練</span>
+                <span className="display-xl block text-white">{t.page_title}</span>
                 <span className="relative mt-1 block">
                   {/* 錯位描邊副本：純裝飾 */}
                   <span
@@ -106,7 +125,7 @@ export default async function TrainingPage() {
                     {RULES.TRAINING_TIME}
                   </span>
                   ，於 {BRAND.location}
-                  {BRAND.name} 進行團體街頭健身訓練。現場簽到並經後台確認後，每次可獲得{" "}
+                  {brandName} 進行團體街頭健身訓練。現場簽到並經後台確認後，每次可獲得{" "}
                   <span className="font-semibold text-white">
                     {RULES.CHECKIN_POINTS} 積分
                   </span>
@@ -187,16 +206,17 @@ export default async function TrainingPage() {
       {/* ============ 近期場次：標題 sticky，內容滾動覆蓋 ============ */}
       <section className="container-msw section-pad">
         {/* F-T1 / F-T2：下場訓練倒數卡（無場次時完全唔 render） */}
-        {upcoming.length > 0 && <NextSessionCard session={upcoming[0]} />}
+        {upcoming.length > 0 && (
+          <NextSessionCard session={upcoming[0]} brandNameEn={theme.brand_name_en} />
+        )}
 
         <div className="grid gap-12 lg:grid-cols-12">
           {/* 左欄：sticky，隨右側內容滾動而停留在畫面中 */}
           <div className="lg:col-span-4">
             <div className="reveal-left lg:sticky lg:top-24">
-              <span className="eyebrow">Upcoming Sessions</span>
               <h2 className="display-xl mt-5">近期場次</h2>
               <p className="mt-6 max-w-sm text-sm leading-relaxed text-white/70">
-                報名後於現場簽到，後台確認即入帳積分。適合任何程度，教練會依程度分組調整強度。
+                {t.intro}
               </p>
 
               <div className="mt-10 flex items-end gap-3">
@@ -204,7 +224,7 @@ export default async function TrainingPage() {
                   {String(upcoming.length).padStart(2, "0")}
                 </span>
                 <span className="text-accent-blue mb-2 text-[11px] font-semibold uppercase tracking-[0.22em]">
-                  場可報名
+                  {t.slots_label}
                 </span>
               </div>
               <div className="mt-6 h-px w-16 bg-white/20" />
@@ -225,6 +245,7 @@ export default async function TrainingPage() {
                       session={s}
                       myStatus={myMap.get(s.id) ?? null}
                       isLoggedIn={Boolean(profile)}
+                      labels={t}
                     />
                   ),
                 }))}
@@ -259,12 +280,8 @@ export default async function TrainingPage() {
           <div className="container-msw section-pad relative">
             <div className="flex flex-wrap items-end justify-between gap-6 border-b border-white/10 pb-8">
               <div>
-                <span className="eyebrow">My Records</span>
                 <h2 className="display-xl mt-5">我的訓練紀錄</h2>
               </div>
-              <span className="text-[11px] font-semibold uppercase tracking-[0.22em] text-white/45">
-                {String(checkins.length).padStart(2, "0")} Records
-              </span>
             </div>
 
             <div className="mt-8 overflow-x-auto">
@@ -274,7 +291,7 @@ export default async function TrainingPage() {
                     <tr>
                       <th className="w-44">日期</th>
                       <th>場次</th>
-                      <th className="w-36">簽到時間</th>
+                      <th className="w-36">{t.history_header}</th>
                       <th className="w-32">狀態</th>
                     </tr>
                   </thead>
@@ -321,7 +338,7 @@ export default async function TrainingPage() {
                 </table>
               ) : (
                 <div className="border-y border-white/10 px-4 py-14 text-center text-sm text-white/70">
-                  尚無訓練紀錄，報名一場試試看。
+                  {t.empty_history}
                 </div>
               )}
             </div>
@@ -349,7 +366,6 @@ export default async function TrainingPage() {
         <div className="container-msw section-pad relative">
           <div className="grid gap-10 lg:grid-cols-12 lg:items-end">
             <div className="lg:col-span-7">
-              <span className="eyebrow">Keep Showing Up</span>
               <h2 className="mt-6 text-4xl font-black leading-[0.98] tracking-[-0.03em] sm:text-5xl lg:text-6xl">
                 訓練之外，還有月度跑步挑戰
               </h2>
@@ -376,10 +392,13 @@ function SessionCard({
   session,
   myStatus,
   isLoggedIn,
+  labels,
 }: {
   session: TrainingSession;
   myStatus: string | null;
   isLoggedIn: boolean;
+  /** 場次卡文字（site_pages.training） */
+  labels: SitePageTraining;
 }) {
   const d = new Date(session.session_date + "T00:00:00");
   const day = d.getDate();
@@ -421,7 +440,7 @@ function SessionCard({
                 : "border-white/15 bg-white/5 text-white/60"
             }`}
           >
-            {isOpen ? "開放報名" : "已截止"}
+            {isOpen ? labels.open_label : labels.closed_label}
           </span>
         </div>
 

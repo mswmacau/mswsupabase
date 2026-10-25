@@ -22,6 +22,7 @@ import {
   X,
 } from "lucide-react";
 import { RULES } from "@/lib/config";
+import { DEFAULT_PAGES, type SitePageRun } from "@/lib/content";
 import { currentMonth, monthLabel, recentMonths } from "@/lib/utils";
 import { uploadImageFile } from "@/lib/upload";
 import { postJson } from "@/lib/fetch-json";
@@ -34,7 +35,11 @@ const STAGE_TEXT: Record<Exclude<Stage, "idle">, { step: string; title: string }
   submit: { step: "Step 02 / 02", title: "送出紀錄至後台" },
 };
 
-export function RunUploadForm() {
+export function RunUploadForm({
+  labels = DEFAULT_PAGES.run,
+}: {
+  labels?: SitePageRun;
+}) {
   const router = useRouter();
   const [pending, setPending] = useState(false);
   const [stage, setStage] = useState<Stage>("idle");
@@ -187,7 +192,7 @@ export function RunUploadForm() {
       <div className="grid gap-5 sm:grid-cols-2">
         <div>
           <label className="label" htmlFor="km">
-            跑步公里數（km）
+            {labels.km_label}
           </label>
           <input
             id="km"
@@ -197,14 +202,14 @@ export function RunUploadForm() {
             min="0.01"
             max={RULES.MAX_KM_PER_SUBMISSION}
             required
-            placeholder="例如 10.5"
+            placeholder={labels.km_placeholder}
             className="field"
           />
         </div>
 
         <div>
           <label className="label" htmlFor="period_month">
-            計入月份
+            {labels.month_label}
           </label>
           <select
             id="period_month"
@@ -223,7 +228,7 @@ export function RunUploadForm() {
 
       <div>
         <label className="label" htmlFor="screenshot">
-          跑步紀錄截圖
+          {labels.screenshot_label}
         </label>
 
         <input
@@ -294,13 +299,13 @@ export function RunUploadForm() {
 
       <div>
         <label className="label" htmlFor="note">
-          備註（選填）
+          {labels.note_label}
         </label>
         <input
           id="note"
           name="note"
           type="text"
-          placeholder="例如：黑沙環海濱長廊晨跑"
+          placeholder={labels.note_placeholder}
           className="field"
         />
       </div>
@@ -312,11 +317,11 @@ export function RunUploadForm() {
       >
         {pending ? (
           <>
-            <Loader2 size={17} className="animate-spin" /> 上傳中…
+            <Loader2 size={17} className="animate-spin" /> {labels.pending_label}
           </>
         ) : (
           <>
-            <UploadCloud size={17} /> 提交紀錄
+            <UploadCloud size={17} /> {labels.submit_label}
           </>
         )}
       </button>

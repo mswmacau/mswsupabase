@@ -10,17 +10,17 @@ export function HeroVisual() {
     >
       <defs>
         <linearGradient id="barGrad" x1="0" y1="0" x2="1" y2="0">
-          <stop offset="0%" stopColor="#0047AB" stopOpacity="0" />
-          <stop offset="45%" stopColor="#0057FF" stopOpacity="0.95" />
-          <stop offset="100%" stopColor="#E3001B" stopOpacity="0.9" />
+          <stop offset="0%" style={{ stopColor: "var(--color-cobalt)" }} stopOpacity="0" />
+          <stop offset="45%" style={{ stopColor: "var(--color-cobalt-bright)" }} stopOpacity="0.95" />
+          <stop offset="100%" style={{ stopColor: "var(--color-vital)" }} stopOpacity="0.9" />
         </linearGradient>
         <radialGradient id="glow" cx="50%" cy="40%" r="50%">
-          <stop offset="0%" stopColor="#0057FF" stopOpacity="0.35" />
-          <stop offset="100%" stopColor="#0057FF" stopOpacity="0" />
+          <stop offset="0%" style={{ stopColor: "var(--color-cobalt-bright)" }} stopOpacity="0.35" />
+          <stop offset="100%" style={{ stopColor: "var(--color-cobalt-bright)" }} stopOpacity="0" />
         </radialGradient>
         <linearGradient id="figGrad" x1="0" y1="0" x2="0" y2="1">
-          <stop offset="0%" stopColor="#ffffff" stopOpacity="0.9" />
-          <stop offset="100%" stopColor="#ffffff" stopOpacity="0.25" />
+          <stop offset="0%" style={{ stopColor: "var(--color-white)" }} stopOpacity="0.9" />
+          <stop offset="100%" style={{ stopColor: "var(--color-white)" }} stopOpacity="0.25" />
         </linearGradient>
       </defs>
 
@@ -28,9 +28,9 @@ export function HeroVisual() {
       <ellipse cx="300" cy="150" rx="260" ry="190" fill="url(#glow)" />
 
       {/* 單杠立柱 */}
-      <path d="M120 60 V330" stroke="#ffffff" strokeOpacity="0.22" strokeWidth="6" strokeLinecap="round" />
-      <path d="M480 60 V330" stroke="#ffffff" strokeOpacity="0.22" strokeWidth="6" strokeLinecap="round" />
-      <path d="M120 330 H480" stroke="#ffffff" strokeOpacity="0.12" strokeWidth="4" strokeLinecap="round" />
+      <path d="M120 60 V330" style={{ stroke: "var(--color-white)" }} strokeOpacity="0.22" strokeWidth="6" strokeLinecap="round" />
+      <path d="M480 60 V330" style={{ stroke: "var(--color-white)" }} strokeOpacity="0.22" strokeWidth="6" strokeLinecap="round" />
+      <path d="M120 330 H480" style={{ stroke: "var(--color-white)" }} strokeOpacity="0.12" strokeWidth="4" strokeLinecap="round" />
 
       {/* 横杠 */}
       <path d="M100 110 H500" stroke="url(#barGrad)" strokeWidth="10" strokeLinecap="round" />
@@ -46,14 +46,14 @@ export function HeroVisual() {
       {/* 動態弧線 */}
       <path
         d="M150 380 Q300 400 450 372"
-        stroke="#E3001B"
+        style={{ stroke: "var(--color-vital)" }}
         strokeOpacity="0.55"
         strokeWidth="3"
         strokeLinecap="round"
       />
       <path
         d="M180 396 Q300 412 420 390"
-        stroke="#0057FF"
+        style={{ stroke: "var(--color-cobalt-bright)" }}
         strokeOpacity="0.4"
         strokeWidth="2"
         strokeLinecap="round"

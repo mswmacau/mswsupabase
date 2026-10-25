@@ -50,6 +50,31 @@ html.fx-reveal-armed:not(.fx-reveal-arming) [data-fx-reveal] {
 }
 
 /* ---------------------------------------------------------------------
+ * H-03b 內容區「一次編排」安靜進場（D 組收斂）
+ *
+ * 同 [data-fx-reveal]（hero 難忘瞬間）共用 .fx-in 觸發 class，
+ * 但幅度更細（18px）、時間更短（0.7s），而且以「區塊群組」為單位：
+ * 統計列同各內容區成組入場，唔再逐卡逐行淡入上滑。
+ *
+ * 觸發時機交畀 RevealHome 嘅第二條 IO（threshold 0 + rootMargin -15%）：
+ * 區塊頂部進入視野下方 85% 先至開始，確保「人到、先入場」。
+ * 初始隱藏態同樣只喺 JS 加咗 .fx-reveal-armed 之後先存在。
+ * ------------------------------------------------------------------- */
+html.fx-reveal-armed [data-fx-seq] {
+  opacity: 0;
+  transform: translate3d(0, 18px, 0);
+}
+html.fx-reveal-armed [data-fx-seq].fx-in {
+  opacity: 1;
+  transform: none;
+}
+html.fx-reveal-armed:not(.fx-reveal-arming) [data-fx-seq] {
+  transition:
+    opacity 0.7s cubic-bezier(0.2, 0.6, 0.2, 1),
+    transform 0.7s cubic-bezier(0.2, 0.6, 0.2, 1);
+}
+
+/* ---------------------------------------------------------------------
  * H-05 按鈕 hover 掃光（純 CSS，冇 JS 都唔影響任何嘢）
  * ------------------------------------------------------------------- */
 [data-fx-sheen] {
@@ -247,6 +272,22 @@ body.fx-has-cursor [data-fx-tilt] {
 }
 
 /* ---------------------------------------------------------------------
+ * E05 Hero 背景圖單層視差（HeroParallax.tsx）
+ * 上下各留 6% 溢出：桌面位移 ±5%、移動 ±2.5%，點移都唔會露底。
+ * ⚠️ 靜止態就係「無 transform」——JS 冇跑／報錯，背景圖停喺原本位置、
+ *    100% 可見，完全唔會影響 LCP。
+ * will-change 由 JS 喺離屏／reduced-motion 時移除，唔寫死喺 CSS（紅線 13）。
+ * ------------------------------------------------------------------- */
+.fx-hero-parallax {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: -6%;
+  bottom: -6%;
+  pointer-events: none;
+}
+
+/* ---------------------------------------------------------------------
  * H-19 回頂部鈕 + 環形進度
  * SSR 固定輸出 data-fx-top="off"（隱形），JS 先會變 "on"
  * ------------------------------------------------------------------- */
@@ -296,7 +337,8 @@ body.fx-has-cursor [data-fx-tilt] {
  * 觸控裝置：呢啲效果一律唔會啟用（JS 亦唔會 mount），CSS 再兜一層底
  * ------------------------------------------------------------------- */
 @media (prefers-reduced-motion: reduce) {
-  html.fx-reveal-armed [data-fx-reveal] {
+  html.fx-reveal-armed [data-fx-reveal],
+  html.fx-reveal-armed [data-fx-seq] {
     opacity: 1;
     transform: none;
     transition: none;
@@ -310,5 +352,9 @@ body.fx-has-cursor [data-fx-tilt] {
      三頁都有 .marquee-track，裸寫會波及佢哋。 */
   .marquee-track[data-fx-marquee] {
     animation: none;
+  }
+  /* E05 Hero 視差：完全靜止（JS 亦會直接清走 transform，呢度係 CSS 兜底） */
+  .fx-hero-parallax {
+    transform: none !important;
   }
 }

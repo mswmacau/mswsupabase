@@ -4,7 +4,7 @@ import { useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { AlertCircle, ArrowRight, CheckCircle2, Loader2, MailCheck } from "lucide-react";
-import { RULES } from "@/lib/config";
+import { DEFAULT_PAGES, type SitePageSignup } from "@/lib/content";
 
 /** F-S1：密碼最短長度（同 /api/auth/signup 嘅檢查一致） */
 const PASSWORD_MIN = 6;
@@ -13,28 +13,54 @@ const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 type FieldKey = "email" | "password" | "confirm_password";
 type FieldErrors = Partial<Record<FieldKey, string>>;
 
-/** 電郵格式、密碼長度、兩次密碼一致（錯誤文案沿用既有 API 訊息） */
-function validateFields(values: {
-  email: string;
-  password: string;
-  confirmPassword: string;
-}): FieldErrors {
+/** 電郵格式、密碼長度、兩次密碼一致（錯誤文案讀 site_pages，回落預設） */
+function validateFields(
+  values: {
+    email: string;
+    password: string;
+    confirmPassword: string;
+  },
+  labels: SitePageSignup
+): FieldErrors {
   const found: FieldErrors = {};
 
   if (!EMAIL_PATTERN.test(values.email.trim())) {
-    found.email = "請輸入有效的電郵地址。";
+    found.email = labels.error_email;
   }
   if (values.password.length < PASSWORD_MIN) {
-    found.password = "密碼至少需要 6 個字元。";
+    found.password = labels.error_password;
   }
   if (values.confirmPassword !== values.password) {
-    found.confirm_password = "兩次輸入的密碼不一致，請重新輸入。";
+    found.confirm_password = labels.error_confirm;
   }
 
   return found;
 }
 
-export function SignupForm() {
+/**
+ * verify_note 內嵌「登入」連結：以首次出現嘅「登入」二字切分，
+ * 前半純文字 + 命中段包 Link + 後半純文字，兼顧 DB 可編輯與零 DOM 差異。
+ * DB 值不含「登入」時整串當純文字渲染（不會產生空連結）。
+ */
+function renderVerifyNote(note: string) {
+  const idx = note.indexOf("登入");
+  if (idx < 0) return note;
+  return (
+    <>
+      {note.slice(0, idx)}
+      <Link href="/login" className="font-semibold text-accent-blue hover:underline">
+        登入
+      </Link>
+      {note.slice(idx + 2)}
+    </>
+  );
+}
+
+export function SignupForm({
+  labels = DEFAULT_PAGES.signup,
+}: {
+  labels?: SitePageSignup;
+}) {
   const router = useRouter();
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -62,7 +88,7 @@ export function SignupForm() {
     ) {
       return;
     }
-    const found = validateFields(readFields(e.currentTarget));
+    const found = validateFields(readFields(e.currentTarget), labels);
     setFieldErrors((prev) => ({ ...prev, [name]: found[name] }));
   }
 
@@ -75,20 +101,23 @@ export function SignupForm() {
     const password = String(fd.get("password") ?? "");
     const confirmPassword = String(fd.get("confirm_password") ?? "");
     if (password !== confirmPassword) {
-      setError("兩次輸入的密碼不一致，請重新輸入。");
+      setError(labels.error_confirm);
       setFieldErrors((prev) => ({
         ...prev,
-        confirm_password: "兩次輸入的密碼不一致，請重新輸入。",
+        confirm_password: labels.error_confirm,
       }));
       return;
     }
 
     // F-S1：送出前先跑一次即時驗證，有錯就唔好送 request
-    const found = validateFields({
-      email: String(fd.get("email") ?? ""),
-      password,
-      confirmPassword,
-    });
+    const found = validateFields(
+      {
+        email: String(fd.get("email") ?? ""),
+        password,
+        confirmPassword,
+      },
+      labels
+    );
     if (Object.keys(found).length > 0) {
       setFieldErrors(found);
       return;
@@ -116,15 +145,13 @@ export function SignupForm() {
       };
 
       if (!data.ok) {
-        setError(data.error ?? "註冊失敗。");
+        setError(data.error ?? labels.error_submit);
         setPending(false);
         return;
       }
 
       if (data.needConfirm) {
-        setDone(
-          data.message ?? "註冊成功！請到電郵信箱點擊驗證連結完成啟用，之後即可登入。"
-        );
+        setDone(data.message ?? labels.success_message);
         setPending(false);
         return;
       }
@@ -173,20 +200,20 @@ export function SignupForm() {
 
       <div>
         <label className="label" htmlFor="display_name">
-          顯示名稱（排行榜上顯示）
+          {labels.display_name_label}
         </label>
         <input
           id="display_name"
           name="display_name"
           type="text"
-          placeholder="例如：阿健"
+          placeholder={labels.display_name_placeholder}
           className="field"
         />
       </div>
 
       <div>
         <label className="label" htmlFor="email">
-          電郵
+          {labels.email_label}
         </label>
         <input
           id="email"
@@ -194,7 +221,7 @@ export function SignupForm() {
           type="email"
           autoComplete="email"
           required
-          placeholder="you@example.com"
+          placeholder={labels.email_placeholder}
           aria-invalid={fieldErrors.email ? true : undefined}
           aria-describedby={fieldErrors.email ? "email-error" : undefined}
           className={`field ${fieldErrors.email ? "border-red-500/70" : ""}`}
@@ -208,7 +235,7 @@ export function SignupForm() {
 
       <div>
         <label className="label" htmlFor="password">
-          密碼（至少 6 個字元）
+          {labels.password_label}
         </label>
         <input
           id="password"
@@ -217,7 +244,7 @@ export function SignupForm() {
           autoComplete="new-password"
           required
           minLength={PASSWORD_MIN}
-          placeholder="••••••••"
+          placeholder={labels.password_placeholder}
           aria-invalid={fieldErrors.password ? true : undefined}
           aria-describedby={fieldErrors.password ? "password-error" : undefined}
           className={`field ${fieldErrors.password ? "border-red-500/70" : ""}`}
@@ -231,7 +258,7 @@ export function SignupForm() {
 
       <div>
         <label className="label" htmlFor="confirm_password">
-          確認密碼（請再輸入一次）
+          {labels.confirm_label}
         </label>
         <input
           id="confirm_password"
@@ -239,7 +266,7 @@ export function SignupForm() {
           type="password"
           autoComplete="new-password"
           required
-          placeholder="••••••••"
+          placeholder={labels.confirm_placeholder}
           aria-describedby={
             fieldErrors.confirm_password
               ? "confirm-password-hint confirm-password-error"
@@ -259,7 +286,7 @@ export function SignupForm() {
           </p>
         )}
         <p id="confirm-password-hint" className="mt-1.5 text-xs text-white/55">
-          請再次輸入相同密碼，兩次不一致時無法提交。
+          {labels.confirm_hint}
         </p>
       </div>
 
@@ -270,11 +297,11 @@ export function SignupForm() {
       >
         {pending ? (
           <>
-            <Loader2 size={17} className="animate-spin" /> 註冊中…
+            <Loader2 size={17} className="animate-spin" /> {labels.pending_label}
           </>
         ) : (
           <>
-            建立帳號 <ArrowRight size={17} />
+            {labels.submit_label} <ArrowRight size={17} />
           </>
         )}
       </button>
@@ -283,25 +310,18 @@ export function SignupForm() {
         <span className="mb-1 flex items-center gap-1.5 font-semibold text-white/85">
           <MailCheck size={14} className="text-accent-blue" /> 關於電郵驗證
         </span>
-        送出後註冊即時完成，不需要收取驗證信——直接以上述電郵與密碼
-        <Link href="/login" className="font-semibold text-accent-blue hover:underline">
-          登入
-        </Link>
-        即可。
+        {renderVerifyNote(labels.verify_note)}
       </div>
 
-      <p className="text-xs leading-relaxed text-white/70">
-        註冊即表示同意 MSW 街健館的活動規則：跑步里程須經後台確認後始計入積分，
-        偽造紀錄將被取消資格。完成月度 {RULES.MONTHLY_GOAL_KM}km 可獲優惠券。
-      </p>
+      <p className="text-xs leading-relaxed text-white/70">{labels.rules_note}</p>
 
       <p className="border-t border-[var(--line-fine)] pt-5 text-center text-sm text-white/70">
-        已有帳號？{" "}
+        {labels.login_prompt}{" "}
         <Link
           href="/login"
           className="font-semibold text-accent-blue hover:underline"
         >
-          會員登入
+          {labels.login_link}
         </Link>
       </p>
     </form>

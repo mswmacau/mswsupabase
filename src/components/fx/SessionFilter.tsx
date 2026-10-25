@@ -9,9 +9,21 @@
  *
  * 初始 state 一定係「全部」：server 同 client 第一次 render 輸出完全一致，
  * 唔會 hydration mismatch；月份判斷只會喺使用者撳 chips（client、已 hydrate）之後發生。
+ *
+ * ── 階段二動效（T-7 E11 第二處，方砚）────────────────────────────────
+ * 月份 chips（全部／本月／下月）高亮底塊改用 `layoutId` 滑動。
+ *
+ * ⚠️ 只做 chips：第 78 行附近嘅卡片網格 `<div className="stagger grid ...">`
+ *    **原封不動**（`stagger` 保留）。chips 同網格唔喺同一個容器，
+ *    所以 `.stagger > *` 嘅 CSS animation 唔會同 motion 打架（R2）。
+ * ⚠️ `card` 係 page 已經 render 好嘅 ReactNode，包 motion 後內容同報名邏輯
+ *    完全唔會變 —— 本任務只喺 chips 上面加一塊可滑動嘅底。
  */
 
 import { Fragment, useMemo, useState, type ReactNode } from "react";
+import { LayoutGroup, motion } from "motion/react";
+import { MotionRoot } from "@/components/motion/MotionRoot";
+import { MOTION_ENABLED, T_CHIP } from "@/components/motion/motionConfig";
 
 export interface SessionFilterItem {
   id: string;
@@ -38,6 +50,9 @@ function monthKey(offset: number): string {
   return `${d.getFullYear()}-${pad2(d.getMonth() + 1)}`;
 }
 
+/** 高亮底塊：原本 active chip 身上嘅 `bg-vital`，抽成一塊可滑動嘅底 */
+const HIGHLIGHT_CLASS = "slab absolute inset-0 -z-10 bg-vital";
+
 export function SessionFilter({ items }: { items: SessionFilterItem[] }) {
   const [filter, setFilter] = useState<FilterKey>("all");
 
@@ -48,32 +63,46 @@ export function SessionFilter({ items }: { items: SessionFilterItem[] }) {
   }, [items, filter]);
 
   return (
-    <>
+    <MotionRoot>
       <div
         role="group"
         aria-label="場次月份"
         className="mb-8 flex flex-wrap gap-2 border-b border-white/10 pb-6"
       >
-        {OPTIONS.map((opt) => {
-          const active = opt.key === filter;
-          return (
-            <button
-              key={opt.key}
-              type="button"
-              aria-pressed={active}
-              onClick={() => setFilter(opt.key)}
-              className={`stat-figure inline-flex min-h-11 items-center px-4 text-sm transition ${
-                active
-                  ? "slab bg-vital text-white"
-                  : "text-white/60 hover:text-white"
-              }`}
-            >
-              {opt.label}
-            </button>
-          );
-        })}
+        {/* E11：LayoutGroup 隔開呢一組 layoutId */}
+        <LayoutGroup id="session-month">
+          {OPTIONS.map((opt) => {
+            const active = opt.key === filter;
+            return (
+              <button
+                key={opt.key}
+                type="button"
+                aria-pressed={active}
+                onClick={() => setFilter(opt.key)}
+                className={`stat-figure relative isolate inline-flex min-h-11 items-center px-4 text-sm transition ${
+                  active ? "slab text-white" : "text-white/60 hover:text-white"
+                }`}
+              >
+                {active ? (
+                  MOTION_ENABLED ? (
+                    <motion.span
+                      layoutId="session-month-active"
+                      className={HIGHLIGHT_CLASS}
+                      transition={T_CHIP}
+                      aria-hidden
+                    />
+                  ) : (
+                    <span className={HIGHLIGHT_CLASS} aria-hidden />
+                  )
+                ) : null}
+                <span className="relative">{opt.label}</span>
+              </button>
+            );
+          })}
+        </LayoutGroup>
       </div>
 
+      {/* ⚠️ 呢個網格維持原狀：`stagger` class 保留、唔加任何 motion（T-7 範圍只係 chips） */}
       {visible.length ? (
         <div className="stagger grid gap-5 sm:grid-cols-2">
           {visible.map((item) => (
@@ -85,6 +114,6 @@ export function SessionFilter({ items }: { items: SessionFilterItem[] }) {
           目前沒有已排定的場次。
         </p>
       )}
-    </>
+    </MotionRoot>
   );
 }

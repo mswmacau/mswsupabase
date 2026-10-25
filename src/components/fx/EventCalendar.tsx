@@ -12,13 +12,36 @@
  *
  * Hydration：初始月份同初始選取日子都係由 events 資料本身推導（唔係由「今日」計），
  * 所以 server 同 client 第一次 render 完全一致。
+ *
+ * ── 階段二動效（T-4 E10，方砚）──────────────────────────────────────
+ * 「列表 / 月曆」切換原本係硬切、無退場，呢度加 `AnimatePresence mode="wait"`：
+ * 退場 0.16s 播完，進場 0.22s 先開始，兩者任何一幀都唔重疊。
+ *
+ * ⚠️ R1 / 紅線 10（「無 JS 時內容 100% 可見」）：
+ *    motion 嘅 `initial={{ opacity: 0 }}` 會喺 SSR 寫入 inline style，
+ *    JS 一失敗內容就永久隱形。所以呢度兩層防護：
+ *      1. `AnimatePresence initial={false}`（只對第一次 render 生效）
+ *      2. `initial: ready ? {...} : false`，`ready` 由 `useMotionReady()`
+ *         喺 mount 成功之後先變 true
+ *    → SSR HTML 只會輸出 `animate` 嘅可見態（opacity:1、y:0）。
+ *
+ * ⚠️ 邊界：EventCalendar 只畀 `/events` 用，motion 唔會外流去首頁（紅線 5 / R3）。
  */
 
 import { useMemo, useState } from "react";
+import { AnimatePresence, motion, type MotionProps } from "motion/react";
 import { CalendarDays, ChevronLeft, ChevronRight } from "lucide-react";
 import { EventCard } from "@/components/EventCard";
 import { EventFilter } from "@/components/fx/EventFilter";
+import { MotionRoot, useMotionReady } from "@/components/motion/MotionRoot";
+import {
+  MOTION_ENABLED,
+  T_VIEW_IN,
+  T_VIEW_OUT,
+  VIEW_SHIFT,
+} from "@/components/motion/motionConfig";
 import { monthLabel, weekdayLabel } from "@/lib/utils";
+import { DEFAULT_PAGES, type SitePageEvents } from "@/lib/content";
 import type { Event } from "@/lib/types";
 
 type View = "list" | "calendar";
@@ -64,7 +87,18 @@ function dateText(day: string): string {
   return m ? `${m[1]}/${m[2]}/${m[3]}` : day;
 }
 
-export function EventCalendar({ events }: { events: Event[] }) {
+export function EventCalendar({
+  events,
+  labels = DEFAULT_PAGES.events,
+  isLoggedIn = false,
+  registeredEventIds = [],
+}: {
+  events: Event[];
+  labels?: SitePageEvents;
+  /** T-26：會員登入狀態與已報名活動 id（傳落 EventCard 的站內報名按鈕） */
+  isLoggedIn?: boolean;
+  registeredEventIds?: string[];
+}) {
   const [view, setView] = useState<View>("list");
 
   // 初始月份 / 初始選取日子：由資料本身推導，SSR 與 hydration 一致
@@ -104,159 +138,191 @@ export function EventCalendar({ events }: { events: Event[] }) {
 
   const activeEvents = activeDate ? byDate.get(activeDate) ?? [] : [];
 
+  /**
+   * T-4（E10）進／退場參數（§5）：進場 0.22s、退場 0.16s，位移只動 transform。
+   * `ready === false`（SSR / 首次 hydration）時 `initial={false}` → 完全可見。
+   */
+  const ready = useMotionReady();
+
+  const viewMotion: MotionProps = MOTION_ENABLED
+    ? {
+        initial: ready ? { opacity: 0, y: VIEW_SHIFT } : false,
+        animate: { opacity: 1, y: 0 },
+        exit: { opacity: 0, y: -8, transition: T_VIEW_OUT },
+        transition: T_VIEW_IN,
+      }
+    : {};
+
   if (!events.length) return null;
 
   return (
-    <section className="container-msw section-pad">
-      <div className="flex flex-wrap items-end justify-between gap-6 border-b border-white/10 pb-8">
-        <div>
-          <span className="eyebrow">Published Events</span>
-          <h2 className="display-xl mt-5">最新活動</h2>
-        </div>
-
-        <div className="flex flex-wrap items-center gap-4">
-          {/* 列表 / 月曆 一鍵切換 */}
-          <div role="group" aria-label="顯示模式" className="flex gap-2">
-            {VIEW_OPTIONS.map((opt) => {
-              const active = opt.key === view;
-              return (
-                <button
-                  key={opt.key}
-                  type="button"
-                  aria-pressed={active}
-                  onClick={() => setView(opt.key)}
-                  className={`stat-figure inline-flex min-h-11 items-center px-4 text-sm transition ${
-                    active
-                      ? "slab bg-vital text-white"
-                      : "text-white/60 hover:text-white"
-                  }`}
-                >
-                  {opt.label}
-                </button>
-              );
-            })}
+    <MotionRoot>
+      <section className="container-msw section-pad">
+        <div className="flex flex-wrap items-end justify-between gap-6 border-b border-white/10 pb-8">
+          <div>
+            <h2 className="display-xl mt-5">最新活動</h2>
           </div>
 
-          <span className="text-[11px] font-semibold uppercase tracking-[0.22em] text-white/45">
-            {String(events.length).padStart(2, "0")} Events
-          </span>
-        </div>
-      </div>
-
-      {view === "list" ? (
-        <EventFilter events={events} />
-      ) : (
-        <div className="mt-10">
-          {/* 月份前後切換：只切顯示，唔 refetch */}
-          <div className="flex items-center justify-between gap-4 border-b border-white/10 pb-5">
-            <button
-              type="button"
-              onClick={() => setMonth((m) => shiftMonth(m, -1))}
-              className="slab inline-flex min-h-11 min-w-11 items-center justify-center border border-[var(--line-fine)] bg-white/[0.03] transition hover:bg-white/[0.08]"
-            >
-              <ChevronLeft size={18} aria-hidden />
-              <span className="sr-only">上個月</span>
-            </button>
-
-            <span className="stat-figure text-lg text-white">
-              {monthLabel(month)}
-            </span>
-
-            <button
-              type="button"
-              onClick={() => setMonth((m) => shiftMonth(m, 1))}
-              className="slab inline-flex min-h-11 min-w-11 items-center justify-center border border-[var(--line-fine)] bg-white/[0.03] transition hover:bg-white/[0.08]"
-            >
-              <ChevronRight size={18} aria-hidden />
-              <span className="sr-only">下個月</span>
-            </button>
-          </div>
-
-          {/* 月曆格：週一開始 */}
-          <div className="mt-6 grid grid-cols-7 border-l border-t border-white/10">
-            {WEEK_LABELS.map((w) => (
-              <div
-                key={w}
-                className="border-b border-r border-white/10 py-2 text-center text-[10px] font-semibold uppercase tracking-[0.18em] text-white/45"
-              >
-                {w}
-              </div>
-            ))}
-
-            {cells.map((date, i) => {
-              if (!date) {
+          <div className="flex flex-wrap items-center gap-4">
+            {/* 列表 / 月曆 一鍵切換 */}
+            <div role="group" aria-label="顯示模式" className="flex gap-2">
+              {VIEW_OPTIONS.map((opt) => {
+                const active = opt.key === view;
                 return (
-                  <div
-                    key={`blank-${i}`}
-                    className="border-b border-r border-white/10 bg-white/[0.02]"
-                  />
-                );
-              }
-
-              const day = Number(date.slice(8));
-              const dayEvents = byDate.get(date) ?? [];
-
-              if (!dayEvents.length) {
-                return (
-                  <div
-                    key={date}
-                    className="min-w-0 border-b border-r border-white/10 p-2"
-                  >
-                    <span className="stat-figure block text-right text-xs text-white/30">
-                      {day}
-                    </span>
-                  </div>
-                );
-              }
-
-              const active = date === activeDate;
-              return (
-                <div
-                  key={date}
-                  className="min-w-0 border-b border-r border-white/10 p-1.5"
-                >
                   <button
+                    key={opt.key}
                     type="button"
                     aria-pressed={active}
-                    onClick={() => setSelected(date)}
-                    className={`block min-h-[3.25rem] w-full px-1.5 py-1 text-left transition ${
+                    onClick={() => setView(opt.key)}
+                    className={`stat-figure inline-flex min-h-11 items-center px-4 text-sm transition ${
                       active
-                        ? "bg-vital/20"
-                        : "bg-white/[0.03] hover:bg-white/[0.08]"
+                        ? "slab bg-vital text-white"
+                        : "text-white/60 hover:text-white"
                     }`}
                   >
-                    <span className="stat-figure block text-xs text-white">
-                      {day}
-                    </span>
-                    <span className="mt-1 block truncate text-[10px] leading-tight text-vital-bright">
-                      {dayEvents[0].title}
-                      {dayEvents.length > 1 ? ` +${dayEvents.length - 1}` : ""}
-                    </span>
-                    <span className="sr-only">
-                      {day} 日，{dayEvents.length} 個活動
-                    </span>
+                    {opt.label}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        </div>
+
+        {/* T-4（E10）：mode="wait" — 上一段播完退場，下一段先開始進場 */}
+        <AnimatePresence mode="wait" initial={false}>
+          {view === "list" ? (
+            <motion.div key="list" {...viewMotion}>
+              <EventFilter
+                events={events}
+                labels={labels}
+                isLoggedIn={isLoggedIn}
+                registeredEventIds={registeredEventIds}
+              />
+            </motion.div>
+          ) : (
+            <motion.div key="calendar" {...viewMotion}>
+              <div className="mt-10">
+                {/* 月份前後切換：只切顯示，唔 refetch */}
+                <div className="flex items-center justify-between gap-4 border-b border-white/10 pb-5">
+                  <button
+                    type="button"
+                    onClick={() => setMonth((m) => shiftMonth(m, -1))}
+                    className="slab inline-flex min-h-11 min-w-11 items-center justify-center border border-[var(--line-fine)] bg-white/[0.03] transition hover:bg-white/[0.08]"
+                  >
+                    <ChevronLeft size={18} aria-hidden />
+                    <span className="sr-only">上個月</span>
+                  </button>
+
+                  <span className="stat-figure text-lg text-white">
+                    {monthLabel(month)}
+                  </span>
+
+                  <button
+                    type="button"
+                    onClick={() => setMonth((m) => shiftMonth(m, 1))}
+                    className="slab inline-flex min-h-11 min-w-11 items-center justify-center border border-[var(--line-fine)] bg-white/[0.03] transition hover:bg-white/[0.08]"
+                  >
+                    <ChevronRight size={18} aria-hidden />
+                    <span className="sr-only">下個月</span>
                   </button>
                 </div>
-              );
-            })}
-          </div>
 
-          {/* 撳日子 → 下方顯示該日活動（重用 EventCard） */}
-          {activeEvents.length > 0 ? (
-            <div className="mt-10">
-              <div className="flex items-center gap-2 text-[11px] font-semibold uppercase tracking-[0.22em] text-white/55">
-                <CalendarDays size={14} />
-                <span className="tnum">{dateText(activeDate ?? "")}</span>
+                {/* 月曆格：週一開始 */}
+                <div className="mt-6 grid grid-cols-7 border-l border-t border-white/10">
+                  {WEEK_LABELS.map((w) => (
+                    <div
+                      key={w}
+                      className="border-b border-r border-white/10 py-2 text-center text-[10px] font-semibold uppercase tracking-[0.18em] text-white/45"
+                    >
+                      {w}
+                    </div>
+                  ))}
+
+                  {cells.map((date, i) => {
+                    if (!date) {
+                      return (
+                        <div
+                          key={`blank-${i}`}
+                          className="border-b border-r border-white/10 bg-white/[0.02]"
+                        />
+                      );
+                    }
+
+                    const day = Number(date.slice(8));
+                    const dayEvents = byDate.get(date) ?? [];
+
+                    if (!dayEvents.length) {
+                      return (
+                        <div
+                          key={date}
+                          className="min-w-0 border-b border-r border-white/10 p-2"
+                        >
+                          <span className="stat-figure block text-right text-xs text-white/30">
+                            {day}
+                          </span>
+                        </div>
+                      );
+                    }
+
+                    const active = date === activeDate;
+                    return (
+                      <div
+                        key={date}
+                        className="min-w-0 border-b border-r border-white/10 p-1.5"
+                      >
+                        <button
+                          type="button"
+                          aria-pressed={active}
+                          onClick={() => setSelected(date)}
+                          className={`block min-h-[3.25rem] w-full px-1.5 py-1 text-left transition ${
+                            active
+                              ? "bg-vital/20"
+                              : "bg-white/[0.03] hover:bg-white/[0.08]"
+                          }`}
+                        >
+                          <span className="stat-figure block text-xs text-white">
+                            {day}
+                          </span>
+                          <span className="mt-1 block truncate text-[10px] leading-tight text-vital-bright">
+                            {dayEvents[0].title}
+                            {dayEvents.length > 1
+                              ? ` +${dayEvents.length - 1}`
+                              : ""}
+                          </span>
+                          <span className="sr-only">
+                            {day} 日，{dayEvents.length} 個活動
+                          </span>
+                        </button>
+                      </div>
+                    );
+                  })}
+                </div>
+
+                {/* 撳日子 → 下方顯示該日活動（重用 EventCard） */}
+                {activeEvents.length > 0 ? (
+                  <div className="mt-10">
+                    <div className="flex items-center gap-2 text-[11px] font-semibold uppercase tracking-[0.22em] text-white/55">
+                      <CalendarDays size={14} />
+                      <span className="tnum">{dateText(activeDate ?? "")}</span>
+                    </div>
+                    <div className="mt-6 grid gap-6 md:grid-cols-2 lg:grid-cols-3">
+                      {activeEvents.map((e) => (
+                        <EventCard
+                          key={e.id}
+                          event={e}
+                          labels={labels}
+                          isLoggedIn={isLoggedIn}
+                          registered={registeredEventIds.includes(e.id)}
+                        />
+                      ))}
+                    </div>
+                  </div>
+                ) : null}
               </div>
-              <div className="mt-6 grid gap-6 md:grid-cols-2 lg:grid-cols-3">
-                {activeEvents.map((e) => (
-                  <EventCard key={e.id} event={e} />
-                ))}
-              </div>
-            </div>
-          ) : null}
-        </div>
-      )}
-    </section>
+            </motion.div>
+          )}
+        </AnimatePresence>
+      </section>
+    </MotionRoot>
   );
 }

@@ -1,7 +1,7 @@
 "use client";
 
 import type { CSSProperties } from "react";
-import { useEffect, useState } from "react";
+import { useEffect, useSyncExternalStore, useState } from "react";
 import { createPortal } from "react-dom";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
@@ -49,9 +49,18 @@ export function MobileNav({
    * 變為 844×390，正常顯示。
    *
    * mounted 只在 client mount 後才為 true，確保 SSR 與首次 hydration 輸出一致。
+   *
+   * 實現同 MotionRoot.useMotionReady()：用 useSyncExternalStore 而唔用
+   * useState + useEffect —— effect 入面同步 setState 會觸發連鎖 render
+   * （eslint react-hooks/set-state-in-effect）；getServerSnapshot 永遠 false、
+   * getSnapshot 永遠 true，React 喺 hydration 之後自己切過去，語意一樣。
    */
-  const [mounted, setMounted] = useState(false);
-  useEffect(() => setMounted(true), []);
+  const subscribeNoop = () => () => {};
+  const mounted = useSyncExternalStore(
+    subscribeNoop,
+    () => true, // client：hydration 後為 true
+    () => false // SSR / 首次 hydration：false
+  );
 
   useEffect(() => {
     document.body.style.overflow = open ? "hidden" : "";
@@ -160,7 +169,11 @@ export function MobileNav({
                   <Link href="/login" className="btn-base btn-ghost btn-slab min-h-11">
                     會員登入
                   </Link>
-                  <Link href="/signup" className="btn-base btn-vital btn-slab min-h-11">
+                  {/* E08 按下回饋：只喺未帶 data-fx-magnet / data-fx-tilt 嘅元素上加（紅線 8） */}
+                  <Link
+                    href="/signup"
+                    className="btn-base btn-vital btn-slab min-h-11 active:scale-[0.97] active:duration-100"
+                  >
                     立即加入
                   </Link>
                 </>

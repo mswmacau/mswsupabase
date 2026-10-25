@@ -1,3 +1,4 @@
+import type { Metadata } from "next";
 import Link from "next/link";
 import {
   ArrowRight,
@@ -11,22 +12,30 @@ import { RunUploadForm } from "./RunUploadForm";
 import { RunSubmissionList } from "@/components/RunSubmissionList";
 import { ProgressBar } from "@/components/ProgressBar";
 import { getCurrentProfile } from "@/lib/supabase/server";
-import { getUserMonthKm, getUserSubmissions } from "@/lib/queries";
+import { getUserMonthKm, getUserSubmissions, getSitePages } from "@/lib/queries";
 import { RULES } from "@/lib/config";
 import { currentMonth, daysLeftInMonth, formatKm, monthLabel } from "@/lib/utils";
 import { CountUp } from "@/components/fx/CountUp";
 import { GoalCalculator } from "@/components/fx/GoalCalculator";
 import { GoalRoute } from "@/components/fx/GoalRoute";
 
-export const metadata = { title: "月度跑步挑戰" };
 export const dynamic = "force-dynamic";
+
+export async function generateMetadata(): Promise<Metadata> {
+  const pages = await getSitePages();
+  return { title: pages.run.page_title };
+}
 
 /** F-R1 拉桿範圍（Brief §2.4：每日 1–20 km），以 props 傳落 client component */
 const PER_DAY_MIN = 1;
 const PER_DAY_MAX = 20;
 
 export default async function RunPage() {
-  const profile = await getCurrentProfile();
+  const [profile, pages] = await Promise.all([
+    getCurrentProfile(),
+    getSitePages(),
+  ]);
+  const t = pages.run;
   const month = currentMonth();
 
   const monthData = profile
@@ -55,12 +64,7 @@ export default async function RunPage() {
       : PER_DAY_MIN;
 
   /** 上傳流程：節奏式排版（01–04），不使用小卡片堆砌 */
-  const STEPS = [
-    "完成跑步後，在 app（Strava / Nike Run Club / 咕咚等）截圖顯示距離的畫面。",
-    "上傳截圖並填寫本次公里數，選擇要計入的月份。",
-    "管理員核對截圖與數字，確認後里程與積分才會入帳。",
-    `當月累積達 ${goal} 公里，月底由後台統一發放優惠券。`,
-  ];
+  const STEPS = [t.step_1, t.step_2, t.step_3, t.step_4];
 
   return (
     <>
@@ -87,8 +91,6 @@ export default async function RunPage() {
             </span>
 
             <div className="min-w-0 flex-1">
-              <span className="eyebrow">Monthly Running Challenge</span>
-
               <h1 className="display-xl mt-6">
                 <span className="block text-white">月度</span>
                 <span className="mt-1 block">
@@ -194,7 +196,6 @@ export default async function RunPage() {
 
             {/* 規則說明：節奏式排版 */}
             <div className="clip-notch card-dark z-raise p-7 md:p-8">
-              <span className="eyebrow eyebrow-cobalt">How It Works</span>
               <ol className="mt-5">
                 {STEPS.map((s, i) => (
                   <li
@@ -224,38 +225,35 @@ export default async function RunPage() {
           {/* 上傳區 + 提交紀錄 */}
           <div className="mt-16 grid gap-8 lg:grid-cols-[0.95fr_1.05fr]">
             <div>
-              <span className="eyebrow">Submit Record</span>
               <h2 className="mt-3 text-2xl font-black tracking-tight">
                 上傳跑步紀錄
               </h2>
-              <p className="mt-2 text-sm text-white/70">
-                同一個月可多次上傳，系統會自動累加。
-              </p>
+              <p className="mt-2 text-sm text-white/70">{t.upload_hint}</p>
 
               <div className="mt-6">
                 {profile ? (
-                  <RunUploadForm />
+                  <RunUploadForm labels={t} />
                 ) : (
                   <div className="clip-notch-br card-dark p-8 text-center">
                     <span className="mx-auto flex h-12 w-12 items-center justify-center border border-[var(--line-fine)] text-vital-bright">
                       <Lock size={22} />
                     </span>
-                    <h3 className="mt-5 text-lg font-bold">請先登入會員</h3>
+                    <h3 className="mt-5 text-lg font-bold">{t.login_card_title}</h3>
                     <p className="mx-auto mt-2 max-w-xs text-sm text-white/70">
-                      登入後才能上傳跑步紀錄並累積里程與積分。
+                      {t.login_prompt}
                     </p>
                     <div className="mt-6 flex flex-wrap justify-center gap-3">
                       <Link
                         href="/login?next=/run"
                         className="btn-base btn-vital btn-slab min-h-11"
                       >
-                        會員登入
+                        {t.login_button}
                       </Link>
                       <Link
                         href="/signup"
                         className="btn-base btn-ghost btn-slab min-h-11"
                       >
-                        註冊新帳號
+                        {t.signup_button}
                       </Link>
                     </div>
                   </div>
@@ -266,7 +264,6 @@ export default async function RunPage() {
             <div>
               <div className="flex flex-wrap items-baseline justify-between gap-3">
                 <div>
-                  <span className="eyebrow">My Submissions</span>
                   <h2 className="mt-3 text-2xl font-black tracking-tight">
                     我的提交紀錄
                   </h2>
@@ -282,7 +279,7 @@ export default async function RunPage() {
                 {profile ? (
                   <RunSubmissionList
                     items={submissions}
-                    emptyText="尚未提交任何跑步紀錄，現在就上傳第一次吧！"
+                    emptyText={t.empty_submissions}
                   />
                 ) : (
                   <div className="slab border border-dashed border-white/15 px-4 py-10 text-center text-sm text-white/70">

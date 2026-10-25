@@ -1,3 +1,4 @@
+import type { Metadata } from "next";
 import Link from "next/link";
 import {
   ArrowRight,
@@ -10,11 +11,19 @@ import {
 import { RULES } from "@/lib/config";
 import { currentMonth, monthLabel } from "@/lib/utils";
 import { getCurrentProfile } from "@/lib/supabase/server";
-import { getCachedPublishedEvents } from "@/lib/queries";
+import {
+  getCachedPublishedEvents,
+  getMyEventRegistrations,
+  getSitePages,
+} from "@/lib/queries";
 import { EventCalendar } from "@/components/fx/EventCalendar";
 
-export const metadata = { title: "活動總覽" };
 export const dynamic = "force-dynamic";
+
+export async function generateMetadata(): Promise<Metadata> {
+  const pages = await getSitePages();
+  return { title: pages.events.page_title };
+}
 
 /** 跑馬燈：接續首頁語言 */
 const MARQUEE_ITEMS = [
@@ -59,10 +68,18 @@ const STEPS = [
 export default async function EventsPage() {
   const month = currentMonth();
   // FE-14 + PM 拍板：保留 getCurrentProfile()，CTA 依登入狀態切換
-  const [events, profile] = await Promise.all([
+  const [events, profile, pages] = await Promise.all([
     getCachedPublishedEvents(),
     getCurrentProfile(),
+    getSitePages(),
   ]);
+  const t = pages.events;
+
+  // T-26：已登入會員查自己報名過的活動 id（卡片顯示「已報名」）；
+  // 未登入回空陣列，卡片顯示「登入後報名」連結。
+  const registeredEventIds = profile
+    ? await getMyEventRegistrations(profile.id)
+    : [];
 
   return (
     <>
@@ -131,7 +148,7 @@ export default async function EventsPage() {
                   <p className="mt-5 text-sm leading-relaxed text-white/65">
                     {events.length > 0
                       ? `目前有 ${events.length} 個已發佈活動，點擊卡片查看報名方式。`
-                      : "目前尚未發佈特別活動，以下為常設的兩條主線。"}
+                      : t.empty_note}
                   </p>
                 </div>
               </div>
@@ -190,14 +207,18 @@ export default async function EventsPage() {
 
       {events.length > 0 ? (
         /* ============ 已發佈活動：F-E1 列表 / 月曆 切換（預設 = 列表） ============ */
-        <EventCalendar events={events} />
+        <EventCalendar
+          events={events}
+          labels={t}
+          isLoggedIn={Boolean(profile)}
+          registeredEventIds={registeredEventIds}
+        />
       ) : (
         <>
           {/* ====== 常設兩條主線：不對稱 Bento（7/5 分欄，佐欄下沉） ====== */}
           <section className="container-msw section-pad">
             <div className="flex flex-wrap items-end justify-between gap-6 border-b border-white/10 pb-8">
               <div>
-                <span className="eyebrow">Core Programs</span>
                 <h2 className="display-xl mt-5">兩條主線</h2>
               </div>
               <p className="max-w-md text-sm leading-relaxed text-white/65">
@@ -220,9 +241,6 @@ export default async function EventsPage() {
                   <div className="flex items-center justify-between gap-4">
                     <span className="text-[11px] font-semibold uppercase tracking-[0.22em] text-white/50">
                       Program 01
-                    </span>
-                    <span className="text-accent-blue text-[11px] font-semibold uppercase tracking-[0.22em]">
-                      Weekly Training
                     </span>
                   </div>
 
@@ -287,9 +305,6 @@ export default async function EventsPage() {
                   <span className="text-[11px] font-semibold uppercase tracking-[0.22em] text-white/50">
                     Program 02
                   </span>
-                  <span className="text-[11px] font-semibold uppercase tracking-[0.22em] text-vital-bright">
-                    Monthly Challenge
-                  </span>
                 </div>
 
                 <div className="mt-8 flex items-end gap-3">
@@ -344,12 +359,8 @@ export default async function EventsPage() {
             <div className="container-msw section-pad relative">
               <div className="flex flex-wrap items-end justify-between gap-6">
                 <div>
-                  <span className="eyebrow">How It Works</span>
                   <h2 className="display-xl mt-5">參加流程</h2>
                 </div>
-                <span className="hidden text-[11px] font-semibold uppercase tracking-[0.22em] text-white/45 md:block">
-                  Four Steps
-                </span>
               </div>
 
               <div className="relative mt-12">
@@ -401,7 +412,6 @@ export default async function EventsPage() {
         <div className="container-msw section-pad relative">
           <div className="grid gap-12 lg:grid-cols-12">
             <div className="lg:col-span-8">
-              <span className="eyebrow">Join The Crew</span>
               <h2 className="mt-6 text-5xl font-black leading-[0.95] tracking-[-0.03em] sm:text-6xl lg:text-7xl">
                 {profile ? "繼續把汗水換成積分" : "現在就開始累積"}
               </h2>

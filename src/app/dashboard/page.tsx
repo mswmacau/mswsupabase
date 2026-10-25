@@ -1,3 +1,4 @@
+import type { Metadata } from "next";
 import type { CSSProperties } from "react";
 import Link from "next/link";
 import { redirect } from "next/navigation";
@@ -15,14 +16,19 @@ import {
   getUserMonthKm,
   getUserPoints,
   getUserSubmissions,
+  getSitePages,
 } from "@/lib/queries";
 import { ProgressBar } from "@/components/ProgressBar";
 import { RunSubmissionList } from "@/components/RunSubmissionList";
 import { RULES } from "@/lib/config";
 import { currentMonth, formatDate, formatKm, monthLabel } from "@/lib/utils";
 
-export const metadata = { title: "我的帳戶" };
 export const dynamic = "force-dynamic";
+
+export async function generateMetadata(): Promise<Metadata> {
+  const pages = await getSitePages();
+  return { title: pages.dashboard.page_title };
+}
 
 /** 斜切角尺寸 */
 const CUT_SM = { "--cut": "8px" } as CSSProperties;
@@ -33,13 +39,15 @@ export default async function DashboardPage() {
   if (!profile) redirect("/login?next=/dashboard");
 
   const month = currentMonth();
-  const [monthKm, submissions, coupons, checkins, points] = await Promise.all([
+  const [monthKm, submissions, coupons, checkins, points, pages] = await Promise.all([
     getUserMonthKm(profile.id, month),
     getUserSubmissions(profile.id, 5),
     getUserCoupons(profile.id),
     getUserCheckins(profile.id, 5),
     getUserPoints(profile.id, 10),
+    getSitePages(),
   ]);
+  const t = pages.dashboard;
 
   const activeCoupons = coupons.filter((c) => c.status === "active").length;
   const goal = RULES.MONTHLY_GOAL_KM;
@@ -65,7 +73,6 @@ export default async function DashboardPage() {
             My Account
           </span>
           <div className="min-w-0 flex-1">
-            <span className="eyebrow">Member Dashboard</span>
             <h1 className="display-xl mt-6 break-words">
               <span className="block text-white">你好，</span>
               <span className="mt-1 block break-words text-vital-bright">
@@ -269,7 +276,6 @@ export default async function DashboardPage() {
           <div className="lg:col-span-7">
             <div className="flex flex-wrap items-baseline justify-between gap-3">
               <div>
-                <span className="eyebrow">Recent Submissions</span>
                 <h2 className="mt-3 text-xl font-black tracking-tight">
                   最近的跑步提交
                 </h2>
@@ -284,13 +290,12 @@ export default async function DashboardPage() {
             <div className="mt-5">
               <RunSubmissionList
                 items={submissions}
-                emptyText="還沒有提交紀錄，去 /run 上傳第一次吧。"
+                emptyText={t.empty_submissions}
               />
             </div>
           </div>
 
           <div className="lg:col-span-5">
-            <span className="eyebrow">Points Ledger</span>
             <h2 className="mt-3 text-xl font-black tracking-tight">積分明細</h2>
             <div className="mt-5">
               {points.length ? (
@@ -330,14 +335,13 @@ export default async function DashboardPage() {
                 </div>
               ) : (
                 <div className="slab border border-dashed border-white/15 px-4 py-10 text-center text-sm text-white/70">
-                  尚無積分紀錄。
+                  {t.empty_points}
                 </div>
               )}
             </div>
           </div>
 
           <div className="lg:col-span-12">
-            <span className="eyebrow">Training Log</span>
             <h2 className="mt-3 text-xl font-black tracking-tight">
               近期訓練紀錄
             </h2>
@@ -390,7 +394,7 @@ export default async function DashboardPage() {
                 </div>
               ) : (
                 <div className="slab border border-dashed border-white/15 px-4 py-10 text-center text-sm text-white/70">
-                  尚無訓練紀錄。
+                  {t.empty_checkins}
                 </div>
               )}
             </div>

@@ -51,7 +51,6 @@ function escapeText(value: string): string {
     .replace(/,/g, "\\,")
     .replace(/\r?\n/g, "\\n");
 }
-
 /** RFC 5545：每行上限 75 octets（呢度用字元數做近似值），續行以一個空格起頭 */
 function foldLine(line: string): string[] {
   if (line.length <= 75) return [line];
@@ -73,8 +72,16 @@ function utcStamp(): string {
  * 組 ICS 字串。DTSTART / DTEND 用「浮動本地時間」（唔帶 Z、唔帶 TZID）——
  * session_date 同 TRAINING_TIME 本身就係本地時間，加時區反而會被日曆 App
  * 再轉一次；浮動時間會直接按使用者日曆時區顯示，最貼近原意。
+ *
+ * T-4：PRODID 的品牌英文名改讀 site_theme.brand_name_en（由 page 傳入，
+ * 回落 BRAND.nameEn），與導覽列／頁尾同源。
  */
-function buildIcs(session: TrainingSession, start: string, end: string): string | null {
+function buildIcs(
+  session: TrainingSession,
+  start: string,
+  end: string,
+  brandNameEn: string
+): string | null {
   const d = splitDate(session.session_date);
   const s = splitClock(start);
   if (!d || !s) return null;
@@ -85,7 +92,7 @@ function buildIcs(session: TrainingSession, start: string, end: string): string 
   const lines: string[] = [
     "BEGIN:VCALENDAR",
     "VERSION:2.0",
-    `PRODID:-//${BRAND.nameEn}//Training//ZH`,
+    `PRODID:-//${brandNameEn}//Training//ZH`,
     "CALSCALE:GREGORIAN",
     "METHOD:PUBLISH",
     "BEGIN:VEVENT",
@@ -103,7 +110,14 @@ function buildIcs(session: TrainingSession, start: string, end: string): string 
 
 /* ============================ F-T1：倒數卡 ============================ */
 
-export function NextSessionCard({ session }: { session: TrainingSession }) {
+export function NextSessionCard({
+  session,
+  brandNameEn = BRAND.nameEn,
+}: {
+  session: TrainingSession;
+  /** 品牌英文名（site_theme.brand_name_en；用於 ICS PRODID，回落 BRAND.nameEn） */
+  brandNameEn?: string;
+}) {
   const { start, end } = trainingClock();
 
   const startMs = useMemo(() => {
@@ -165,7 +179,7 @@ export function NextSessionCard({ session }: { session: TrainingSession }) {
   }
 
   function handleAddToCalendar() {
-    const ics = buildIcs(session, start, end);
+    const ics = buildIcs(session, start, end, brandNameEn);
     if (!ics) return;
 
     // 微信內：改為複製 .ics 內容到剪貼簿，使用者可貼到行事曆 app。

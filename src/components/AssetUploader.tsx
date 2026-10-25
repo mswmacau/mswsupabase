@@ -10,6 +10,9 @@
  *  - 移除後 onChange(null)
  * 備註：封面「確認移除」對話框由父層（EventManager）在 onChange(null) 時處理，
  *       本元件只負責把值清成 null。
+ *
+ * T-11（V1 O2–O4）：尺寸／比例提示改為常駐顯示——未上傳與已上傳狀態都看得到；
+ *       各 kind 有建議像素（父層傳入的 hint 可覆寫）；iPhone HEIC 處理提示統一在此。
  */
 
 import { useRef, useState } from "react";
@@ -25,6 +28,17 @@ export interface AssetUploaderProps {
   aspect?: "16/9" | "2/1" | "1/1" | "auto";
   hint?: string;
 }
+
+/** T-11：各 kind 的建議像素與比例（父層可用 hint 覆寫） */
+const KIND_HINTS: Record<AssetUploaderProps["kind"], string> = {
+  logo: "建議 512×512 正方形。",
+  hero: "建議 1600×900。",
+  event: "活動封面；建議 1600×900（16:9），不符比例會被裁切。",
+  coach: "建議 900×1200 直式（3:4）。",
+};
+
+/** T-11：iPhone HEIC 常駐提示（V1 O4；選到 HEIC 檔時另有上傳錯誤說明） */
+const HEIC_HINT = "iPhone 相片請先轉 JPG，或在相機設定改為「相容性最佳」。";
 
 export function AssetUploader({
   kind,
@@ -132,9 +146,10 @@ export function AssetUploader({
         </button>
       )}
 
-      {hint && !preview && (
-        <p className="text-xs text-white/70">{hint}</p>
-      )}
+      {/* T-11：提示常駐顯示——已上傳後仍看得到建議（V1 O2/O3） */}
+      <p className="text-xs text-white/70">
+        {hint ?? KIND_HINTS[kind]} {HEIC_HINT}
+      </p>
       {error && (
         <p role="alert" aria-live="polite" className="text-xs text-red-300">
           {error}

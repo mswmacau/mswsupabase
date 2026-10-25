@@ -45,7 +45,6 @@ export default async function CouponsPage() {
             My Coupons
           </span>
           <div className="min-w-0 flex-1">
-            <span className="eyebrow">Redeem Rewards</span>
             <h1 className="display-xl mt-6">
               <span className="block text-white">我的</span>
               <span className="mt-1 block">

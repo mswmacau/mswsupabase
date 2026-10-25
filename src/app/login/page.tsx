@@ -1,11 +1,16 @@
+import type { Metadata } from "next";
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { ArrowLeft } from "lucide-react";
 import { LoginForm } from "./LoginForm";
 import { getCurrentProfile } from "@/lib/supabase/server";
+import { getSitePages } from "@/lib/queries";
 import { RULES } from "@/lib/config";
 
-export const metadata = { title: "會員登入" };
+export async function generateMetadata(): Promise<Metadata> {
+  const pages = await getSitePages();
+  return { title: pages.login.page_title };
+}
 
 /** 左側宣言區的三聯事實：大數字主導，不用小圖標堆砌 */
 const FACTS = [
@@ -22,7 +27,11 @@ export default async function LoginPage({
   const { next } = await searchParams;
   const target = next && next.startsWith("/") ? next : "/dashboard";
 
-  const profile = await getCurrentProfile();
+  const [profile, pages] = await Promise.all([
+    getCurrentProfile(),
+    getSitePages(),
+  ]);
+  const t = pages.login;
   if (profile) redirect(profile.role === "admin" ? "/admin" : target);
 
   // min-h-screen-safe：微信／iOS Safari 改用 svh，避免網址列遮住底部（定義見 globals.css）
@@ -61,8 +70,6 @@ export default async function LoginPage({
                 <ArrowLeft size={15} /> 回首頁
               </Link>
 
-              <span className="eyebrow mt-8 block">Member Login</span>
-
               <h1 className="display-xl mt-6">
                 <span className="block text-white">回到</span>
                 <span className="mt-1 block">
@@ -72,8 +79,7 @@ export default async function LoginPage({
               </h1>
 
               <p className="mt-8 max-w-md text-base leading-relaxed text-white/70">
-                登入後可報名定期訓練、上傳跑步紀錄與查看積分排行。
-                里程與簽到都由後台確認後才入帳，讓每一次累積都算得清楚。
+                {t.intro}
               </p>
 
               <dl className="stagger mt-10 grid max-w-md grid-cols-3 gap-6 border-t border-[var(--line-fine)] pt-6">
@@ -96,19 +102,18 @@ export default async function LoginPage({
 
           {/* ===== 右：表單（去膠囊，斜切角 + 玻璃底） ===== */}
           <div className="clip-notch-br border border-[var(--line-fine)] bg-[var(--glass-bg-strong)] p-7 backdrop-blur-xl md:p-9">
-            <span className="eyebrow eyebrow-cobalt">Account Access</span>
             <p className="mt-4 text-sm leading-relaxed text-white/70">
-              使用電郵與密碼登入會員帳戶。
+              {t.form_intro}
             </p>
 
             {target.startsWith("/admin") && (
               <p className="slab mt-5 border border-cobalt/40 bg-cobalt/10 px-3 py-2.5 text-xs leading-relaxed text-blue-200">
-                管理員入口：請用管理員帳號登入，成功後會直接進入後台管理。
+                {t.admin_notice}
               </p>
             )}
 
             <div className="mt-7">
-              <LoginForm next={target} />
+              <LoginForm next={target} labels={t} />
             </div>
           </div>
         </div>

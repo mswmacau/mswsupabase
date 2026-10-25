@@ -564,6 +564,7 @@ sudo certbot renew --dry-run                     # 確認憑證續期機制正�
 | `NEXT_PUBLIC_SUPABASE_ANON_KEY` | Supabase 匿名公開金鑰，前端用它通過 RLS 存取資料 | Supabase → **Project Settings → API → Project API keys → anon public** | 是 | ✅ |
 | `NEXT_PUBLIC_SITE_URL` | 網站正式網址；用於電郵驗證連結導回（`/auth/callback`） | 你自己買的網域，例如 `https://www.mswmacau.com`（**不含**結尾斜線） | 是 | ✅ |
 | `SUPABASE_SERVICE_KEY` | **僅**維運腳本（如 `seed.mjs`）與資料搬遷使用，可繞過 RLS | Supabase → **Project Settings → API → service_role** | 否 | ❌ 日常不需要 |
+| `NEXT_PUBLIC_MOTION_ENABLED` | 動效緊急開關：活動／訓練頁嘅 motion 動畫。**唔設＝開啟**（預設動畫正常）；設為 `false`（或 `0`/`off`/`no`）即停用動畫，內容與功能完全唔受影響 | 唔使去邊度攞，有需要時自己填入 `false` | 是 | ❌ 日常不需要 |
 
 ### ⚠️ 金鑰安全守則（請務必遵守）
 

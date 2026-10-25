@@ -145,7 +145,6 @@ export function LeaderboardSearch({
       <section className="container-msw section-pad">
         <div className="flex flex-wrap items-end justify-between gap-6 border-b border-white/10 pb-8">
           <div>
-            <span className="eyebrow">Monthly Ranking</span>
             <h2 className="display-xl mt-5">{monthLabel} 里程榜</h2>
           </div>
           <span className="text-[11px] font-semibold uppercase tracking-[0.22em] text-white/45">
@@ -233,7 +232,6 @@ export function LeaderboardSearch({
         <div className="container-msw section-pad relative">
           <div className="flex flex-wrap items-end justify-between gap-6 border-b border-white/10 pb-8">
             <div>
-              <span className="eyebrow">All Time</span>
               <h2 className="display-xl mt-5">累積總榜</h2>
             </div>
             <span className="text-[11px] font-semibold uppercase tracking-[0.22em] text-white/45">

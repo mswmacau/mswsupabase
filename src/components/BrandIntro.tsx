@@ -1,4 +1,5 @@
 import { ABOUT } from "@/lib/config";
+import type { SiteContentAbout } from "@/lib/content";
 
 /** 關鍵詞強調：紅色用 vital-bright（對 ink ≈ 5.1:1，達 WCAG AA） */
 const ACCENT_VITAL = "font-bold text-vital-bright";
@@ -58,10 +59,17 @@ function Emphasize({
  * 首頁「關於我們」區塊。
  * 版式刻意不對稱：第一段是宣言式大字主敘述，第二、三段走 1.6 : 1 的
  * 主段 + 側欄引言，不使用等寬卡片、圖標或折疊塊。
+ *
+ * T-5：四段文案改讀 site_content.about（首頁與 /about 同源，單一來源）；
+ * 未傳入時回落 config 的 ABOUT（逐字等於預設值）。
  */
-export function BrandIntro() {
+export function BrandIntro({ about = ABOUT }: { about?: SiteContentAbout }) {
   return (
-    <section id="about" className="relative overflow-hidden border-b border-ink-line">
+    <section
+      id="about"
+      className="relative overflow-hidden border-b border-ink-line"
+      data-fx-seq
+    >
       {/* 手工質感：細網格 + 噪點（沿用其他區塊） */}
       <div className="grid-lines absolute inset-0" aria-hidden />
       <div className="noise-overlay" aria-hidden />
@@ -77,33 +85,16 @@ export function BrandIntro() {
       />
 
       <div className="container-msw section-pad relative">
-        {/* ===== 01：宣言式主敘述 ===== */}
-        <div className="grid gap-8 lg:grid-cols-[auto_minmax(0,1fr)] lg:items-start lg:gap-14">
-          <div className="flex items-center gap-5 lg:flex-col lg:items-start lg:gap-6">
-            <span
-              aria-hidden
-              className="stat-figure text-5xl text-outline md:text-6xl lg:text-7xl"
-            >
-              01
-            </span>
-            <span aria-hidden className="vlabel hidden text-white/40 lg:block">
-              Who We Are
-            </span>
-          </div>
-
-          <div>
-            <span className="eyebrow">{ABOUT.eyebrow}</span>
-            <h2 className="mt-6 max-w-4xl text-[clamp(1.35rem,2.6vw,2rem)] font-black leading-[1.35] tracking-[-0.01em] text-white">
-              <Emphasize text={ABOUT.lead} terms={["Street Workout", "HYROX"]} />
-            </h2>
-          </div>
-        </div>
+        {/* 宣言式主敘述 */}
+        <h2 className="mt-6 max-w-4xl text-[clamp(1.35rem,2.6vw,2rem)] font-black leading-[1.35] tracking-[-0.01em] text-white">
+          <Emphasize text={about.lead} terms={["Street Workout", "HYROX"]} />
+        </h2>
 
         {/* ===== 02：不對稱雙欄（理念 / 號召） ===== */}
         <div className="mt-12 grid gap-10 border-t border-[var(--line-fine-strong)] pt-12 lg:mt-16 lg:grid-cols-[1.6fr_1fr] lg:gap-16 lg:pt-14">
           <p className="text-base leading-[1.9] text-[var(--text-muted)] lg:text-lg">
             <Emphasize
-              text={ABOUT.philosophy}
+              text={about.philosophy}
               terms={["生活態度"]}
               strong={["挑戰自身極限"]}
             />
@@ -116,7 +107,7 @@ export function BrandIntro() {
               className="mb-4 block h-1.5 w-1.5 rotate-45 bg-vital-bright"
             />
             <p className="text-base leading-[1.9] text-white/80">
-              {ABOUT.cta}
+              {about.cta}
             </p>
           </div>
         </div>

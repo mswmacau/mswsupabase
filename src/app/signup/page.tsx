@@ -1,11 +1,16 @@
+import type { Metadata } from "next";
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { ArrowLeft } from "lucide-react";
 import { SignupForm } from "./SignupForm";
 import { getCurrentProfile } from "@/lib/supabase/server";
+import { getSitePages } from "@/lib/queries";
 import { RULES } from "@/lib/config";
 
-export const metadata = { title: "註冊會員" };
+export async function generateMetadata(): Promise<Metadata> {
+  const pages = await getSitePages();
+  return { title: pages.signup.page_title };
+}
 
 /** 左側宣言區的三聯事實 */
 const FACTS = [
@@ -25,7 +30,11 @@ const BENEFITS = [
 ] as const;
 
 export default async function SignupPage() {
-  const profile = await getCurrentProfile();
+  const [profile, pages] = await Promise.all([
+    getCurrentProfile(),
+    getSitePages(),
+  ]);
+  const t = pages.signup;
   if (profile) redirect("/dashboard");
 
   // min-h-screen-safe：微信／iOS Safari 改用 svh，避免網址列遮住底部（定義見 globals.css）
@@ -64,8 +73,6 @@ export default async function SignupPage() {
                 <ArrowLeft size={15} /> 回首頁
               </Link>
 
-              <span className="eyebrow mt-8 block">Join MSW</span>
-
               <h1 className="display-xl mt-6">
                 <span className="block text-white">開始</span>
                 <span className="mt-1 block">
@@ -75,9 +82,7 @@ export default async function SignupPage() {
               </h1>
 
               <p className="mt-8 max-w-md text-base leading-relaxed text-white/70">
-                免費加入 MSW 街健館。每週一定期訓練、每月{" "}
-                {RULES.MONTHLY_GOAL_KM} 公里跑步挑戰，
-                里程與簽到都由後台確認後入帳，讓訓練變成看得見的累積。
+                {t.intro}
               </p>
 
               <dl className="stagger mt-10 grid max-w-md grid-cols-3 gap-6 border-t border-[var(--line-fine)] pt-6">
@@ -100,13 +105,12 @@ export default async function SignupPage() {
 
           {/* ===== 右：表單 + 會員權益 ===== */}
           <div className="clip-notch-br border border-[var(--line-fine)] bg-[var(--glass-bg-strong)] p-7 backdrop-blur-xl md:p-9">
-            <span className="eyebrow eyebrow-cobalt">Create Account</span>
             <p className="mt-4 text-sm leading-relaxed text-white/70">
-              填寫電郵與密碼即可建立帳號，無需審核。
+              {t.form_intro}
             </p>
 
             <div className="mt-7">
-              <SignupForm />
+              <SignupForm labels={t} />
             </div>
 
             {/* 會員權益：節奏式排版，不用小卡片堆砌 */}

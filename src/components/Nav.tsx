@@ -6,6 +6,7 @@ import { usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
 import { ChevronDown, Shield, Ticket, User } from "lucide-react";
 import { BRAND, NAV_LINKS } from "@/lib/config";
+import type { NavLink } from "@/lib/content";
 import { useSmartNav } from "./fx/useSmartNav";
 import { MobileNav } from "./MobileNav";
 import { LogoutButton } from "./LogoutButton";
@@ -18,6 +19,8 @@ interface Props {
   logoUrl?: string | null;
   brandName?: string;
   brandNameEn?: string;
+  /** 導覽選單（site_nav；由 layout 以 getSiteNav() 讀出後傳入） */
+  navLinks?: NavLink[];
 }
 
 /** 斜切角尺寸：小元件用較小的切角，避免切掉過多面積 */
@@ -32,6 +35,7 @@ export function Nav({
   logoUrl,
   brandName = BRAND.name,
   brandNameEn = BRAND.nameEn,
+  navLinks,
 }: Props) {
   const [scrolled, setScrolled] = useState(false);
   // F-G1：向下碌收起、向上碌／碌返頂部重現（reduced-motion 時恆為 false）
@@ -48,7 +52,11 @@ export function Nav({
     return () => window.removeEventListener("scroll", onScroll);
   }, []);
 
-  const links = NAV_LINKS.map((l) => ({ ...l }));
+  // T-6：選單改讀 site_nav（layout 傳入）；未傳入時回落 config 的 NAV_LINKS。
+  // visible=false 的項目保留在資料中但不顯示（桌面與手機選單同步）。
+  const links = (navLinks ?? NAV_LINKS.map((l) => ({ ...l, visible: true })))
+    .filter((l) => l.visible)
+    .map((l) => ({ href: l.href, label: l.label }));
 
   return (
     <header
@@ -199,7 +207,9 @@ export function Nav({
               </Link>
               <Link
                 href="/signup"
-                className="btn-base btn-vital btn-slab min-h-11 !px-5 !py-2 text-sm"
+                // E08 按下回饋：只喺未帶 data-fx-magnet / data-fx-tilt 嘅元素上加（紅線 8）
+                // 用 Tailwind v4 嘅 `scale` 獨立合成屬性，唔會同 hover 嘅 transform 打架
+                className="btn-base btn-vital btn-slab min-h-11 !px-5 !py-2 text-sm active:scale-[0.97] active:duration-100"
               >
                 立即加入
               </Link>

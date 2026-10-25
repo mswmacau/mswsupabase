@@ -5,6 +5,7 @@
   --color-ink: #0f0f0f;              /* 近黑 — 主背景 */
   --color-ink-soft: #161616;         /* 卡片深底 */
   --color-ink-line: #262626;         /* 深色區分割線 */
+  --color-surface-avatar: #1c1c1c;   /* 教練頭像佔位底：獨立表面色，刻意不併入 ink 尺度以保持視覺一致 */
   --color-paper: #f5f5f7;            /* 淺灰白 — 內容區塊 */
   --color-cobalt: #0047ab;           /* 鈷藍 — 主要藍 */
   --color-cobalt-bright: #0057ff;    /* 亮鈷藍 — hover / 漸層 */
@@ -195,9 +196,6 @@ main:focus-visible {
     background: currentColor;
     opacity: 0.85;
   }
-  .eyebrow-cobalt {
-    color: color-mix(in srgb, var(--color-cobalt-bright) 70%, var(--color-white));
-  }
 
   .field {
     width: 100%;
@@ -258,8 +256,8 @@ main:focus-visible {
       transparent 2px 26px
     );
     opacity: 0.5;
-    -webkit-mask-image: linear-gradient(100deg, transparent, #000 45%, transparent);
-    mask-image: linear-gradient(100deg, transparent, #000 45%, transparent);
+    -webkit-mask-image: linear-gradient(100deg, transparent, var(--color-ink) 45%, transparent);
+    mask-image: linear-gradient(100deg, transparent, var(--color-ink) 45%, transparent);
   }
 
   /* ===== 運動元素：斜切 / 切角 ===== */
@@ -806,7 +804,7 @@ body::after {
       以免不支援時連底色都沒有。 */
 @supports not ((backdrop-filter: blur(2px)) or (-webkit-backdrop-filter: blur(2px))) {
   .glass {
-    background: #0f0f0f;
+    background: var(--color-ink);
     backdrop-filter: none;
     -webkit-backdrop-filter: none;
   }

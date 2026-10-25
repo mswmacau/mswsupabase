@@ -29,7 +29,8 @@ export class FetchError extends Error {
 const NETWORK_ERROR = "網路中斷，請檢查連線後再試。";
 
 interface CallOptions {
-  method?: "POST" | "PATCH" | "PUT" | "DELETE";
+  /** GET 用於純取數（不帶 body）；其餘方法照舊可帶 JSON body */
+  method?: "GET" | "POST" | "PATCH" | "PUT" | "DELETE";
   body?: unknown;
 }
 

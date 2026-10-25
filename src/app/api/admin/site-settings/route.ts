@@ -5,6 +5,8 @@
  * DELETE 回復原廠設定（只重置 site_theme 一列，不動其他資料）→ 200
  *
  * 契約：SPEC-R6.md §2.6（POST）、§2.7（DELETE）
+ * T-15：POST/DELETE 成功後各寫一筆 admin_audit_log（module=site-settings，
+ *       action=save/restore；best-effort，見 src/lib/audit.ts）
  * Owner：白客
  *
  * H6：全部包 try/catch，任何情況都回 JSON。
@@ -24,6 +26,7 @@ import {
   jsonValidation,
   readJson,
 } from "@/lib/api";
+import { writeAuditLog } from "@/lib/audit";
 
 import { SITE_THEME_TAG } from "@/lib/queries";
 
@@ -51,7 +54,8 @@ async function authorizeAdmin() {
     .maybeSingle();
   if (profile?.role !== "admin") return { res: jsonForbidden() } as const;
 
-  return { supabase } as const;
+  // T-15：actorId 一併回傳（操作日誌的 actor_id = 授權管理員 user.id）
+  return { supabase, actorId: user.id } as const;
 }
 
 type Authorized = Awaited<ReturnType<typeof authorizeAdmin>>;
@@ -78,7 +82,7 @@ export async function POST(request: Request) {
   try {
     const auth = (await authorizeAdmin()) as Authorized;
     if ("res" in auth) return auth.res;
-    const { supabase } = auth;
+    const { supabase, actorId } = auth;
 
     const body = await readJson(request);
     if (!body) return jsonBadJson();
@@ -139,6 +143,9 @@ export async function POST(request: Request) {
     revalidateTag(SITE_THEME_TAG, { expire: 60 });
     revalidatePath("/", "layout");
 
+    // 7) T-15 操作日誌（best-effort，失敗不影響主流程，見 lib/audit.ts 檔頭）
+    await writeAuditLog(supabase, actorId, "site-settings", "save", "更新網站主題設定。");
+
     return jsonOk({
       data: next,
       message: "網站設定已儲存，重新載入頁面後生效。",
@@ -155,7 +162,7 @@ export async function DELETE() {
   try {
     const auth = (await authorizeAdmin()) as Authorized;
     if ("res" in auth) return auth.res;
-    const { supabase } = auth;
+    const { supabase, actorId } = auth;
 
     const { error } = await supabase.from("app_settings").upsert(
       {
@@ -170,6 +177,9 @@ export async function DELETE() {
 
     revalidateTag(SITE_THEME_TAG, { expire: 60 });
     revalidatePath("/", "layout");
+
+    // T-15 操作日誌（best-effort，失敗不影響主流程）
+    await writeAuditLog(supabase, actorId, "site-settings", "restore", "回復網站主題原廠設定。");
 
     return jsonOk({ data: DEFAULT_THEME, message: "已回復原廠設定。" });
   } catch (err) {

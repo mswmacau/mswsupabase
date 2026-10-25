@@ -79,7 +79,6 @@ export function ScrubText({
       <span className="fx-sr-only">{text}</span>
       <span ref={hostRef} className="fx-scrub" aria-hidden>
         {Array.from(text).map((ch, i) => (
-          // eslint-disable-next-line react/no-array-index-key -- 逐字 span 位置固定，index 就係穩定 key
           <span key={i} data-fx-w>
             {ch === " " ? "\u00A0" : ch}
           </span>

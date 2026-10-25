@@ -70,7 +70,6 @@ where id = (select id from auth.users where email = 'you@example.com');`}
     <section className="pt-24 pb-20 md:pt-28">
       <div className="container-msw">
         <div className="mb-8">
-          <span className="eyebrow">Admin Console</span>
           <h1 className="mt-2 text-2xl font-black">MSW 後台管理</h1>
         </div>
 

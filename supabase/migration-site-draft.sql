@@ -1,0 +1,61 @@
+-- =============================================================
+-- 網站內容草稿袋：site_content_draft 鍵（T-16，草稿預覽 MVP）
+-- 日期：2026-10-23
+-- 執行位置：Supabase Dashboard → SQL Editor → 整段貼上執行
+-- 幂等：on conflict (key) do nothing，可重複執行；不覆蓋用戶已儲存的草稿
+-- =============================================================
+--
+-- 【用途】
+-- app_settings 的一個新鍵，存「草稿袋」——一個 JSONB 物件：
+--   {
+--     "content": { …與 site_content 相同結構… },
+--     "nav":     { …與 site_nav 相同結構… },
+--     "contact": { …與 site_contact 相同結構… },
+--     "pages":   { …與 site_pages 相同結構… },
+--     "blocks":  { …與 site_blocks 相同結構… },
+--     "seo":     { …與 site_seo 相同結構… }
+--   }
+-- 只存管理員實際傳來的分區（其餘分區不出現在袋裡）。
+-- 前台永不讀取本鍵；只有以下兩處讀：
+--   - GET /api/admin/site-draft（管理員讀回自己的草稿）
+--   - /preview 預覽頁（經 Next draft mode + getDraftOverride()，見 src/lib/draft.ts）
+--
+-- 【語義（重要）】
+-- 空袋 {} = 無草稿（本檔播種的預設值）。
+-- 袋內至少一個分區 = 有草稿。
+-- 發佈成功後袋被清空為 {}；「丟棄草稿」同樣清空為 {}。
+-- 前台六個 getter（queries.ts）只在「draft mode 已啟用且呼叫者是管理員」
+-- 時才讀本鍵，其餘任何情況行為與本檔執行前逐字一致。
+--
+-- 【範圍裁決（主理人已定，MVP）】
+-- 只做「草稿袋 + 管理員預覽 + 三按鈕（儲存草稿／預覽／發佈）」；
+-- 不做全站每頁預覽、不做草稿歷史版本（T-16 降級方案已定案）。
+--
+-- 【性質】
+-- 只新增 app_settings 的一個鍵；不改動任何既有表結構、既有欄位與既有資料。
+-- RLS 沿用 schema.sql 第 251–257 行既有政策（settings_select_all for select
+-- using (true) / settings_admin_write for all using (public.is_admin())），
+-- 自動覆蓋新鍵，無需新增政策。
+--
+-- Owner：白客（backend-engineer）
+--
+-- 【已知限制（如實記錄，不隱瞞）】
+-- settings_select_all 是 using (true)——anon 角色理論上可經 PostgREST 直接
+-- select 本鍵看到未發佈草稿。取捨：草稿僅為行銷文案、不含敏感資料；且 /preview
+-- 頁與 getDraftOverride() 都另有管理員閘門，未發佈內容不會出現在前台。
+-- 要徹底收緊需改動既有 select 政策（紅線：不改既有表結構與政策），故記錄在案。
+-- =============================================================
+
+insert into public.app_settings (key, value) values
+  ('site_content_draft', '{}'::jsonb)
+on conflict (key) do nothing;
+
+-- =============================================================
+-- 執行後驗證
+-- =============================================================
+-- select key, jsonb_typeof(value) as type, value
+--   from public.app_settings
+--  where key = 'site_content_draft';
+--   → 應有 1 列，type = object，value = {}；再執行一次本檔不會報錯，
+--     且管理員已儲存的草稿不會被洗掉（on conflict do nothing）。
+-- =============================================================

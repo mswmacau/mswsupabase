@@ -1,10 +1,21 @@
 import Link from "next/link";
+import type { Metadata } from "next";
 import { ArrowUpRight, AtSign } from "lucide-react";
 import { CountUp } from "@/components/fx/CountUp";
-import { getCachedSiteStats } from "@/lib/queries";
-import { ABOUT, BRAND } from "@/lib/config";
+import {
+  getCachedSiteStats,
+  getSiteContent,
+  getSitePages,
+  getSiteTheme,
+} from "@/lib/queries";
+import { BRAND } from "@/lib/config";
 
-export const metadata = { title: "關於我們" };
+/** T-19：頁面標題改讀 site_pages.about（DB 無值 → 回落預設＝現有硬編碼） */
+export async function generateMetadata(): Promise<Metadata> {
+  const pages = await getSitePages();
+  return { title: pages.about.page_title };
+}
+
 export const dynamic = "force-dynamic";
 
 /**
@@ -14,10 +25,22 @@ export const dynamic = "force-dynamic";
  * - 數字全部嚟自 getCachedSiteStats()（site_stats，120 秒 cache），用 F-G2 嘅 CountUp
  * - IG 連結重用 BRAND.instagramUrl（同 footer 同一個，冇新增 config 欄位）
  *
+ * T-4 / T-5 / T-19：英文名讀 site_theme.brand_name_en、標語讀 site_theme.tagline_zh、
+ * 四段內文讀 site_content.about（與首頁 BrandIntro 同源）、頁面標題讀
+ * site_pages.about；DB 無值時全部回落 config 現值（沙箱渲染與基線一致）。
+ *
  * 未做：F-A1 成立時間線、F-A2 教練卡（等站主提供文案 / 教練資料 + 相片）
  */
 export default async function AboutPage() {
-  const stats = await getCachedSiteStats();
+  const [stats, theme, content, pages] = await Promise.all([
+    getCachedSiteStats(),
+    getSiteTheme(),
+    getSiteContent(),
+    getSitePages(),
+  ]);
+
+  // 標語同「追蹤我們」段：DB 有值用 DB，否則回落 BRAND.tagline（原硬編碼）
+  const tagline = theme.tagline_zh ?? BRAND.tagline;
 
   // 標籤同數字單位沿用真站現有用字（首頁「累積數據」區塊）
   const figures = [
@@ -46,14 +69,12 @@ export default async function AboutPage() {
         <div className="container-msw relative z-10">
           <div className="relative pb-14 pt-28 md:pt-36 lg:pb-16">
             <div className="absolute left-0 top-40 hidden lg:block">
-              <span className="vlabel text-white/50">{BRAND.nameEn}</span>
+              <span className="vlabel text-white/50">{theme.brand_name_en}</span>
             </div>
 
             <div className="lg:pl-14">
-              <span className="eyebrow">{ABOUT.eyebrow}</span>
-
               <h1 className="mt-6 lg:-ml-[3vw] lg:w-[112%]">
-                <span className="display-xl block text-white">關於我們</span>
+                <span className="display-xl block text-white">{pages.about.page_title}</span>
                 <span className="relative mt-1 block">
                   <span
                     aria-hidden
@@ -69,7 +90,7 @@ export default async function AboutPage() {
 
               <div className="mt-10 grid gap-10 lg:grid-cols-12 lg:gap-8">
                 <p className="text-base leading-relaxed text-white/70 lg:col-span-7 sm:text-lg">
-                  {ABOUT.lead}
+                  {content.about.lead}
                 </p>
               </div>
             </div>
@@ -81,7 +102,7 @@ export default async function AboutPage() {
       <section className="container-msw section-pad">
         <div className="grid gap-10 border-t border-[var(--line-fine-strong)] pt-12 lg:grid-cols-[1.6fr_1fr] lg:gap-16 lg:pt-14">
           <p className="text-base leading-[1.9] text-[var(--text-muted)] lg:text-lg">
-            {ABOUT.philosophy}
+            {content.about.philosophy}
           </p>
 
           {/* 側欄引言：垂直細線 + 菱形標記（同首頁 BrandIntro 一致） */}
@@ -90,7 +111,7 @@ export default async function AboutPage() {
               aria-hidden
               className="mb-4 block h-1.5 w-1.5 rotate-45 bg-vital-bright"
             />
-            <p className="text-base leading-[1.9] text-white/80">{ABOUT.cta}</p>
+            <p className="text-base leading-[1.9] text-white/80">{content.about.cta}</p>
           </div>
         </div>
       </section>
@@ -149,10 +170,9 @@ export default async function AboutPage() {
         <div className="container-msw section-pad relative">
           <div className="grid gap-10 lg:grid-cols-12 lg:items-end">
             <div className="lg:col-span-7">
-              <span className="eyebrow">{BRAND.nameEn}</span>
               <h2 className="display-xl mt-6">追蹤我們</h2>
               <p className="mt-6 max-w-xl text-base leading-relaxed text-white/70">
-                {BRAND.tagline}。
+                {tagline}。
               </p>
             </div>
 

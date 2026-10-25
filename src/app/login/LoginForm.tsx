@@ -4,9 +4,16 @@ import { useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { AlertCircle, ArrowRight, Loader2 } from "lucide-react";
+import { DEFAULT_PAGES, type SitePageLogin } from "@/lib/content";
 import { safeNext } from "@/lib/safe-next";
 
-export function LoginForm({ next }: { next: string }) {
+export function LoginForm({
+  next,
+  labels = DEFAULT_PAGES.login,
+}: {
+  next: string;
+  labels?: SitePageLogin;
+}) {
   const router = useRouter();
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -35,7 +42,7 @@ export function LoginForm({ next }: { next: string }) {
       };
 
       if (!data.ok) {
-        setError(data.error ?? "登入失敗。");
+        setError(data.error ?? labels.error_message);
         setPending(false);
         return;
       }
@@ -63,7 +70,7 @@ export function LoginForm({ next }: { next: string }) {
 
       <div>
         <label className="label" htmlFor="email">
-          電郵
+          {labels.email_label}
         </label>
         <input
           id="email"
@@ -71,14 +78,14 @@ export function LoginForm({ next }: { next: string }) {
           type="email"
           autoComplete="email"
           required
-          placeholder="you@example.com"
+          placeholder={labels.email_placeholder}
           className="field"
         />
       </div>
 
       <div>
         <label className="label" htmlFor="password">
-          密碼
+          {labels.password_label}
         </label>
         <input
           id="password"
@@ -86,7 +93,7 @@ export function LoginForm({ next }: { next: string }) {
           type="password"
           autoComplete="current-password"
           required
-          placeholder="••••••••"
+          placeholder={labels.password_placeholder}
           className="field"
         />
       </div>
@@ -98,22 +105,22 @@ export function LoginForm({ next }: { next: string }) {
       >
         {pending ? (
           <>
-            <Loader2 size={17} className="animate-spin" /> 登入中…
+            <Loader2 size={17} className="animate-spin" /> {labels.pending_label}
           </>
         ) : (
           <>
-            登入 <ArrowRight size={17} />
+            {labels.submit_label} <ArrowRight size={17} />
           </>
         )}
       </button>
 
       <p className="border-t border-[var(--line-fine)] pt-5 text-center text-sm text-white/70">
-        還沒有帳號？{" "}
+        {labels.signup_prompt}{" "}
         <Link
           href="/signup"
           className="font-semibold text-accent-blue hover:underline"
         >
-          立即註冊
+          {labels.signup_link}
         </Link>
       </p>
     </form>

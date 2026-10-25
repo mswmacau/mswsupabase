@@ -3,19 +3,23 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
+  BarChart3,
   CalendarDays,
   CalendarPlus,
   ClipboardCheck,
   Dumbbell,
+  FileText,
   Gift,
   LayoutDashboard,
   Palette,
+  ScrollText,
   TicketCheck,
   Users,
 } from "lucide-react";
 
 const LINKS = [
   { href: "/admin", label: "總覽", icon: LayoutDashboard, exact: true },
+  { href: "/admin/analytics", label: "數據分析", icon: BarChart3 },
   { href: "/admin/runs", label: "跑步審核", icon: ClipboardCheck },
   { href: "/admin/checkins", label: "簽到確認", icon: Users },
   { href: "/admin/monthly", label: "月度名單 / 發券", icon: Gift },
@@ -23,6 +27,8 @@ const LINKS = [
   { href: "/admin/sessions", label: "訓練場次", icon: CalendarPlus },
   { href: "/admin/coaches", label: "教練管理", icon: Dumbbell },
   { href: "/admin/events", label: "活動管理", icon: CalendarDays },
+  { href: "/admin/content", label: "網站內容", icon: FileText },
+  { href: "/admin/audit-log", label: "操作紀錄", icon: ScrollText },
   { href: "/admin/site-settings", label: "網站設定", icon: Palette },
 ];
 

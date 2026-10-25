@@ -10,23 +10,37 @@
  *  - 「已下架」篩選器可看到 archived 並一鍵復原
  *  - 刪除需勾選「確認下架此活動」才能執行
  *  - 封面「確認移除封面？」對話框 + 送 removeCover:true
+ *
+ * T-26：每張卡顯示「站內報名：N 人」（GET /api/admin/event-registrations
+ * 一次取齊全部活動人數）；N > 0 可點擊展開報名名單（會員暱稱 + 報名時間，
+ * 暱稱為空顯示「匿名會員」）；N = 0 不展開；取數失敗顯示可重試提示，
+ * 不影響既有 CRUD 操作。
  */
 
-import { useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import {
   Archive,
   ArchiveRestore,
+  ChevronDown,
+  ChevronUp,
   Loader2,
   Pencil,
   Plus,
   Rocket,
   Trash2,
+  Users,
 } from "lucide-react";
 import type { Event, EventStatus } from "@/lib/types";
 import { AssetUploader } from "@/components/AssetUploader";
-import { deleteJson, FetchError, patchJson, postJson } from "@/lib/fetch-json";
-import { formatDate } from "@/lib/utils";
+import {
+  deleteJson,
+  FetchError,
+  patchJson,
+  postJson,
+  requestJson,
+} from "@/lib/fetch-json";
+import { formatDate, formatDateTime } from "@/lib/utils";
 
 interface FormState {
   title: string;
@@ -117,6 +131,12 @@ function buildPayload(form: FormState, editing: Event | null) {
   return payload;
 }
 
+/** T-26：管理端取數端點回傳的單場人數列 */
+interface RegCountRow {
+  event_id: string;
+  registered: number;
+}
+
 export function EventManager({ events }: { events: Event[] }) {
   const router = useRouter();
   const [showArchived, setShowArchived] = useState(false);
@@ -127,6 +147,42 @@ export function EventManager({ events }: { events: Event[] }) {
   const [error, setError] = useState<string | null>(null);
   const [fields, setFields] = useState<Record<string, string>>({});
   const [success, setSuccess] = useState<string | null>(null);
+
+  /** T-26：各活動站內報名人數（event_id → 人數）；null = 尚未取到 */
+  const [regCounts, setRegCounts] = useState<Record<string, number> | null>(null);
+  const [regError, setRegError] = useState(false);
+
+  const loadRegCounts = useCallback(async (isActive: () => boolean = () => true) => {
+    setRegError(false);
+    try {
+      const data = await requestJson<{ ok: true; events: RegCountRow[] }>(
+        "/api/admin/event-registrations",
+        { method: "GET" }
+      );
+      if (!isActive()) return;
+      const map: Record<string, number> = {};
+      for (const row of data.events ?? []) {
+        map[row.event_id] = Number(row.registered ?? 0);
+      }
+      setRegCounts(map);
+    } catch {
+      // 人數取數失敗不影響 CRUD；顯示可重試提示，卡片照常操作
+      if (!isActive()) return;
+      setRegError(true);
+    }
+  }, []);
+
+  // 沿用 ContentManager 的「async IIFE + cancelled」模式（避免 effect 內
+  // 同步 setState；卸載後不再 setState）
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      await loadRegCounts(() => !cancelled);
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [loadRegCounts]);
 
   const visible = showArchived ? events : events.filter((e) => e.status !== "archived");
   const archivedCount = events.filter((e) => e.status === "archived").length;
@@ -240,6 +296,20 @@ export function EventManager({ events }: { events: Event[] }) {
         </div>
       )}
 
+      {/* T-26：站內報名人數取數失敗——可讀提示 + 重試，不影響其他操作 */}
+      {regError && (
+        <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-amber-500/40 bg-amber-500/10 px-4 py-3 text-sm text-amber-200">
+          <span>站內報名人數暫時讀不到，活動管理功能不受影響。</span>
+          <button
+            type="button"
+            onClick={() => void loadRegCounts()}
+            className="inline-flex items-center gap-1.5 rounded-lg border border-amber-500/50 px-3 py-1.5 text-xs font-semibold text-amber-200 transition hover:bg-amber-500/10"
+          >
+            重試
+          </button>
+        </div>
+      )}
+
       {/* 列表 */}
       {visible.length === 0 ? (
         <div className="rounded-2xl border border-dashed border-white/15 px-6 py-14 text-center text-sm text-white/70">
@@ -253,6 +323,7 @@ export function EventManager({ events }: { events: Event[] }) {
             <EventRow
               key={ev.id}
               ev={ev}
+              registeredCount={regCounts ? regCounts[ev.id] ?? 0 : null}
               onEdit={() => openEdit(ev)}
               onChanged={(msg) => {
                 setSuccess(msg);
@@ -467,7 +538,7 @@ export function EventManager({ events }: { events: Event[] }) {
                     value={form.cover_path}
                     onChange={onCoverChange}
                     aspect="16/9"
-                    hint="長邊超過 1600px 會自動壓縮；不支援 iPhone HEIC。"
+                    hint="活動封面；建議 1600×900（16:9），不符比例會被裁切；長邊超過 1600px 會自動壓縮。"
                   />
                   {fields.cover_path && (
                     <p className="mt-1 text-xs text-red-300">
@@ -543,17 +614,21 @@ export function EventManager({ events }: { events: Event[] }) {
 
 function EventRow({
   ev,
+  registeredCount,
   onEdit,
   onChanged,
   onError,
 }: {
   ev: Event;
+  /** T-26：站內報名人數；null = 人數尚未取到（不顯示） */
+  registeredCount: number | null;
   onEdit: () => void;
   onChanged: (msg: string) => void;
   onError: (msg: string) => void;
 }) {
   const [pending, setPending] = useState<string | null>(null);
   const [confirm, setConfirm] = useState(false);
+  const [rosterOpen, setRosterOpen] = useState(false);
   const badge = STATUS_BADGE[ev.status];
 
   async function act(
@@ -593,6 +668,26 @@ function EventRow({
             ? " · 有報名方式"
             : " · 尚無報名方式"}
         </div>
+
+        {/* T-26：站內報名人數；0 人不展開，> 0 人可點擊展開名單 */}
+        {registeredCount !== null && (
+          <div className="mt-2">
+            {registeredCount > 0 ? (
+              <button
+                type="button"
+                aria-expanded={rosterOpen}
+                onClick={() => setRosterOpen((o) => !o)}
+                className="inline-flex items-center gap-1.5 rounded-lg border border-cobalt/40 bg-cobalt/10 px-2.5 py-1 text-xs font-semibold text-blue-200 transition hover:bg-cobalt/20"
+              >
+                <Users size={13} />
+                站內報名：{registeredCount} 人
+                {rosterOpen ? <ChevronUp size={13} /> : <ChevronDown size={13} />}
+              </button>
+            ) : (
+              <span className="text-xs text-white/55">站內報名：0 人</span>
+            )}
+          </div>
+        )}
       </div>
 
       <div className="flex flex-wrap items-center gap-2">
@@ -700,6 +795,95 @@ function EventRow({
           />
           勾選「確認下架此活動」後才能執行
         </label>
+      )}
+
+      {/* T-26：展開後的報名名單（fetched on demand；失敗可重試） */}
+      {rosterOpen && registeredCount !== null && registeredCount > 0 && (
+        <EventRoster eventId={ev.id} />
+      )}
+    </div>
+  );
+}
+
+/** T-26：單場活動的站內報名名單（會員暱稱 + 報名時間） */
+interface RosterRow {
+  id: string;
+  user_id: string;
+  display_name: string;
+  created_at: string;
+}
+
+function EventRoster({ eventId }: { eventId: string }) {
+  const [rows, setRows] = useState<RosterRow[] | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
+
+  const load = useCallback(async (isActive: () => boolean = () => true) => {
+    setLoading(true);
+    setLoadError(null);
+    try {
+      const data = await requestJson<{ ok: true; registrations: RosterRow[] }>(
+        `/api/admin/event-registrations?event_id=${encodeURIComponent(eventId)}`,
+        { method: "GET" }
+      );
+      if (!isActive()) return;
+      setRows(data.registrations ?? []);
+    } catch (e) {
+      if (!isActive()) return;
+      setRows(null);
+      setLoadError(e instanceof Error ? e.message : "讀取名單失敗，請稍後再試。");
+    } finally {
+      if (isActive()) setLoading(false);
+    }
+  }, [eventId]);
+
+  // 同 EventManager 主元件：async IIFE + cancelled（卸載後不 setState）
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      await load(() => !cancelled);
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [load]);
+
+  return (
+    <div className="w-full border-t border-ink-line pt-3">
+      <div className="mb-2 text-xs font-semibold uppercase tracking-[0.14em] text-white/55">
+        報名名單
+      </div>
+      {loading ? (
+        <p className="flex items-center gap-2 text-xs text-white/60">
+          <Loader2 size={14} className="animate-spin" /> 讀取名單中…
+        </p>
+      ) : loadError ? (
+        <div className="flex flex-wrap items-center gap-3 text-xs">
+          <span className="text-red-300">{loadError}</span>
+          <button
+            type="button"
+            onClick={() => void load()}
+            className="rounded-lg border border-white/20 px-2.5 py-1 font-semibold text-white/80 transition hover:border-white/40"
+          >
+            重試
+          </button>
+        </div>
+      ) : rows && rows.length > 0 ? (
+        <ul className="divide-y divide-ink-line rounded-xl border border-ink-line">
+          {rows.map((r) => (
+            <li
+              key={r.id}
+              className="flex flex-wrap items-center justify-between gap-2 px-4 py-2 text-sm"
+            >
+              <span className="text-white/85">{r.display_name || "匿名會員"}</span>
+              <span className="text-xs text-white/55">
+                {formatDateTime(r.created_at)}
+              </span>
+            </li>
+          ))}
+        </ul>
+      ) : (
+        <p className="text-xs text-white/60">目前沒有人報名。</p>
       )}
     </div>
   );

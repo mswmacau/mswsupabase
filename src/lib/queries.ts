@@ -3,6 +3,29 @@ import { unstable_cache } from "next/cache";
 import { createClient } from "./supabase/server";
 import { anonClient } from "./supabase/anon";
 import { coerceTheme, DEFAULT_THEME, type SiteTheme } from "./theme";
+import { coerceSeo, DEFAULT_SEO, type SiteSeo } from "./seo";
+import {
+  DEFAULT_BLOCKS,
+  DEFAULT_CONTACT,
+  DEFAULT_CONTENT,
+  DEFAULT_NAV,
+  DEFAULT_PAGES,
+  coerceBlocks,
+  coerceContact,
+  coerceContent,
+  coerceNav,
+  coercePages,
+  type SiteBlocks,
+  type SiteContact,
+  type SiteContent,
+  type SiteNav,
+  type SitePages,
+} from "./content";
+import {
+  draftSection,
+  getDraftOverride,
+  type DraftSectionKey,
+} from "./draft";
 import { currentMonth, monthLabel, todayISO } from "./utils";
 import type {
   Coupon,
@@ -73,6 +96,17 @@ export async function getAllSessions(limit = 60): Promise<TrainingSession[]> {
 /** getSiteTheme() 的 cache tag；revalidateTag 必須用同一個字串（see api/admin/site-settings） */
 export const SITE_THEME_TAG = "site-theme";
 
+/* ── 站點內容五鍵（T-3；播種見 supabase/migration-site-content.sql）──
+ * 管理端路由 api/admin/site-* 寫入後以 revalidateTag 失效同名快取；
+ * 前台讀取（getSiteContent 等）由方硯接線時補，此處只放 tag 常數，
+ * 兩邊必須用同一個字串，否則改了後台前台不會更新。 */
+export const SITE_CONTENT_TAG = "site-content";
+export const SITE_NAV_TAG = "site-nav";
+export const SITE_CONTACT_TAG = "site-contact";
+export const SITE_PAGES_TAG = "site-pages";
+export const SITE_BLOCKS_TAG = "site-blocks";
+export const SITE_SEO_TAG = "site-seo";
+
 /**
  * 網站主題（单次 columns read）
  *
@@ -99,6 +133,200 @@ export const getSiteTheme = unstable_cache(
   ["site-theme"],
   { tags: [SITE_THEME_TAG], revalidate: 60 }
 );
+
+/* ── 站點內容五鍵的前台讀取（T-4/T-5/T-6/T-19/T-20 接線）─────────────
+ * 模式完全复刻 getSiteTheme：不含 cookie 的 anonClient + unstable_cache
+ * （60 秒 + 同名 tag），DB 無值／無 Supabase → 回落 DEFAULT_*——
+ * DEFAULT_* 逐字等於原有硬編碼，所以沙箱（無 Supabase）渲染與基線一致。
+ * 寫入端（api/admin/site-*）以 revalidateTag 失效同名字快取。 */
+
+/* ── T-16 草稿預覽：請求作用域覆蓋（機制詳見 src/lib/draft.ts）───────
+ * 六個站點內容 getter 一律改為「外層包裝 + 內層原路徑」兩層：
+ *   - 外層 withDraftOverride()：預覽模式（管理員 + Next draft mode）時回
+ *     草稿袋對應分區的值（coerce 後）；
+ *   - 內層 *Cached：原 unstable_cache 函數一字未動，非預覽請求走的
+ *     就是這條路——與 T-16 上線前的行為逐字一致。
+ * 覆蓋檢查在 unstable_cache 之外，預覽請求不會把草稿值寫進跨請求快取。 */
+async function withDraftOverride<T>(
+  key: DraftSectionKey,
+  coerce: (input: unknown) => T,
+  fallback: () => Promise<T>
+): Promise<T> {
+  const draft = await getDraftOverride();
+  const section = draftSection(draft, key);
+  if (section !== undefined) return coerce(section);
+  return fallback();
+}
+
+/** 首頁 + 關於我們文案（site_content）── DB 讀取原路徑（T-16 起由下方包裝呼叫） */
+const getSiteContentCached = unstable_cache(
+  cache(async (): Promise<SiteContent> => {
+    const supabase = anonClient();
+    if (!supabase) return DEFAULT_CONTENT;
+
+    const { data, error } = await supabase
+      .from("app_settings")
+      .select("value")
+      .eq("key", "site_content")
+      .maybeSingle();
+
+    if (error || !data) return DEFAULT_CONTENT;
+
+    return coerceContent(data.value);
+  }),
+  ["site-content"],
+  { tags: [SITE_CONTENT_TAG], revalidate: 60 }
+);
+
+/**
+ * 首頁 + 關於我們文案（site_content）。
+ * T-16：預覽模式回草稿袋的 content；其餘情況走原 unstable_cache 路徑
+ * （無草稿時行為與上線前逐字一致）。
+ */
+export async function getSiteContent(): Promise<SiteContent> {
+  return withDraftOverride("content", coerceContent, getSiteContentCached);
+}
+
+/** 導覽選單（site_nav；陣列順序即顯示順序，visible=false 不顯示）── DB 讀取原路徑 */
+const getSiteNavCached = unstable_cache(
+  cache(async (): Promise<SiteNav> => {
+    const supabase = anonClient();
+    if (!supabase) return DEFAULT_NAV;
+
+    const { data, error } = await supabase
+      .from("app_settings")
+      .select("value")
+      .eq("key", "site_nav")
+      .maybeSingle();
+
+    if (error || !data) return DEFAULT_NAV;
+
+    return coerceNav(data.value);
+  }),
+  ["site-nav"],
+  { tags: [SITE_NAV_TAG], revalidate: 60 }
+);
+
+/**
+ * 導覽選單（site_nav）。
+ * T-16：預覽模式回草稿袋的 nav；其餘情況走原 unstable_cache 路徑。
+ */
+export async function getSiteNav(): Promise<SiteNav> {
+  return withDraftOverride("nav", coerceNav, getSiteNavCached);
+}
+
+/** 頁尾聯絡四欄 + 品牌宣言四行（site_contact）── DB 讀取原路徑 */
+const getSiteContactCached = unstable_cache(
+  cache(async (): Promise<SiteContact> => {
+    const supabase = anonClient();
+    if (!supabase) return DEFAULT_CONTACT;
+
+    const { data, error } = await supabase
+      .from("app_settings")
+      .select("value")
+      .eq("key", "site_contact")
+      .maybeSingle();
+
+    if (error || !data) return DEFAULT_CONTACT;
+
+    return coerceContact(data.value);
+  }),
+  ["site-contact"],
+  { tags: [SITE_CONTACT_TAG], revalidate: 60 }
+);
+
+/**
+ * 頁尾聯絡四欄 + 品牌宣言四行（site_contact）。
+ * T-16：預覽模式回草稿袋的 contact；其餘情況走原 unstable_cache 路徑。
+ */
+export async function getSiteContact(): Promise<SiteContact> {
+  return withDraftOverride("contact", coerceContact, getSiteContactCached);
+}
+
+/** 九個前台頁面的標題／說明／CTA／空狀態／表單標籤（site_pages）── DB 讀取原路徑 */
+const getSitePagesCached = unstable_cache(
+  cache(async (): Promise<SitePages> => {
+    const supabase = anonClient();
+    if (!supabase) return DEFAULT_PAGES;
+
+    const { data, error } = await supabase
+      .from("app_settings")
+      .select("value")
+      .eq("key", "site_pages")
+      .maybeSingle();
+
+    if (error || !data) return DEFAULT_PAGES;
+
+    return coercePages(data.value);
+  }),
+  ["site-pages"],
+  { tags: [SITE_PAGES_TAG], revalidate: 60 }
+);
+
+/**
+ * 九個前台頁面的標題／說明／CTA／空狀態／表單標籤（site_pages）。
+ * T-16：預覽模式回草稿袋的 pages；其餘情況走原 unstable_cache 路徑。
+ */
+export async function getSitePages(): Promise<SitePages> {
+  return withDraftOverride("pages", coercePages, getSitePagesCached);
+}
+
+/** 首頁區塊顯隱與排序（site_blocks）── DB 讀取原路徑 */
+const getSiteBlocksCached = unstable_cache(
+  cache(async (): Promise<SiteBlocks> => {
+    const supabase = anonClient();
+    if (!supabase) return DEFAULT_BLOCKS;
+
+    const { data, error } = await supabase
+      .from("app_settings")
+      .select("value")
+      .eq("key", "site_blocks")
+      .maybeSingle();
+
+    if (error || !data) return DEFAULT_BLOCKS;
+
+    return coerceBlocks(data.value);
+  }),
+  ["site-blocks"],
+  { tags: [SITE_BLOCKS_TAG], revalidate: 60 }
+);
+
+/**
+ * 首頁區塊顯隱與排序（site_blocks）。
+ * T-16：預覽模式回草稿袋的 blocks；其餘情況走原 unstable_cache 路徑。
+ */
+export async function getSiteBlocks(): Promise<SiteBlocks> {
+  return withDraftOverride("blocks", coerceBlocks, getSiteBlocksCached);
+}
+
+/** SEO metadata（site_seo；layout.tsx 的 generateMetadata 由方硯接線，T-12 前端部分）── DB 讀取原路徑 */
+const getSiteSeoCached = unstable_cache(
+  cache(async (): Promise<SiteSeo> => {
+    const supabase = anonClient();
+    if (!supabase) return DEFAULT_SEO;
+
+    const { data, error } = await supabase
+      .from("app_settings")
+      .select("value")
+      .eq("key", "site_seo")
+      .maybeSingle();
+
+    if (error || !data) return DEFAULT_SEO;
+
+    return coerceSeo(data.value);
+  }),
+  ["site-seo"],
+  { tags: [SITE_SEO_TAG], revalidate: 60 }
+);
+
+/**
+ * SEO metadata（site_seo）。
+ * T-16：預覽模式回草稿袋的 seo；其餘情況走原 unstable_cache 路徑
+ * （layout 的 generateMetadata 在無草稿時行為不變）。
+ */
+export async function getSiteSeo(): Promise<SiteSeo> {
+  return withDraftOverride("seo", coerceSeo, getSiteSeoCached);
+}
 
 /**
  * ── 前台公開查詢的快取版本 ──
@@ -450,6 +678,26 @@ export async function getUserCheckins(
     .limit(limit);
 
   return (data as unknown as TrainingCheckin[]) ?? [];
+}
+
+/**
+ * 會員自己已報名的活動 id 集合（T-26；/events 的「已報名」狀態）。
+ * RLS：event_reg_select_own_or_admin——只讀得到自己的列。
+ * 查詢失敗回空陣列（頁面照常渲染，只是全部顯示「站內報名」按鈕）；
+ * 開發模式下印出錯誤，避免靜默失敗。
+ */
+export async function getMyEventRegistrations(userId: string): Promise<string[]> {
+  const supabase = await createClient();
+  if (!supabase) return [];
+
+  const { data, error } = await supabase
+    .from("event_registrations")
+    .select("event_id")
+    .eq("user_id", userId)
+    .eq("status", "registered");
+
+  logQueryError("getMyEventRegistrations", error);
+  return ((data as { event_id: string }[]) ?? []).map((r) => r.event_id);
 }
 
 /* ================= 後台查詢 ================= */

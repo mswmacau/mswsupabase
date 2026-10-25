@@ -1,7 +1,8 @@
 import Link from "next/link";
 import type { ReactNode } from "react";
 import { ArrowUpRight, AtSign, Mail, MapPin, Shield } from "lucide-react";
-import { BRAND, NAV_LINKS, RULES } from "@/lib/config";
+import { BRAND, RULES } from "@/lib/config";
+import { DEFAULT_CONTACT, DEFAULT_NAV, type NavLink, type SiteContact } from "@/lib/content";
 
 /** 聯絡方式：以細分隔線逐條列出，不做等寬欄位堆砌 */
 type ContactItem = {
@@ -12,20 +13,23 @@ type ContactItem = {
   external?: boolean;
 };
 
-const CONTACT: readonly ContactItem[] = [
-  { icon: <MapPin size={16} aria-hidden />, text: BRAND.location },
-  {
-    icon: <Mail size={16} aria-hidden />,
-    text: BRAND.email,
-    href: `mailto:${BRAND.email}`,
-  },
-  {
-    icon: <AtSign size={16} aria-hidden />,
-    text: BRAND.instagram,
-    href: BRAND.instagramUrl,
-    external: true,
-  },
-];
+/** 由 site_contact（頁尾聯絡）組成聯絡清單；未傳入時回落 config 的 BRAND 現值 */
+function contactItems(contact: SiteContact): ContactItem[] {
+  return [
+    { icon: <MapPin size={16} aria-hidden />, text: contact.location },
+    {
+      icon: <Mail size={16} aria-hidden />,
+      text: contact.email,
+      href: `mailto:${contact.email}`,
+    },
+    {
+      icon: <AtSign size={16} aria-hidden />,
+      text: contact.instagram,
+      href: contact.instagram_url,
+      external: true,
+    },
+  ];
+}
 
 /** 未登入顯示註冊／登入；已登入只顯示會員專區，並用「管理員入口」進後台 */
 export function Footer({
@@ -33,12 +37,23 @@ export function Footer({
   isAdmin = false,
   brandName = BRAND.name,
   brandNameEn = BRAND.nameEn,
+  contact = DEFAULT_CONTACT,
+  navLinks,
 }: {
   isLoggedIn?: boolean;
   isAdmin?: boolean;
   brandName?: string;
   brandNameEn?: string;
+  /** 頁尾聯絡四欄 + 品牌宣言四行（site_contact；layout 以 getSiteContact() 傳入） */
+  contact?: SiteContact;
+  /** 導覽選單（site_nav；visible=false 不顯示） */
+  navLinks?: NavLink[];
 }) {
+  const CONTACT = contactItems(contact);
+  // 選單顯隱與導覽列同步：隱藏的項目在頁尾導航行一併不顯示
+  const footerLinks = (navLinks ?? DEFAULT_NAV.links)
+    .filter((l) => l.visible)
+    .map((l) => ({ href: l.href, label: l.label }));
   return (
     <footer className="relative overflow-hidden border-t border-ink-line bg-ink">
       {/* 手工質感：細網格 + 噪點 */}
@@ -49,8 +64,6 @@ export function Footer({
         {/* ===== 品牌宣言：大字主導，不是三欄連結堆砌 ===== */}
         <div className="grid gap-10 py-14 lg:grid-cols-[1.7fr_1fr] lg:gap-16 lg:py-20">
           <div>
-            <span className="eyebrow">Macau Street Workout</span>
-
             <h2 className="display-xl mt-6">
               <span className="block text-white">用自身的重量</span>
               <span className="mt-1 block text-outline">練出澳門</span>
@@ -69,17 +82,17 @@ export function Footer({
             {/* 品牌介紹：宣言式排版，四行各自獨立成行，不做卡片堆疊 */}
             <div className="mt-8 max-w-lg">
               <p className="text-lg font-extrabold leading-snug text-white sm:text-xl">
-                {BRAND.intro[0]}
+                {contact.intro[0]}
               </p>
               <p className="mt-3 text-xs font-semibold tracking-[0.12em] text-[var(--text-muted)]">
-                {BRAND.intro[1]}
+                {contact.intro[1]}
               </p>
               <p className="mt-1.5 text-[11px] font-bold uppercase tracking-[0.2em] text-[var(--text-faint)]">
-                {BRAND.intro[2]}
+                {contact.intro[2]}
               </p>
               {/* 收尾宣言：描邊字獨立一行，不與其他行共用行框（避免被斷行切割） */}
               <p className="mt-6 block text-xl font-black leading-tight tracking-[-0.01em] text-outline sm:text-3xl">
-                {BRAND.intro[3]}
+                {contact.intro[3]}
               </p>
             </div>
           </div>
@@ -145,7 +158,7 @@ export function Footer({
         {/* ① 導覽類 */}
         <div className="border-t border-[var(--line-fine)] py-6">
           <div className="flex flex-wrap items-center gap-x-7 gap-y-2">
-            {NAV_LINKS.map((l) => (
+            {footerLinks.map((l) => (
               <Link
                 key={l.href}
                 href={l.href}

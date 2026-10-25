@@ -211,7 +211,7 @@ export function CoachManager({ coaches }: { coaches: Coach[] }) {
               aspect="1/1"
               value={form.photo_path || null}
               onChange={(path) => set("photo_path", path ?? "")}
-              hint="建議用直式方形構圖，系統會自動壓縮"
+              hint="建議 900×1200 直式構圖（3:4），系統會自動壓縮。"
             />
           </div>
         </div>

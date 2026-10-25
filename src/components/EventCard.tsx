@@ -9,12 +9,17 @@
  *
  * 2026 視覺升級：髮絲描邊 + 斜切角、hover 景深抬升、斜切日期徽章、
  * 大寫寬字距標籤。顏色全部由 --color-* 變數衍生。
+ *
+ * T-26：報名區改為「外部連結／報名方式文字」+「站內報名按鈕」兩個並存入口；
+ *       前者一行未動（回歸紅線），後者由 EventRegisterAction 渲染。
  */
 
 import { CalendarDays, MapPin, Ticket, Users } from "lucide-react";
 import type { Event } from "@/lib/types";
+import { DEFAULT_PAGES, type SitePageEvents } from "@/lib/content";
 import { publicAssetUrl } from "@/lib/assets";
 import { formatDate, weekdayLabel } from "@/lib/utils";
+import { EventRegisterAction } from "@/components/EventRegisterAction";
 
 /**
  * 報名連結防呆：若 registration_url 指向本站自己（vercel 正式網域、
@@ -58,7 +63,19 @@ function dateLabel(e: Event): string {
   return `${start}（週${weekdayLabel(e.event_date)}）`;
 }
 
-export function EventCard({ event }: { event: Event }) {
+export function EventCard({
+  event,
+  labels = DEFAULT_PAGES.events,
+  isLoggedIn = false,
+  registered = false,
+}: {
+  event: Event;
+  labels?: SitePageEvents;
+  /** T-26：會員登入狀態；未登入顯示「登入後報名」連結 */
+  isLoggedIn?: boolean;
+  /** T-26：該會員是否已報名此活動（顯示「已報名」＋取消報名） */
+  registered?: boolean;
+}) {
   const cover = publicAssetUrl(event.cover_path);
   // 報名連結指向本站時不渲染連結，一律走報名方式文字（無 note 給預設文案）
   const selfPointing = event.registration_url
@@ -124,7 +141,8 @@ export function EventCard({ event }: { event: Event }) {
           )}
         </div>
 
-        <div className="mt-auto pt-6">
+        <div className="mt-auto space-y-3 pt-6">
+          {/* 既有報名入口：外部連結按鈕／報名方式文字——行為完全不變（回歸紅線） */}
           {event.registration_url && !selfPointing ? (
             <a
               href={event.registration_url}
@@ -132,16 +150,23 @@ export function EventCard({ event }: { event: Event }) {
               rel="noopener noreferrer"
               className="btn-base btn-cobalt btn-slab w-full text-sm"
             >
-              <Ticket size={16} /> 報名 / 詳情
+              <Ticket size={16} /> {labels.card_register_label}
             </a>
           ) : showNote ? (
             <div className="border-l-2 border-vital/60 bg-white/[0.03] px-4 py-3 text-sm leading-relaxed text-white/70">
               <span className="mb-1 flex items-center gap-1.5 font-semibold text-white/85">
-                <Ticket size={14} className="text-vital-bright" /> 報名方式
+                <Ticket size={14} className="text-vital-bright" /> {labels.card_note_title}
               </span>
-              {event.registration_note ?? "詳情請洽官方 Instagram"}
+              {event.registration_note ?? labels.card_note_fallback}
             </div>
           ) : null}
+
+          {/* T-26：站內報名入口（與外部連結並存，不互相影響） */}
+          <EventRegisterAction
+            eventId={event.id}
+            isLoggedIn={isLoggedIn}
+            registered={registered}
+          />
         </div>
       </div>
     </article>

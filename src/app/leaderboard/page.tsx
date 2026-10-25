@@ -1,16 +1,22 @@
+import type { Metadata } from "next";
 import Link from "next/link";
 import { ArrowRight, Trophy } from "lucide-react";
 import {
   getCachedAllTimeLeaderboard,
   getCachedMonthlyLeaderboard,
+  getSitePages,
 } from "@/lib/queries";
 import { RULES } from "@/lib/config";
 import { addMonths, currentMonth, formatKm, monthLabel, recentMonths } from "@/lib/utils";
 import { CountUp } from "@/components/fx/CountUp";
 import { LeaderboardSearch } from "@/components/fx/LeaderboardSearch";
 
-export const metadata = { title: "排行榜" };
 export const dynamic = "force-dynamic";
+
+export async function generateMetadata(): Promise<Metadata> {
+  const pages = await getSitePages();
+  return { title: pages.leaderboard.page_title };
+}
 
 /** 跑馬燈 */
 const MARQUEE_ITEMS = [
@@ -34,11 +40,13 @@ export default async function LeaderboardPage({
   // 只係傳唔同嘅 YYYY-MM，唔加新 query function、唔改 DB。
   const prevMonth = addMonths(month, -1);
 
-  const [monthly, allTime, prevMonthly] = await Promise.all([
+  const [monthly, allTime, prevMonthly, pages] = await Promise.all([
     getCachedMonthlyLeaderboard(month, 50),
     getCachedAllTimeLeaderboard(20),
     getCachedMonthlyLeaderboard(prevMonth, 50),
+    getSitePages(),
   ]);
+  const t = pages.leaderboard;
 
   /** user_id → 上月名次（1 起） */
   const prevRanks: Record<string, number> = {};
@@ -77,7 +85,7 @@ export default async function LeaderboardPage({
               <span className="eyebrow">Leaderboard</span>
 
               <h1 className="mt-6 lg:-ml-[3vw] lg:w-[112%]">
-                <span className="display-xl block text-white">排行榜</span>
+                <span className="display-xl block text-white">{t.page_title}</span>
                 <span className="relative mt-1 block">
                   <span
                     aria-hidden
@@ -121,7 +129,7 @@ export default async function LeaderboardPage({
                   <p className="mt-5 text-sm leading-relaxed text-white/65">
                     {monthly.length
                       ? `本月已有 ${monthly.length} 位會員上榜，目標 ${RULES.MONTHLY_GOAL_KM} 公里。`
-                      : "本月尚無已確認紀錄，成為第一位上榜者。"}
+                      : t.empty_month}
                   </p>
                 </div>
               </div>
@@ -230,7 +238,6 @@ export default async function LeaderboardPage({
         <div className="container-msw section-pad relative">
           <div className="grid gap-10 lg:grid-cols-12 lg:items-end">
             <div className="lg:col-span-7">
-              <span className="eyebrow">Your Turn</span>
               <h2 className="mt-6 text-4xl font-black leading-[0.98] tracking-[-0.03em] sm:text-5xl lg:text-6xl">
                 下一個名字，換你上板
               </h2>
