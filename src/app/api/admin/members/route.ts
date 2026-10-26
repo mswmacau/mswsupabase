@@ -5,8 +5,11 @@
  *        → RPC admin_list_members
  *        → { ok: true, data: { members, total, page, limit, has_service_role } }
  * POST   { email, password, display_name?, role? }   → 建立帳號（需 service_role）
- * PATCH  { userId, display_name?, phone?, role?, status?, status_reason? }
- *        → RPC admin_update_member
+ * PATCH  { userId, display_name?, phone?, role?, status?, status_reason?,
+ *          points_delta?, points_reason? }
+ *        → RPC admin_update_member（有會員欄位時）
+ *        → RPC admin_adjust_points（有 points_delta 時；非零整數且 |delta| ≤ 10000）
+ *        兩段一律「先資料、後積分」依序執行，任一段失敗回 400 並標明是哪一段。
  * DELETE ?userId=  → 有 service_role：auth.admin.deleteUser + admin_delete_member
  *                    沒有：軟刪除（status='disabled'），回應帶 note
  *
@@ -397,36 +400,77 @@ export async function PATCH(request: Request) {
     }
     if (Object.keys(fields).length > 0) return jsonValidation(fields);
 
+    // 積分調整（選填）：非零整數，絕對值 ≤ 10000（RPC 另有 is_admin 與 delta≠0 閘門）
+    let pointsDelta: number | null = null;
+    const pointsDeltaRaw = body.points_delta;
+    if (pointsDeltaRaw !== undefined && pointsDeltaRaw !== null) {
+      if (
+        typeof pointsDeltaRaw !== "number" ||
+        !Number.isInteger(pointsDeltaRaw) ||
+        pointsDeltaRaw === 0 ||
+        Math.abs(pointsDeltaRaw) > 10000
+      ) {
+        fields.points_delta = "積分調整值必須是 -10000 到 10000 之間的非零整數。";
+      } else {
+        pointsDelta = pointsDeltaRaw;
+      }
+    }
+    if (Object.keys(fields).length > 0) return jsonValidation(fields);
+
     const displayName = textOrNull(body.display_name, 80);
     const phone = textOrNull(body.phone, 30);
     const statusReason = textOrNull(body.status_reason, 200);
+    const pointsReason = optionalText(body.points_reason, 200) ?? "管理員手動調整";
 
-    const { error } = await supabase.rpc("admin_update_member", {
-      p_id: userId,
-      p_display_name: displayName,
-      p_phone: phone,
-      p_role: role,
-      p_status: status,
-      p_status_reason: statusReason,
-    });
-    if (error) return rpcFailure("PATCH /api/admin/members rpc", error);
+    const hasPointsDelta = pointsDelta !== null;
+    const hasProfileChanges =
+      displayName !== null ||
+      phone !== null ||
+      role !== null ||
+      status !== null ||
+      statusReason !== null;
+    // 只送積分時不必再跑一次 admin_update_member（避免兩段 RPC 無謂交錯）；
+    // 其餘情況（含空 body）維持原行為，一律先更新 profile。
+    const shouldUpdateProfile = hasProfileChanges || !hasPointsDelta;
 
-    const changes: string[] = [];
-    if (displayName !== null) changes.push("名稱");
-    if (phone !== null) changes.push("電話");
-    if (role !== null) changes.push(`角色=${role}`);
-    if (status !== null) {
-      changes.push(`狀態=${status}`);
-      if (statusReason) changes.push(`原因：${statusReason}`);
+    /* ---------- 第一段：會員資料 / 角色 / 狀態 ---------- */
+    if (shouldUpdateProfile) {
+      const { error } = await supabase.rpc("admin_update_member", {
+        p_id: userId,
+        p_display_name: displayName,
+        p_phone: phone,
+        p_role: role,
+        p_status: status,
+        p_status_reason: statusReason,
+      });
+      if (error) {
+        // 同時要調整積分時，明確標明是「資料」這一段失敗，且不繼續動積分
+        if (hasPointsDelta) {
+          return jsonValidation(
+            {},
+            `會員資料更新失敗：${error.message ?? "操作被拒絕。"}`
+          );
+        }
+        return rpcFailure("PATCH /api/admin/members rpc", error);
+      }
     }
 
-    await writeAuditLog(
-      supabase,
-      actorId,
-      "members",
-      "update",
-      `更新會員 ${userId}${changes.length ? `（${changes.join("、")}）` : ""}。`
-    );
+    /* ---------- 第二段：積分調整（第一段成功後才執行） ---------- */
+    let newPoints: number | null = null;
+    if (pointsDelta !== null) {
+      const { data: adjusted, error } = await supabase.rpc("admin_adjust_points", {
+        p_user_id: userId,
+        p_delta: pointsDelta,
+        p_reason: pointsReason,
+      });
+      if (error) {
+        return jsonValidation(
+          {},
+          `積分調整失敗：${error.message ?? "操作被拒絕。"}`
+        );
+      }
+      newPoints = Number(adjusted ?? 0);
+    }
 
     // 回傳「列表列」形狀（含三個計數與 email），前端才能直接覆蓋原本那一列。
     // admin_get_member 失敗時退回 null，由前端用本地狀態補上，不讓更新變失敗。
@@ -436,8 +480,50 @@ export async function PATCH(request: Request) {
     );
     const member =
       !detailError && detail ? toMemberRow(detail as MemberDetail) : null;
+    // 以 RPC 回傳的新點數為準（profiles.points 已同步）
+    if (member && newPoints !== null) member.points = newPoints;
+    const memberName = member?.display_name || member?.email || userId;
 
-    return jsonOk({ data: { member }, message: "已更新會員資料。" });
+    if (shouldUpdateProfile) {
+      const changes: string[] = [];
+      if (displayName !== null) changes.push("名稱");
+      if (phone !== null) changes.push("電話");
+      if (role !== null) changes.push(`角色=${role}`);
+      if (status !== null) {
+        changes.push(`狀態=${status}`);
+        if (statusReason) changes.push(`原因：${statusReason}`);
+      }
+
+      await writeAuditLog(
+        supabase,
+        actorId,
+        "members",
+        "update",
+        `更新會員 ${userId}${changes.length ? `（${changes.join("、")}）` : ""}。`
+      );
+    }
+
+    if (pointsDelta !== null) {
+      const signed = `${pointsDelta > 0 ? "+" : ""}${pointsDelta}`;
+      await writeAuditLog(
+        supabase,
+        actorId,
+        "members",
+        "adjust_points",
+        `調整 ${memberName} 積分 ${signed}（${pointsReason}）`
+      );
+    }
+
+    const message = hasPointsDelta
+      ? hasProfileChanges
+        ? "已更新會員資料並調整積分。"
+        : "已調整會員積分。"
+      : "已更新會員資料。";
+
+    return jsonOk({
+      data: { member, points: member?.points ?? newPoints ?? null },
+      message,
+    });
   } catch (err) {
     return jsonInternal("PATCH /api/admin/members", err);
   }

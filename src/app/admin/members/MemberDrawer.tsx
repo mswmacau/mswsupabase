@@ -5,6 +5,8 @@ import {
   Activity,
   AlertCircle,
   CalendarDays,
+  Diff,
+  KeyRound,
   Loader2,
   MapPin,
   Pencil,
@@ -89,10 +91,14 @@ export function MemberDrawer({
   member,
   onClose,
   onEdit,
+  onAdjustPoints,
+  onResetPassword,
 }: {
   member: MemberRow;
   onClose: () => void;
   onEdit: (member: MemberRow & { phone?: string | null }) => void;
+  onAdjustPoints: (member: MemberRow) => void;
+  onResetPassword: (member: MemberRow) => void;
 }) {
   const panelRef = useRef<HTMLDivElement>(null);
   const [detail, setDetail] = useState<MemberDetail | null>(null);
@@ -335,21 +341,39 @@ export function MemberDrawer({
 
         {/* ===== 底部操作 ===== */}
         <div className="border-t border-ink-line px-5 py-3">
-          <div className="flex items-center justify-between gap-3">
-            <button
-              type="button"
-              onClick={() => setReloadKey((k) => k + 1)}
-              disabled={loading}
-              aria-label="重新載入會員詳情"
-              className="btn-base btn-ghost px-3 py-2 text-xs"
-            >
-              {loading ? (
-                <Loader2 size={14} className="animate-spin" />
-              ) : (
-                <RefreshCw size={14} />
-              )}
-              重新載入
-            </button>
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <div className="flex flex-wrap items-center gap-2">
+              <button
+                type="button"
+                onClick={() => setReloadKey((k) => k + 1)}
+                disabled={loading}
+                aria-label="重新載入會員詳情"
+                className="btn-base btn-ghost px-3 py-2 text-xs"
+              >
+                {loading ? (
+                  <Loader2 size={14} className="animate-spin" />
+                ) : (
+                  <RefreshCw size={14} />
+                )}
+                重新載入
+              </button>
+              <button
+                type="button"
+                onClick={() => onAdjustPoints(detail?.member ?? member)}
+                aria-label="調整積分"
+                className="btn-base btn-ghost px-3 py-2 text-xs"
+              >
+                <Diff size={14} /> 調整積分
+              </button>
+              <button
+                type="button"
+                onClick={() => onResetPassword(detail?.member ?? member)}
+                aria-label="重設密碼"
+                className="btn-base btn-ghost px-3 py-2 text-xs"
+              >
+                <KeyRound size={14} /> 重設密碼
+              </button>
+            </div>
             <button
               type="button"
               onClick={() => onEdit(detail?.member ?? member)}

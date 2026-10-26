@@ -5,9 +5,11 @@ import {
   ChevronLeft,
   ChevronRight,
   CheckCircle2,
+  Diff,
   Eye,
   KeyRound,
   Loader2,
+  Mail,
   Pencil,
   Plus,
   Power,
@@ -22,6 +24,9 @@ import { MemberCreateDialog } from "./MemberCreateDialog";
 import { MemberDeleteDialog } from "./MemberDeleteDialog";
 import { MemberDrawer } from "./MemberDrawer";
 import { MemberEditDialog } from "./MemberEditDialog";
+import { MemberPasswordDialog } from "./MemberPasswordDialog";
+import { MemberPointsDialog } from "./MemberPointsDialog";
+import { MemberVerificationDialog } from "./MemberVerificationDialog";
 import { ErrorBanner, RoleBadge, StatusBadge } from "./ui";
 import {
   isOkEnvelope,
@@ -84,6 +89,9 @@ export function MemberManager() {
   const [drawerMember, setDrawerMember] = useState<MemberRow | null>(null);
   const [editMember, setEditMember] = useState<(MemberRow & { phone?: string | null }) | null>(null);
   const [deleteMember, setDeleteMember] = useState<MemberRow | null>(null);
+  const [pointsMember, setPointsMember] = useState<MemberRow | null>(null);
+  const [passwordMember, setPasswordMember] = useState<MemberRow | null>(null);
+  const [verifyMember, setVerifyMember] = useState<MemberRow | null>(null);
   const [createOpen, setCreateOpen] = useState(false);
 
   const hasFilters = search !== "" || roleFilter !== "all" || statusFilter !== "all";
@@ -420,6 +428,15 @@ export function MemberManager() {
                       >
                         <Pencil size={15} />
                       </IconAction>
+                      <IconAction label="調整積分" onClick={() => setPointsMember(member)}>
+                        <Diff size={15} />
+                      </IconAction>
+                      <IconAction label="重設密碼" onClick={() => setPasswordMember(member)}>
+                        <KeyRound size={15} />
+                      </IconAction>
+                      <IconAction label="重寄驗證信" onClick={() => setVerifyMember(member)}>
+                        <Mail size={15} />
+                      </IconAction>
                       <IconAction
                         label={
                           member.status === "active"
@@ -489,6 +506,14 @@ export function MemberManager() {
             setDrawerMember(null);
             setEditMember(member);
           }}
+          onAdjustPoints={(member) => {
+            setDrawerMember(null);
+            setPointsMember(member);
+          }}
+          onResetPassword={(member) => {
+            setDrawerMember(null);
+            setPasswordMember(member);
+          }}
         />
       )}
 
@@ -502,6 +527,35 @@ export function MemberManager() {
             );
             setNotice(`已更新「${memberName(updated)}」的資料。`);
           }}
+        />
+      )}
+
+      {pointsMember && (
+        <MemberPointsDialog
+          member={pointsMember}
+          onClose={() => setPointsMember(null)}
+          onUpdated={(updated, points) => {
+            setMembers((prev) =>
+              prev.map((row) =>
+                row.member_id === updated.member_id ? { ...row, ...updated, points } : row
+              )
+            );
+            setNotice(`已將「${memberName(updated)}」的積分調整為 ${points.toLocaleString()}。`);
+          }}
+        />
+      )}
+
+      {passwordMember && (
+        <MemberPasswordDialog
+          member={passwordMember}
+          onClose={() => setPasswordMember(null)}
+        />
+      )}
+
+      {verifyMember && (
+        <MemberVerificationDialog
+          member={verifyMember}
+          onClose={() => setVerifyMember(null)}
         />
       )}
 
