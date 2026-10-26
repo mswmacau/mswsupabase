@@ -19,6 +19,7 @@ import {
 
 const LINKS = [
   { href: "/admin", label: "總覽", icon: LayoutDashboard, exact: true },
+  { href: "/admin/members", label: "會員管理", icon: Users },
   { href: "/admin/analytics", label: "數據分析", icon: BarChart3 },
   { href: "/admin/runs", label: "跑步審核", icon: ClipboardCheck },
   { href: "/admin/checkins", label: "簽到確認", icon: Users },
