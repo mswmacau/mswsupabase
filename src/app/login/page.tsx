@@ -6,6 +6,7 @@ import { LoginForm } from "./LoginForm";
 import { getCurrentProfile } from "@/lib/supabase/server";
 import { getSitePages } from "@/lib/queries";
 import { RULES } from "@/lib/config";
+import { safeNext } from "@/lib/safe-next";
 
 export async function generateMetadata(): Promise<Metadata> {
   const pages = await getSitePages();
@@ -25,7 +26,9 @@ export default async function LoginPage({
   searchParams: Promise<{ next?: string }>;
 }) {
   const { next } = await searchParams;
-  const target = next && next.startsWith("/") ? next : "/dashboard";
+  // 防開放重定向：與 api/auth/login、auth/callback、LoginForm 用同一套白名單
+  //（自行用 startsWith("/") 會放行 //evil.com 與 /\evil.com）
+  const target = safeNext(next, "/dashboard");
 
   const [profile, pages] = await Promise.all([
     getCurrentProfile(),
