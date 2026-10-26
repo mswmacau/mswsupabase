@@ -7,6 +7,7 @@ import {
   jsonBadJson,
   jsonConflict,
   jsonInternal,
+  jsonMethodNotAllowed,
   jsonNotFound,
   jsonNotConfigured,
   jsonOk,
@@ -46,6 +47,11 @@ async function screenshotExists(supabase: Supabase, path: string): Promise<boole
  *
  * 契約：SPEC-R6.md §2.8
  */
+/** 只接受 POST／DELETE：其他方法回統一 JSON 錯誤信封，避免 Next 預設 405 空 body 破壞 API 契約。 */
+export async function GET() {
+  return jsonMethodNotAllowed();
+}
+
 export async function POST(request: Request) {
   try {
     if (!isSupabaseConfigured) return jsonNotConfigured();

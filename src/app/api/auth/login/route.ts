@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { isSupabaseConfigured } from "@/lib/supabase/env";
-import { jsonBadJson, jsonInternal, readJson } from "@/lib/api";
+import { jsonBadJson, jsonInternal, jsonMethodNotAllowed, readJson } from "@/lib/api";
 import { safeNext } from "@/lib/safe-next";
 
 /**
@@ -12,6 +12,11 @@ import { safeNext } from "@/lib/safe-next";
  * （違反 SPEC H6）。改用 readJson() + jsonBadJson() 並包 try/catch；
  * 其餘回應內容與 HTTP status 一字不改。
  */
+/** 只接受 POST：其他方法回統一 JSON 錯誤信封，避免 Next 預設 405 空 body 破壞 API 契約。 */
+export async function GET() {
+  return jsonMethodNotAllowed();
+}
+
 export async function POST(request: Request) {
   try {
     if (!isSupabaseConfigured)
