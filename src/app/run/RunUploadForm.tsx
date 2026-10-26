@@ -236,7 +236,7 @@ export function RunUploadForm({
           id="screenshot"
           name="screenshot"
           type="file"
-          accept={RULES.ALLOWED_IMAGE_TYPES.join(",")}
+          accept={RULES.ALLOWED_IMAGE_TYPES.filter((t) => t !== "image/heic").join(",")}
           required
           className="hidden"
           onChange={(e) => {

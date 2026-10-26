@@ -234,14 +234,16 @@ export function Footer({
           <span>
             © {new Date().getFullYear()} {brandName} · {brandNameEn}
           </span>
-          <div className="flex flex-wrap items-center gap-5">
-            <Link
-              href="/admin"
-              className="inline-flex min-h-11 items-center gap-1.5 transition hover:text-white"
-            >
-              <Shield size={13} /> 管理員入口
-            </Link>
-          </div>
+          {isAdmin && (
+            <div className="flex flex-wrap items-center gap-5">
+              <Link
+                href="/admin"
+                className="inline-flex min-h-11 items-center gap-1.5 transition hover:text-white"
+              >
+                <Shield size={13} /> 管理員入口
+              </Link>
+            </div>
+          )}
         </div>
       </div>
     </footer>

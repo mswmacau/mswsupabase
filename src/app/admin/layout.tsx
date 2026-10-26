@@ -1,7 +1,6 @@
-import Link from "next/link";
+import { redirect } from "next/navigation";
 import { ShieldAlert } from "lucide-react";
 import { AdminNav } from "@/components/AdminNav";
-import { LogoutButton } from "@/components/LogoutButton";
 import { getCurrentProfile } from "@/lib/supabase/server";
 import { isSupabaseConfigured } from "@/lib/supabase/env";
 
@@ -36,34 +35,13 @@ where id = (select id from auth.users where email = 'you@example.com');`}
   }
 
   if (!profile) {
-    return (
-      <section className="pt-32 pb-20 text-center">
-        <div className="container-msw">
-          <h1 className="text-2xl font-bold">請先登入</h1>
-          <Link href="/login?next=/admin" className="btn-base btn-vital mt-6">
-            會員登入
-          </Link>
-        </div>
-      </section>
-    );
+    // proxy 已處理未登入，這裡是第二道防線：確保永遠不會以 200 渲染後台外殼
+    redirect("/login?next=/admin");
   }
 
   if (profile.role !== "admin") {
-    return (
-      <section className="pt-32 pb-20 text-center">
-        <div className="container-msw max-w-md">
-          <ShieldAlert size={40} className="mx-auto text-vital-bright" />
-          <h1 className="mt-5 text-2xl font-bold">權限不足</h1>
-          <p className="mt-3 text-sm leading-relaxed text-white/75">
-            目前登入的是「{profile.display_name ?? "會員"}」，此帳號不是管理員。
-            請登出後改用管理員帳號登入，或在 Supabase 把這個帳號的 role 設為 admin。
-          </p>
-          <div className="mx-auto mt-7 max-w-[220px]">
-            <LogoutButton className="btn-base btn-ghost justify-center" />
-          </div>
-        </div>
-      </section>
-    );
+    // 非管理員一律導走（原本回 200 +「權限不足」頁，HTTP 語意錯誤）
+    redirect("/dashboard");
   }
 
   return (
