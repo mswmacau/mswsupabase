@@ -57,12 +57,29 @@ export async function POST(request: Request) {
       return NextResponse.json({ ok: false, error: msg }, { status: 401 });
     }
 
-    // 判斷是否管理員，導向對應頁面
+    // 帳號狀態強制（v2）：被停權／停用的會員即使密碼正確也必須擋下，
+    // 並立刻清掉剛建立的 session，避免拿著有效 token 繼續打 API。
+    // profile 不存在時（例如舊資料）不在此擋，交由後續頁面處理。
     const { data: profile } = await supabase
       .from("profiles")
-      .select("role")
+      .select("role, status, status_reason")
       .eq("id", data.user.id)
       .maybeSingle();
+
+    if (profile && profile.status !== "active") {
+      await supabase.auth.signOut();
+      return NextResponse.json(
+        {
+          ok: false,
+          code: "ACCOUNT_INACTIVE",
+          error:
+            profile.status === "suspended"
+              ? "此帳號已被停權，請聯絡管理員。"
+              : "此帳號已停用，請聯絡管理員。",
+        },
+        { status: 403 }
+      );
+    }
 
     // 防開放重定向：只放行單一斜線開頭的站內相對路徑，擋 //evil.com、/\evil.com、/api/*
     const requested = safeNext(next, "");

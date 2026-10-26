@@ -62,6 +62,26 @@ export default async function proxy(request: NextRequest) {
     return NextResponse.redirect(url);
   }
 
+  // 帳號狀態強制（v2）：停權／停用的會員即使還持有有效 session，
+  // 也不可進入會員中心與後台。
+  // 注意：查詢失敗（DB 暫時不可用、RLS 異常）一律「放行」，
+  // 不可因為一次查詢錯誤把全站鎖死；真正的權限仍由各頁／API 把關。
+  if (user) {
+    const { data: profile, error: statusError } = await supabase
+      .from("profiles")
+      .select("status")
+      .eq("id", user.id)
+      .maybeSingle();
+
+    if (!statusError && profile && profile.status !== "active") {
+      const url = request.nextUrl.clone();
+      url.pathname = "/login";
+      url.search = "";
+      url.searchParams.set("error", "inactive");
+      return NextResponse.redirect(url);
+    }
+  }
+
   return response;
 }
 

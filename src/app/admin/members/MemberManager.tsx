@@ -1,77 +1,100 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState, type ReactNode } from "react";
 import {
-  AlertCircle,
+  ChevronLeft,
+  ChevronRight,
   CheckCircle2,
-  Coins,
+  Eye,
+  KeyRound,
   Loader2,
+  Pencil,
+  Plus,
+  Power,
   RefreshCw,
   Search,
+  Trash2,
+  Users,
   X,
 } from "lucide-react";
 import { formatDate, formatKm } from "@/lib/utils";
+import { MemberCreateDialog } from "./MemberCreateDialog";
+import { MemberDeleteDialog } from "./MemberDeleteDialog";
+import { MemberDrawer } from "./MemberDrawer";
+import { MemberEditDialog } from "./MemberEditDialog";
+import { ErrorBanner, RoleBadge, StatusBadge } from "./ui";
+import {
+  isOkEnvelope,
+  parseError,
+  type MemberListData,
+  type MemberRole,
+  type MemberRow,
+  type MemberStatus,
+} from "./types";
 
 /**
- * 後台會員管理：搜尋 / 列表 / 改角色 / 調整積分
+ * 後台會員管理（完整版）
  *
- * 設計：
- *  - 列表一律打 /api/admin/members（後端會再驗一次管理員身分）。
- *    不在 Server Component 直接查，因為改角色／改積分需要 security definer
- *    RPC，統一走同一條 API 比較好對齊錯誤訊息與稽核。
- *  - 搜尋 debounce 300ms；切換關鍵字時中止上一個請求，避免舊結果覆蓋新結果。
- *  - 角色下拉選了即送出；因為 value 綁定列資料，失敗時會自動回到原值。
- *  - 積分用頁內對話框，不用 alert()；成功／失敗都顯示在頁內訊息區。
+ * 資料流：一律打 /api/admin/members（後端會再驗一次管理員身分）。
+ *  - 列表：GET ?q=&role=&status=&page=&limit=20
+ *  - 詳情：抽屜自己打 GET /api/admin/members/[id]
+ *  - 編輯：PATCH /api/admin/members
+ *  - 新增：POST /api/admin/members（無 service key 時後端回 501 SERVICE_ROLE_REQUIRED）
+ *  - 刪除：DELETE /api/admin/members?userId=（無 service key 時為軟刪除＝停用）
+ *
+ * 設計取捨：
+ *  - 搜尋 debounce 300ms，切換條件時 AbortController 中止舊請求，避免舊結果覆蓋新結果
+ *  - 所有錯誤都走頁內訊息區（role="alert"），不用 alert()
+ *  - 表格在窄螢幕橫向滾動，外層不加固定寬度，避免整頁溢出
  */
 
-type Role = "member" | "admin";
+const PAGE_SIZE = 20;
 
-type MemberRow = {
-  member_id: string;
-  display_name: string | null;
-  email: string | null;
-  role: Role;
-  points: number;
-  total_km: number | string;
-  created_at: string;
-  last_sign_in_at: string | null;
-  run_count: number | string;
-  checkin_count: number | string;
-  coupon_count: number | string;
-};
+type RoleFilter = "all" | MemberRole;
+type StatusFilter = "all" | MemberStatus;
 
-const ROLE_LABEL: Record<Role, string> = {
-  member: "會員",
-  admin: "管理員",
-};
+const STATUS_OPTIONS: { value: StatusFilter; label: string }[] = [
+  { value: "all", label: "全部狀態" },
+  { value: "active", label: "正常" },
+  { value: "suspended", label: "停權" },
+  { value: "disabled", label: "停用" },
+];
 
-const PAGE_LIMIT = 50;
-
-function memberName(m: MemberRow): string {
-  return m.display_name?.trim() || m.email || "（未具名會員）";
+function memberName(member: MemberRow): string {
+  return member.display_name?.trim() || member.email || "（未具名會員）";
 }
 
 export function MemberManager() {
-  const [members, setMembers] = useState<MemberRow[]>([]);
   const [query, setQuery] = useState("");
   const [search, setSearch] = useState("");
-  const [reloadKey, setReloadKey] = useState(0);
+  const [roleFilter, setRoleFilter] = useState<RoleFilter>("all");
+  const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
+  const [page, setPage] = useState(1);
+
+  const [members, setMembers] = useState<MemberRow[]>([]);
+  const [total, setTotal] = useState(0);
+  const [hasServiceRole, setHasServiceRole] = useState(true);
 
   const [loading, setLoading] = useState(true);
-  const [busyId, setBusyId] = useState<string | null>(null);
+  const [reloadKey, setReloadKey] = useState(0);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
+  const [busyId, setBusyId] = useState<string | null>(null);
 
-  const [target, setTarget] = useState<MemberRow | null>(null);
-  const [delta, setDelta] = useState("");
-  const [reason, setReason] = useState("");
-  const [savingPoints, setSavingPoints] = useState(false);
-  // 對話框內的錯誤（頁面層的訊息區在遮罩後面，看不到）
-  const [pointsError, setPointsError] = useState<string | null>(null);
+  const [drawerMember, setDrawerMember] = useState<MemberRow | null>(null);
+  const [editMember, setEditMember] = useState<(MemberRow & { phone?: string | null }) | null>(null);
+  const [deleteMember, setDeleteMember] = useState<MemberRow | null>(null);
+  const [createOpen, setCreateOpen] = useState(false);
+
+  const hasFilters = search !== "" || roleFilter !== "all" || statusFilter !== "all";
+  const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
 
   /* ---------- 搜尋 debounce 300ms ---------- */
   useEffect(() => {
-    const timer = setTimeout(() => setSearch(query.trim()), 300);
+    const timer = setTimeout(() => {
+      setSearch(query.trim());
+      setPage(1);
+    }, 300);
     return () => clearTimeout(timer);
   }, [query]);
 
@@ -79,32 +102,41 @@ export function MemberManager() {
   useEffect(() => {
     const controller = new AbortController();
 
-    async function fetchMembers() {
+    async function load() {
       setLoading(true);
       setError(null);
       try {
-        const params = new URLSearchParams();
+        const params = new URLSearchParams({
+          page: String(page),
+          limit: String(PAGE_SIZE),
+        });
         if (search) params.set("q", search);
-        params.set("limit", String(PAGE_LIMIT));
+        if (roleFilter !== "all") params.set("role", roleFilter);
+        if (statusFilter !== "all") params.set("status", statusFilter);
 
         const res = await fetch(`/api/admin/members?${params.toString()}`, {
           cache: "no-store",
           signal: controller.signal,
         });
-        const body = (await res.json()) as {
-          ok: boolean;
-          error?: string;
-          data?: { members?: MemberRow[] };
-        };
+        const body: unknown = await res.json();
         if (controller.signal.aborted) return;
 
-        if (!body.ok) {
+        if (!res.ok || !isOkEnvelope<MemberListData>(body)) {
           setMembers([]);
-          setError(body.error ?? "讀取會員資料失敗。");
+          setTotal(0);
+          setError(parseError(body, "讀取會員資料失敗。").error);
           return;
         }
 
-        setMembers(Array.isArray(body.data?.members) ? body.data.members : []);
+        const data = body.data;
+        const list = Array.isArray(data.members) ? data.members : [];
+        const nextTotal = Number(data.total) || 0;
+        setMembers(list);
+        setTotal(nextTotal);
+        setHasServiceRole(data.has_service_role !== false);
+
+        const lastPage = Math.max(1, Math.ceil(nextTotal / PAGE_SIZE));
+        if (page > lastPage) setPage(lastPage);
       } catch (err) {
         if ((err as { name?: string }).name === "AbortError") return;
         setError("網路錯誤，請稍後再試。");
@@ -113,44 +145,40 @@ export function MemberManager() {
       }
     }
 
-    void fetchMembers();
+    void load();
     return () => controller.abort();
-  }, [search, reloadKey]);
+  }, [search, roleFilter, statusFilter, page, reloadKey]);
 
-  /* ---------- 改角色 ---------- */
-  async function changeRole(member: MemberRow, role: Role) {
-    if (role === member.role) return;
-
+  /* ---------- 啟用／停用快捷鍵 ---------- */
+  async function toggleStatus(member: MemberRow) {
+    const nextStatus: MemberStatus = member.status === "active" ? "suspended" : "active";
     setBusyId(member.member_id);
     setError(null);
     setNotice(null);
     try {
       const res = await fetch("/api/admin/members", {
-        method: "POST",
+        method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          action: "set_role",
-          userId: member.member_id,
-          role,
-        }),
+        body: JSON.stringify({ userId: member.member_id, status: nextStatus }),
       });
-      const body = (await res.json()) as {
-        ok: boolean;
-        error?: string;
-        message?: string;
-      };
+      const body: unknown = await res.json();
 
-      if (!body.ok) {
-        setError(body.error ?? "更新角色失敗。");
+      if (!res.ok || !isOkEnvelope<{ member?: MemberRow }>(body)) {
+        setError(parseError(body, "更新會員狀態失敗。").error);
         return;
       }
 
+      const updated = body.data.member;
       setMembers((prev) =>
-        prev.map((m) =>
-          m.member_id === member.member_id ? { ...m, role } : m
+        prev.map((row) =>
+          row.member_id === member.member_id
+            ? { ...row, ...(updated ?? {}), status: updated?.status ?? nextStatus }
+            : row
         )
       );
-      setNotice(`已將「${memberName(member)}」設為${ROLE_LABEL[role]}。`);
+      setNotice(
+        `已將「${memberName(member)}」${nextStatus === "active" ? "啟用" : "停用"}。`
+      );
     } catch {
       setError("網路錯誤，請稍後再試。");
     } finally {
@@ -158,87 +186,24 @@ export function MemberManager() {
     }
   }
 
-  /* ---------- 調整積分 ---------- */
-  function openPoints(member: MemberRow) {
-    setTarget(member);
-    setDelta("");
-    setReason("");
-    setPointsError(null);
-    setError(null);
-    setNotice(null);
+  function clearFilters() {
+    setQuery("");
+    setSearch("");
+    setRoleFilter("all");
+    setStatusFilter("all");
+    setPage(1);
   }
 
-  function closePoints() {
-    if (savingPoints) return;
-    setTarget(null);
-  }
-
-  async function submitPoints() {
-    if (!target) return;
-
-    const value = Number(delta);
-    if (!Number.isInteger(value) || value === 0) {
-      setPointsError("請輸入非 0 的整數（正數加分、負數扣分）。");
-      return;
-    }
-
-    setSavingPoints(true);
-    setPointsError(null);
-    setError(null);
-    setNotice(null);
-    try {
-      const res = await fetch("/api/admin/members", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          action: "adjust_points",
-          userId: target.member_id,
-          delta: value,
-          reason: reason.trim() || undefined,
-        }),
-      });
-      const body = (await res.json()) as {
-        ok: boolean;
-        error?: string;
-        message?: string;
-        data?: { points?: number };
-      };
-
-      if (!body.ok) {
-        setPointsError(body.error ?? "調整積分失敗。");
-        return;
-      }
-
-      const points = Number(body.data?.points);
-      if (Number.isFinite(points)) {
-        setMembers((prev) =>
-          prev.map((m) =>
-            m.member_id === target.member_id ? { ...m, points } : m
-          )
-        );
-      }
-      setNotice(body.message ?? "已調整積分。");
-      setTarget(null);
-    } catch {
-      setPointsError("網路錯誤，請稍後再試。");
-    } finally {
-      setSavingPoints(false);
-    }
-  }
+  const summary = useMemo(() => {
+    if (loading && members.length === 0) return "載入中…";
+    if (total === 0) return "沒有符合條件的會員";
+    return `共 ${total.toLocaleString()} 位會員`;
+  }, [loading, members.length, total]);
 
   return (
-    <div className="space-y-4">
+    <div className="min-w-0 space-y-4">
       {/* ===== 頁內訊息區 ===== */}
-      {error && (
-        <div
-          role="alert"
-          aria-live="polite"
-          className="flex items-start gap-2.5 rounded-xl border border-red-500/40 bg-red-500/10 px-4 py-3 text-sm text-red-200"
-        >
-          <AlertCircle size={17} className="mt-0.5 shrink-0" />
-          <span>{error}</span>
-        </div>
-      )}
+      {error && <ErrorBanner message={error} onDismiss={() => setError(null)} />}
       {notice && (
         <div
           role="status"
@@ -246,239 +211,365 @@ export function MemberManager() {
           className="flex items-start gap-2.5 rounded-xl border border-emerald-500/40 bg-emerald-500/10 px-4 py-3 text-sm text-emerald-200"
         >
           <CheckCircle2 size={17} className="mt-0.5 shrink-0" />
-          <span>{notice}</span>
+          <span className="min-w-0 flex-1 break-words">{notice}</span>
+          <button
+            type="button"
+            onClick={() => setNotice(null)}
+            aria-label="關閉提示訊息"
+            className="-mr-1 shrink-0 rounded p-1 text-emerald-200/70 transition hover:text-emerald-100"
+          >
+            <X size={15} />
+          </button>
         </div>
       )}
 
       {/* ===== 工具列 ===== */}
-      <div className="flex flex-wrap items-center gap-3">
-        <div className="relative min-w-[220px] flex-1">
-          <Search
-            size={16}
-            className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-white/40"
-          />
-          <input
-            type="search"
-            className="field !pl-9"
-            value={query}
-            onChange={(e) => setQuery(e.target.value)}
-            placeholder="搜尋名稱或電郵"
-            aria-label="搜尋會員名稱或電郵"
-          />
+      <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+        <div className="flex min-w-0 flex-1 flex-wrap items-center gap-2">
+          <div className="relative min-w-[180px] flex-1 sm:max-w-xs">
+            <Search
+              size={16}
+              className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-white/40"
+            />
+            <input
+              type="search"
+              className="field pl-9"
+              value={query}
+              onChange={(event) => setQuery(event.target.value)}
+              placeholder="搜尋名稱或電郵"
+              aria-label="搜尋會員名稱或電郵"
+            />
+          </div>
+
+          <select
+            className="field w-auto"
+            value={roleFilter}
+            aria-label="依角色篩選"
+            onChange={(event) => {
+              setRoleFilter(event.target.value as RoleFilter);
+              setPage(1);
+            }}
+          >
+            <option value="all">全部角色</option>
+            <option value="admin">管理員</option>
+            <option value="member">會員</option>
+          </select>
+
+          <select
+            className="field w-auto"
+            value={statusFilter}
+            aria-label="依狀態篩選"
+            onChange={(event) => {
+              setStatusFilter(event.target.value as StatusFilter);
+              setPage(1);
+            }}
+          >
+            {STATUS_OPTIONS.map((option) => (
+              <option key={option.value} value={option.value}>
+                {option.label}
+              </option>
+            ))}
+          </select>
+
+          <button
+            type="button"
+            onClick={() => setReloadKey((key) => key + 1)}
+            disabled={loading}
+            aria-label="重新整理會員列表"
+            className="btn-base btn-ghost px-3 py-2 text-sm"
+          >
+            {loading ? (
+              <Loader2 size={16} className="animate-spin" />
+            ) : (
+              <RefreshCw size={16} />
+            )}
+            重新整理
+          </button>
         </div>
-        <button
-          type="button"
-          onClick={() => setReloadKey((k) => k + 1)}
-          disabled={loading}
-          className="btn-base btn-ghost"
-        >
-          {loading ? (
-            <Loader2 size={16} className="animate-spin" />
-          ) : (
-            <RefreshCw size={16} />
-          )}
-          重新整理
-        </button>
+
+        <div className="flex items-center gap-2">
+          <button
+            type="button"
+            onClick={() => setCreateOpen(true)}
+            disabled={!hasServiceRole}
+            aria-label="新增會員"
+            aria-describedby={hasServiceRole ? undefined : "service-role-hint"}
+            title={hasServiceRole ? undefined : "未設定服務金鑰，無法新增帳號"}
+            className="btn-base btn-cobalt px-4 py-2 text-sm"
+          >
+            <Plus size={16} /> 新增會員
+          </button>
+        </div>
       </div>
 
+      {!hasServiceRole && (
+        <p
+          id="service-role-hint"
+          className="flex items-start gap-1.5 rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-xs text-amber-200"
+        >
+          <KeyRound size={14} className="mt-0.5 shrink-0" />
+          未設定服務金鑰，無法新增帳號；刪除會員時只會停用。
+        </p>
+      )}
+
       {/* ===== 列表 ===== */}
-      {loading && members.length === 0 ? (
-        <div className="rounded-xl border border-ink-line bg-ink-soft px-4 py-12 text-center text-sm text-white/60">
-          <Loader2 size={20} className="mx-auto animate-spin" />
-          <span className="mt-2 block">載入中…</span>
-        </div>
-      ) : members.length === 0 ? (
-        <div className="rounded-xl border border-dashed border-white/15 px-4 py-12 text-center text-sm text-white/60">
-          {search ? "找不到符合條件的會員。" : "尚無會員資料。"}
-        </div>
-      ) : (
-        <div className="overflow-x-auto rounded-xl border border-ink-line">
-          <table className="w-full min-w-[980px] text-sm">
-            <thead className="bg-ink-soft text-left text-xs text-white/60">
+      <div className="min-w-0 overflow-x-auto rounded-xl border border-ink-line" aria-busy={loading}>
+        <table className="w-full min-w-[900px] text-sm">
+          <caption className="sr-only">
+            會員列表，共 {total} 位；點擊列可開啟詳情抽屜
+          </caption>
+          <thead className="bg-ink-soft text-left text-xs text-white/60">
+            <tr>
+              <th scope="col" className="whitespace-nowrap px-4 py-3 font-semibold">名稱</th>
+              <th scope="col" className="whitespace-nowrap px-4 py-3 font-semibold">電郵</th>
+              <th scope="col" className="whitespace-nowrap px-4 py-3 font-semibold">角色</th>
+              <th scope="col" className="whitespace-nowrap px-4 py-3 font-semibold">狀態</th>
+              <th scope="col" className="whitespace-nowrap px-4 py-3 text-right font-semibold">積分</th>
+              <th scope="col" className="whitespace-nowrap px-4 py-3 text-right font-semibold">總里程</th>
+              <th scope="col" className="whitespace-nowrap px-4 py-3 font-semibold">加入日期</th>
+              <th scope="col" className="whitespace-nowrap px-4 py-3 text-right font-semibold">操作</th>
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-ink-line">
+            {loading && members.length === 0 ? (
+              Array.from({ length: 6 }).map((_, index) => (
+                <tr key={`skeleton-${index}`} className="animate-pulse">
+                  {Array.from({ length: 8 }).map((__, cell) => (
+                    <td key={cell} className="px-4 py-3.5">
+                      <span className="block h-3.5 rounded bg-white/10" />
+                    </td>
+                  ))}
+                </tr>
+              ))
+            ) : members.length === 0 ? (
               <tr>
-                <th className="whitespace-nowrap px-4 py-3 font-semibold">
-                  名稱
-                </th>
-                <th className="whitespace-nowrap px-4 py-3 font-semibold">
-                  電郵
-                </th>
-                <th className="whitespace-nowrap px-4 py-3 font-semibold">
-                  角色
-                </th>
-                <th className="whitespace-nowrap px-4 py-3 text-right font-semibold">
-                  積分
-                </th>
-                <th className="whitespace-nowrap px-4 py-3 text-right font-semibold">
-                  總里程
-                </th>
-                <th className="whitespace-nowrap px-4 py-3 font-semibold">
-                  加入日期
-                </th>
-                <th className="whitespace-nowrap px-4 py-3 font-semibold">
-                  提交／簽到／券
-                </th>
-                <th className="whitespace-nowrap px-4 py-3 text-right font-semibold">
-                  操作
-                </th>
+                <td colSpan={8} className="px-4 py-12 text-center text-sm text-white/60">
+                  {error ? (
+                    "暫時無法顯示會員資料。"
+                  ) : hasFilters ? (
+                    <div className="space-y-3">
+                      <p>找不到符合條件的會員。</p>
+                      <button
+                        type="button"
+                        onClick={clearFilters}
+                        className="btn-base btn-ghost px-4 py-2 text-xs"
+                      >
+                        清除篩選
+                      </button>
+                    </div>
+                  ) : (
+                    <div className="space-y-3">
+                      <Users size={22} className="mx-auto text-white/30" />
+                      <p>尚無會員資料。</p>
+                    </div>
+                  )}
+                </td>
               </tr>
-            </thead>
-            <tbody className="divide-y divide-ink-line">
-              {members.map((m) => (
-                <tr key={m.member_id}>
-                  <td className="max-w-[180px] truncate px-4 py-3 font-semibold">
-                    {m.display_name?.trim() || "（未具名會員）"}
+            ) : (
+              members.map((member) => (
+                <tr
+                  key={member.member_id}
+                  onClick={() => setDrawerMember(member)}
+                  className="cursor-pointer transition hover:bg-white/5 focus-within:bg-white/5"
+                >
+                  <td className="max-w-[200px] px-4 py-3">
+                    <div className="truncate font-semibold" title={memberName(member)}>
+                      {member.display_name?.trim() || "（未具名會員）"}
+                    </div>
+                    <div className="truncate text-xs text-white/45">
+                      最後登入 {formatDate(member.last_sign_in_at)}
+                    </div>
                   </td>
-                  <td className="max-w-[220px] truncate px-4 py-3 text-white/70">
-                    {m.email ?? "—"}
+                  <td className="max-w-[220px] truncate px-4 py-3 text-white/70" title={member.email ?? undefined}>
+                    {member.email ?? "—"}
                   </td>
                   <td className="px-4 py-3">
-                    <select
-                      className="field !w-auto !px-2.5 !py-1.5 text-xs"
-                      value={m.role}
-                      disabled={busyId === m.member_id}
-                      aria-label={`${memberName(m)} 的角色`}
-                      onChange={(e) =>
-                        void changeRole(m, e.target.value as Role)
-                      }
-                    >
-                      <option value="member">會員</option>
-                      <option value="admin">管理員</option>
-                    </select>
+                    <RoleBadge role={member.role} />
                   </td>
-                  <td className="px-4 py-3 text-right tabular-nums">
-                    {Number(m.points).toLocaleString()}
+                  <td className="px-4 py-3">
+                    <StatusBadge status={member.status} />
+                    {member.status_reason && (
+                      <span
+                        className="mt-1 block max-w-[160px] truncate text-xs text-white/40"
+                        title={member.status_reason}
+                      >
+                        {member.status_reason}
+                      </span>
+                    )}
                   </td>
-                  <td className="px-4 py-3 text-right tabular-nums">
-                    {formatKm(m.total_km)} km
+                  <td className="whitespace-nowrap px-4 py-3 text-right tabular-nums">
+                    {Number(member.points ?? 0).toLocaleString()}
+                  </td>
+                  <td className="whitespace-nowrap px-4 py-3 text-right tabular-nums">
+                    {formatKm(member.total_km)} km
                   </td>
                   <td className="whitespace-nowrap px-4 py-3 text-white/70">
-                    {formatDate(m.created_at)}
+                    {formatDate(member.created_at)}
                   </td>
-                  <td className="whitespace-nowrap px-4 py-3 tabular-nums text-white/70">
-                    {Number(m.run_count)}／{Number(m.checkin_count)}／
-                    {Number(m.coupon_count)}
-                  </td>
-                  <td className="px-4 py-3 text-right">
-                    <button
-                      type="button"
-                      onClick={() => openPoints(m)}
-                      disabled={busyId === m.member_id}
-                      className="btn-base btn-ghost !px-3 !py-1.5 text-xs"
-                    >
-                      <Coins size={14} /> 調整積分
-                    </button>
+                  <td className="whitespace-nowrap px-4 py-3">
+                    <div className="flex items-center justify-end gap-1">
+                      <IconAction
+                        label={`檢視 ${memberName(member)} 的詳情`}
+                        onClick={() => setDrawerMember(member)}
+                      >
+                        <Eye size={15} />
+                      </IconAction>
+                      <IconAction
+                        label={`編輯 ${memberName(member)}`}
+                        onClick={() => setEditMember(member)}
+                      >
+                        <Pencil size={15} />
+                      </IconAction>
+                      <IconAction
+                        label={
+                          member.status === "active"
+                            ? `停用 ${memberName(member)}`
+                            : `啟用 ${memberName(member)}`
+                        }
+                        onClick={() => void toggleStatus(member)}
+                        disabled={busyId === member.member_id}
+                        tone={member.status === "active" ? "warn" : "ok"}
+                      >
+                        {busyId === member.member_id ? (
+                          <Loader2 size={15} className="animate-spin" />
+                        ) : (
+                          <Power size={15} />
+                        )}
+                      </IconAction>
+                      <IconAction
+                        label={`刪除 ${memberName(member)}`}
+                        onClick={() => setDeleteMember(member)}
+                        tone="danger"
+                      >
+                        <Trash2 size={15} />
+                      </IconAction>
+                    </div>
                   </td>
                 </tr>
-              ))}
-            </tbody>
-          </table>
+              ))
+            )}
+          </tbody>
+        </table>
+      </div>
+
+      {/* ===== 分頁 ===== */}
+      <div className="flex flex-wrap items-center justify-between gap-3 text-xs text-white/60">
+        <span>{summary}</span>
+        <div className="flex items-center gap-2">
+          <button
+            type="button"
+            onClick={() => setPage((current) => Math.max(1, current - 1))}
+            disabled={page <= 1 || loading}
+            aria-label="上一頁"
+            className="btn-base btn-ghost px-3 py-1.5 text-xs"
+          >
+            <ChevronLeft size={15} /> 上一頁
+          </button>
+          <span aria-live="polite" className="tabular-nums">
+            第 {page} / {totalPages} 頁
+          </span>
+          <button
+            type="button"
+            onClick={() => setPage((current) => Math.min(totalPages, current + 1))}
+            disabled={page >= totalPages || loading}
+            aria-label="下一頁"
+            className="btn-base btn-ghost px-3 py-1.5 text-xs"
+          >
+            下一頁 <ChevronRight size={15} />
+          </button>
         </div>
+      </div>
+
+      {/* ===== 抽屜與對話框 ===== */}
+      {drawerMember && (
+        <MemberDrawer
+          member={drawerMember}
+          onClose={() => setDrawerMember(null)}
+          onEdit={(member) => {
+            setDrawerMember(null);
+            setEditMember(member);
+          }}
+        />
       )}
 
-      <p className="text-xs text-white/50">
-        顯示 {members.length} 位（最多 {PAGE_LIMIT} 位，可用搜尋縮小範圍）。
-      </p>
+      {editMember && (
+        <MemberEditDialog
+          member={editMember}
+          onClose={() => setEditMember(null)}
+          onSaved={(updated) => {
+            setMembers((prev) =>
+              prev.map((row) => (row.member_id === updated.member_id ? { ...row, ...updated } : row))
+            );
+            setNotice(`已更新「${memberName(updated)}」的資料。`);
+          }}
+        />
+      )}
 
-      {/* ===== 調整積分對話框 ===== */}
-      {target && (
-        <div
-          className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4"
-          role="dialog"
-          aria-modal="true"
-          aria-labelledby="points-title"
-        >
-          <div className="w-full max-w-sm rounded-xl border border-ink-line bg-ink-soft p-5">
-            <div className="flex items-start justify-between gap-4">
-              <h3 id="points-title" className="text-base font-bold">
-                調整積分
-              </h3>
-              <button
-                type="button"
-                onClick={closePoints}
-                disabled={savingPoints}
-                aria-label="關閉"
-                className="text-white/50 transition hover:text-white"
-              >
-                <X size={18} />
-              </button>
-            </div>
+      {createOpen && (
+        <MemberCreateDialog
+          onClose={() => setCreateOpen(false)}
+          onCreated={(name) => {
+            setNotice(`已新增會員「${name}」。`);
+            setPage(1);
+            setReloadKey((key) => key + 1);
+          }}
+          onServiceRoleRequired={() => setHasServiceRole(false)}
+        />
+      )}
 
-            <p className="mt-1 text-xs text-white/60">
-              {memberName(target)} · 目前 {Number(target.points).toLocaleString()}{" "}
-              分
-            </p>
-
-            <div className="mt-4 space-y-3">
-              <div>
-                <label className="label" htmlFor="points-delta">
-                  調整值（正數加分、負數扣分）
-                </label>
-                <input
-                  id="points-delta"
-                  type="number"
-                  step={1}
-                  className="field"
-                  value={delta}
-                  onChange={(e) => setDelta(e.target.value)}
-                  placeholder="例：50 或 -20"
-                  autoFocus
-                />
-              </div>
-              <div>
-                <label className="label" htmlFor="points-reason">
-                  原因（選填）
-                </label>
-                <input
-                  id="points-reason"
-                  type="text"
-                  className="field"
-                  value={reason}
-                  onChange={(e) => setReason(e.target.value)}
-                  placeholder="例：活動補發"
-                  maxLength={200}
-                />
-              </div>
-            </div>
-
-            {pointsError && (
-              <div
-                role="alert"
-                className="mt-4 flex items-start gap-2 rounded-xl border border-red-500/40 bg-red-500/10 px-3 py-2 text-xs text-red-200"
-              >
-                <AlertCircle size={14} className="mt-0.5 shrink-0" />
-                <span>{pointsError}</span>
-              </div>
-            )}
-
-            <div className="mt-5 flex justify-end gap-2">
-              <button
-                type="button"
-                onClick={closePoints}
-                disabled={savingPoints}
-                className="btn-base btn-ghost"
-              >
-                取消
-              </button>
-              <button
-                type="button"
-                onClick={() => void submitPoints()}
-                disabled={savingPoints}
-                className="btn-base btn-cobalt"
-              >
-                {savingPoints ? (
-                  <>
-                    <Loader2 size={16} className="animate-spin" /> 儲存中…
-                  </>
-                ) : (
-                  <>
-                    <Coins size={16} /> 確認調整
-                  </>
-                )}
-              </button>
-            </div>
-          </div>
-        </div>
+      {deleteMember && (
+        <MemberDeleteDialog
+          member={deleteMember}
+          onClose={() => setDeleteMember(null)}
+          onDeleted={(member, softDeleted) => {
+            setNotice(
+              softDeleted
+                ? `未設定服務金鑰，已改為停用「${memberName(member)}」。`
+                : `已刪除「${memberName(member)}」。`
+            );
+            setReloadKey((key) => key + 1);
+          }}
+        />
       )}
     </div>
+  );
+}
+
+function IconAction({
+  label,
+  onClick,
+  disabled = false,
+  tone = "default",
+  children,
+}: {
+  label: string;
+  onClick: () => void;
+  disabled?: boolean;
+  tone?: "default" | "warn" | "ok" | "danger";
+  children: ReactNode;
+}) {
+  const toneClass =
+    tone === "danger"
+      ? "hover:border-red-500/50 hover:text-red-300"
+      : tone === "warn"
+        ? "hover:border-amber-500/50 hover:text-amber-300"
+        : tone === "ok"
+          ? "hover:border-emerald-500/50 hover:text-emerald-300"
+          : "hover:border-white/40 hover:text-white";
+
+  return (
+    <button
+      type="button"
+      aria-label={label}
+      title={label}
+      disabled={disabled}
+      onClick={(event) => {
+        event.stopPropagation();
+        onClick();
+      }}
+      className={`rounded-lg border border-white/15 p-1.5 text-white/65 transition disabled:opacity-50 ${toneClass}`}
+    >
+      {children}
+    </button>
   );
 }
