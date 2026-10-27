@@ -328,24 +328,24 @@ export function MemberManager() {
           </caption>
           <colgroup>
             <col className="w-[17%]" />
-            <col className="w-[19%]" />
-            <col className="w-[8%]" />
+            <col className="w-[15%]" />
+            <col className="w-[10%]" />
             <col className="w-[9%]" />
             <col className="w-[7%]" />
-            <col className="w-[8%]" />
             <col className="w-[9%]" />
-            <col className="w-[23%]" />
+            <col className="w-[11%]" />
+            <col className="w-[22%]" />
           </colgroup>
           <thead className="bg-ink-soft text-left text-xs text-white/60">
             <tr>
-              <th scope="col" className="whitespace-nowrap px-4 py-3 font-semibold">名稱</th>
-              <th scope="col" className="whitespace-nowrap px-4 py-3 font-semibold">電郵</th>
-              <th scope="col" className="whitespace-nowrap px-4 py-3 font-semibold">角色</th>
-              <th scope="col" className="whitespace-nowrap px-4 py-3 font-semibold">狀態</th>
-              <th scope="col" className="whitespace-nowrap px-4 py-3 text-right font-semibold">積分</th>
-              <th scope="col" className="whitespace-nowrap px-4 py-3 text-right font-semibold">總里程</th>
-              <th scope="col" className="whitespace-nowrap px-4 py-3 font-semibold">加入日期</th>
-              <th scope="col" className="sticky right-0 z-10 whitespace-nowrap border-l border-ink-line bg-ink-soft px-4 py-3 text-right font-semibold">操作</th>
+              <th scope="col" className="whitespace-nowrap px-3 py-3 font-semibold">名稱</th>
+              <th scope="col" className="whitespace-nowrap px-3 py-3 font-semibold">電郵</th>
+              <th scope="col" className="whitespace-nowrap px-3 py-3 font-semibold">角色</th>
+              <th scope="col" className="whitespace-nowrap px-3 py-3 font-semibold">狀態</th>
+              <th scope="col" className="whitespace-nowrap px-3 py-3 text-right font-semibold">積分</th>
+              <th scope="col" className="whitespace-nowrap px-3 py-3 text-right font-semibold">總里程</th>
+              <th scope="col" className="whitespace-nowrap px-3 py-3 font-semibold">加入日期</th>
+              <th scope="col" className="sticky right-0 z-10 whitespace-nowrap border-l border-ink-line bg-ink-soft px-3 py-3 text-right font-semibold">操作</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-ink-line">
@@ -353,7 +353,7 @@ export function MemberManager() {
               Array.from({ length: 6 }).map((_, index) => (
                 <tr key={`skeleton-${index}`} className="animate-pulse">
                   {Array.from({ length: 8 }).map((__, cell) => (
-                    <td key={cell} className="px-4 py-3.5">
+                    <td key={cell} className="px-3 py-3.5">
                       <span className="block h-3.5 rounded bg-white/10" />
                     </td>
                   ))}
@@ -390,7 +390,7 @@ export function MemberManager() {
                   onClick={() => setDrawerMember(member)}
                   className="cursor-pointer transition hover:bg-white/5 focus-within:bg-white/5"
                 >
-                  <td className="px-4 py-3">
+                  <td className="px-3 py-3">
                     <div className="truncate font-semibold" title={memberName(member)}>
                       {member.display_name?.trim() || "（未具名會員）"}
                     </div>
@@ -398,13 +398,13 @@ export function MemberManager() {
                       最後登入 {formatDate(member.last_sign_in_at)}
                     </div>
                   </td>
-                  <td className="max-w-[180px] truncate px-4 py-3 text-white/70" title={member.email ?? undefined}>
+                  <td className="max-w-[180px] truncate px-3 py-3 text-white/70" title={member.email ?? undefined}>
                     {member.email ?? "—"}
                   </td>
-                  <td className="px-4 py-3">
+                  <td className="px-3 py-3">
                     <RoleBadge role={member.role} />
                   </td>
-                  <td className="px-4 py-3">
+                  <td className="px-3 py-3">
                     <StatusBadge status={member.status} />
                     {member.status_reason && (
                       <span
@@ -415,13 +415,13 @@ export function MemberManager() {
                       </span>
                     )}
                   </td>
-                  <td className="whitespace-nowrap px-4 py-3 text-right tabular-nums">
+                  <td className="whitespace-nowrap px-3 py-3 text-right tabular-nums">
                     {Number(member.points ?? 0).toLocaleString()}
                   </td>
-                  <td className="whitespace-nowrap px-4 py-3 text-right tabular-nums">
+                  <td className="whitespace-nowrap px-3 py-3 text-right tabular-nums">
                     {formatKm(member.total_km)} km
                   </td>
-                  <td className="whitespace-nowrap px-4 py-3 text-white/70">
+                  <td className="whitespace-nowrap px-3 py-3 text-white/70">
                     {formatDate(member.created_at)}
                   </td>
                   <td className="sticky right-0 z-10 whitespace-nowrap border-l border-ink-line bg-ink px-3 py-3">
