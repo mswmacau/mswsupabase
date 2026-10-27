@@ -18,6 +18,7 @@ export type ApiErrorCode =
   | "NOT_FOUND"
   | "CONFLICT"
   | "STORAGE"
+  | "SCHEMA_OUTDATED"
   | "INTERNAL";
 
 /** 成功：一律帶 ok:true，其餘攤平在同一層 */

@@ -35,6 +35,7 @@ import { createAdminClient, isServiceRoleConfigured } from "@/lib/supabase/admin
 import {
   isUuid,
   jsonBadJson,
+  jsonErr,
   jsonForbidden,
   jsonInternal,
   jsonNotFound,
@@ -139,6 +140,36 @@ function rpcFailure(where: string, error: RpcError) {
     }
     return jsonValidation({}, message || "操作被拒絕。");
   }
+
+  // 常見「部署了程式但沒跑 SQL」的情境 → 給管理員可照做的中文提示，
+  // 不要只丟一句「伺服器錯誤」。這些訊息只會出現在已驗證的 admin 介面。
+  const code = error?.code ?? "";
+  const raw = error?.message ?? "";
+  let hint = "";
+
+  if (code === "PGRST202" || /could not find the function/i.test(raw)) {
+    hint =
+      "資料庫尚未建立 admin_* 函式。請到 Supabase → SQL Editor 執行 supabase/migration-admin-members-v2.sql，完成後重新整理本頁。";
+  } else if (code === "PGRST203") {
+    hint =
+      "資料庫存在多個同名函式（多載衝突）。請重新執行 supabase/migration-admin-members-v2.sql（檔內會先刪除舊的 3 參數版本）。";
+  } else if (code === "42501") {
+    hint =
+      "資料庫權限不足（函式 execute 授權缺失）。請重新執行 supabase/migration-admin-members-v2.sql。";
+  } else if (code === "42703") {
+    hint =
+      "資料庫缺少 profiles.status 等欄位。請執行 supabase/migration-admin-members-v2.sql。";
+  } else if (code === "42P01") {
+    hint = "資料庫缺少資料表。請先執行 supabase/schema.sql。";
+  } else if (code === "PGRST301" || /JWT expired/i.test(raw)) {
+    hint = "登入狀態已過期，請重新登入後再試。";
+  }
+
+  if (hint) {
+    console.error(`[api] ${where} rpc 結構不符:`, code, raw);
+    return jsonErr(hint, "SCHEMA_OUTDATED", 503);
+  }
+
   return jsonInternal(where, error);
 }
 
