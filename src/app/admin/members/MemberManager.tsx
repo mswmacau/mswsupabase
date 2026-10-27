@@ -322,10 +322,20 @@ export function MemberManager() {
 
       {/* ===== 列表 ===== */}
       <div className="min-w-0 overflow-x-auto rounded-xl border border-ink-line" aria-busy={loading}>
-        <table className="w-full min-w-[900px] text-sm">
+        <table className="w-full min-w-[840px] table-fixed text-sm">
           <caption className="sr-only">
             會員列表，共 {total} 位；點擊列可開啟詳情抽屜
           </caption>
+          <colgroup>
+            <col className="w-[17%]" />
+            <col className="w-[19%]" />
+            <col className="w-[8%]" />
+            <col className="w-[9%]" />
+            <col className="w-[7%]" />
+            <col className="w-[8%]" />
+            <col className="w-[9%]" />
+            <col className="w-[23%]" />
+          </colgroup>
           <thead className="bg-ink-soft text-left text-xs text-white/60">
             <tr>
               <th scope="col" className="whitespace-nowrap px-4 py-3 font-semibold">名稱</th>
@@ -335,7 +345,7 @@ export function MemberManager() {
               <th scope="col" className="whitespace-nowrap px-4 py-3 text-right font-semibold">積分</th>
               <th scope="col" className="whitespace-nowrap px-4 py-3 text-right font-semibold">總里程</th>
               <th scope="col" className="whitespace-nowrap px-4 py-3 font-semibold">加入日期</th>
-              <th scope="col" className="whitespace-nowrap px-4 py-3 text-right font-semibold">操作</th>
+              <th scope="col" className="sticky right-0 z-10 whitespace-nowrap border-l border-ink-line bg-ink-soft px-4 py-3 text-right font-semibold">操作</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-ink-line">
@@ -380,7 +390,7 @@ export function MemberManager() {
                   onClick={() => setDrawerMember(member)}
                   className="cursor-pointer transition hover:bg-white/5 focus-within:bg-white/5"
                 >
-                  <td className="max-w-[200px] px-4 py-3">
+                  <td className="px-4 py-3">
                     <div className="truncate font-semibold" title={memberName(member)}>
                       {member.display_name?.trim() || "（未具名會員）"}
                     </div>
@@ -388,7 +398,7 @@ export function MemberManager() {
                       最後登入 {formatDate(member.last_sign_in_at)}
                     </div>
                   </td>
-                  <td className="max-w-[220px] truncate px-4 py-3 text-white/70" title={member.email ?? undefined}>
+                  <td className="max-w-[180px] truncate px-4 py-3 text-white/70" title={member.email ?? undefined}>
                     {member.email ?? "—"}
                   </td>
                   <td className="px-4 py-3">
@@ -414,8 +424,8 @@ export function MemberManager() {
                   <td className="whitespace-nowrap px-4 py-3 text-white/70">
                     {formatDate(member.created_at)}
                   </td>
-                  <td className="whitespace-nowrap px-4 py-3">
-                    <div className="flex items-center justify-end gap-1">
+                  <td className="sticky right-0 z-10 whitespace-nowrap border-l border-ink-line bg-ink px-3 py-3">
+                    <div className="flex items-center justify-end gap-0">
                       <IconAction
                         label={`檢視 ${memberName(member)} 的詳情`}
                         onClick={() => setDrawerMember(member)}
@@ -621,7 +631,7 @@ function IconAction({
         event.stopPropagation();
         onClick();
       }}
-      className={`rounded-lg border border-white/15 p-1.5 text-white/65 transition disabled:opacity-50 ${toneClass}`}
+      className={`rounded-lg border border-white/15 p-1 text-white/65 transition disabled:opacity-50 ${toneClass}`}
     >
       {children}
     </button>

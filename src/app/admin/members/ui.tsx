@@ -32,7 +32,7 @@ const STATUS_STYLE: Record<MemberStatus, string> = {
 export function RoleBadge({ role }: { role: MemberRole }) {
   return (
     <span
-      className={`inline-flex items-center rounded-full border px-2.5 py-0.5 text-xs font-semibold ${ROLE_STYLE[role]}`}
+      className={`inline-flex items-center whitespace-nowrap rounded-full border px-2.5 py-0.5 text-xs font-semibold ${ROLE_STYLE[role]}`}
     >
       {ROLE_LABEL[role]}
     </span>
@@ -42,7 +42,7 @@ export function RoleBadge({ role }: { role: MemberRole }) {
 export function StatusBadge({ status }: { status: MemberStatus }) {
   return (
     <span
-      className={`inline-flex items-center rounded-full border px-2.5 py-0.5 text-xs font-semibold ${STATUS_STYLE[status]}`}
+      className={`inline-flex items-center whitespace-nowrap rounded-full border px-2.5 py-0.5 text-xs font-semibold ${STATUS_STYLE[status]}`}
     >
       {STATUS_LABEL[status]}
     </span>
