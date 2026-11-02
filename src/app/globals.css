@@ -908,3 +908,13 @@ button {
     animation: none !important;
   }
 }
+
+/* ===== 公開核銷頁（/v/[code]）：全站唯一免登入頁，不掛站點導覽與頁尾 =====
+ * 根 layout 一律渲染 <header>（Nav）與 <footer>（Footer），巢狀 layout 無法移除，
+ * 因此由本頁外殼的 data-msw-verify 反選 body 直接子元素隱藏。
+ * 只影響帶該屬性的頁面，其餘頁面完全不受影響。 */
+body:has(> main > [data-msw-verify]) > header,
+body:has(> main > [data-msw-verify]) > footer,
+body:has(> main > [data-msw-verify]) > [data-setup-banner] {
+  display: none;
+}
