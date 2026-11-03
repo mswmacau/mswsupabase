@@ -26,8 +26,35 @@ const SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY ?? "";
  * 是否已配置 service_role 金鑰。
  * 未配置時所有「需要管理 auth 使用者」的功能都必須降級（501 / 軟刪除）。
  */
+/**
+ * 讀出金鑰 JWT 的 role claim（不驗簽，只用來辨識「這把是不是 service_role」）。
+ * 目的：防止有人把 anon key 填進 SUPABASE_SERVICE_ROLE_KEY——兩者都是長 JWT，
+ * 只檢查長度會漏掉，結果就是以 anon 身分呼叫 RPC，被資料庫回 42501 permission denied，
+ * 而錯得很難查（錯誤訊息會指向權限，不是指向環境變數）。
+ */
+function jwtRole(key: string): string | null {
+  try {
+    const seg = key.split(".")[1];
+    if (!seg) return null;
+    const json = JSON.parse(
+      Buffer.from(seg.replace(/-/g, "+").replace(/_/g, "/"), "base64").toString("utf8")
+    );
+    return typeof json?.role === "string" ? json.role : null;
+  } catch {
+    return null;
+  }
+}
+
+const SERVICE_ROLE_ROLE = jwtRole(SERVICE_ROLE_KEY);
+
 export const isServiceRoleConfigured =
-  SUPABASE_URL.startsWith("http") && SERVICE_ROLE_KEY.length > 20;
+  SUPABASE_URL.startsWith("http") &&
+  SERVICE_ROLE_KEY.length > 20 &&
+  SERVICE_ROLE_ROLE === "service_role";
+
+/** 金鑰有填但角色不對（多數是誤填 anon key）：只在 server log 提示一次。 */
+export const serviceRoleKeyLooksWrong =
+  SERVICE_ROLE_KEY.length > 20 && SERVICE_ROLE_ROLE !== "service_role";
 
 /**
  * 建立 service_role 客戶端（繞過 RLS，能操作 auth.users）。
