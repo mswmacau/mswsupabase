@@ -5,6 +5,7 @@ import { redirect } from "next/navigation";
 import {
   ArrowRight,
   CalendarDays,
+  Gift,
   Route,
   Ticket,
   TrendingUp,
@@ -20,6 +21,7 @@ import {
 } from "@/lib/queries";
 import { ProgressBar } from "@/components/ProgressBar";
 import { RunSubmissionList } from "@/components/RunSubmissionList";
+import { getRewardsEnabled } from "@/lib/rewards";
 import { RULES } from "@/lib/config";
 import { currentMonth, formatDate, formatKm, monthLabel } from "@/lib/utils";
 
@@ -39,14 +41,16 @@ export default async function DashboardPage() {
   if (!profile) redirect("/login?next=/dashboard");
 
   const month = currentMonth();
-  const [monthKm, submissions, coupons, checkins, points, pages] = await Promise.all([
-    getUserMonthKm(profile.id, month),
-    getUserSubmissions(profile.id, 5),
-    getUserCoupons(profile.id),
-    getUserCheckins(profile.id, 5),
-    getUserPoints(profile.id, 10),
-    getSitePages(),
-  ]);
+  const [monthKm, submissions, coupons, checkins, points, pages, rewardsEnabled] =
+    await Promise.all([
+      getUserMonthKm(profile.id, month),
+      getUserSubmissions(profile.id, 5),
+      getUserCoupons(profile.id),
+      getUserCheckins(profile.id, 5),
+      getUserPoints(profile.id, 10),
+      getSitePages(),
+      getRewardsEnabled(),
+    ]);
   const t = pages.dashboard;
 
   const activeCoupons = coupons.filter((c) => c.status === "active").length;
@@ -270,6 +274,43 @@ export default async function DashboardPage() {
             desc="查看目前名次"
           />
         </div>
+
+        {/* 禮品換領：入口卡片（rewards_enabled=false 時整張隱藏） */}
+        {rewardsEnabled && (
+          <div className="clip-notch-br card-dark z-raise mt-4 flex flex-col gap-5 border-vital/25 p-6 sm:flex-row sm:items-center sm:justify-between sm:p-7">
+            <div className="flex min-w-0 items-center gap-4">
+              <span className="clip-slab flex h-12 w-12 flex-none items-center justify-center bg-vital/15 text-vital-bright">
+                <Gift size={22} />
+              </span>
+              <div className="min-w-0">
+                <h2 className="text-lg font-black tracking-tight">禮品換領</h2>
+                <p className="mt-0.5 text-xs leading-relaxed text-white/60">
+                  用積分換蜂蜜水、運動毛巾等，兌換後到商戶出示 QR 領取。
+                </p>
+              </div>
+            </div>
+
+            <div className="flex items-center justify-between gap-5 border-t border-[var(--line-fine)] pt-4 sm:border-l sm:border-t-0 sm:pl-7 sm:pt-0">
+              <div className="text-left sm:text-right">
+                <div className="stat-figure text-3xl text-white">
+                  {profile.points}
+                  <span className="ml-1 font-sans text-xs font-medium text-white/55">
+                    分
+                  </span>
+                </div>
+                <div className="mt-0.5 text-[11px] uppercase tracking-[0.18em] text-white/50">
+                  可用積分
+                </div>
+              </div>
+              <Link
+                href="/dashboard/rewards"
+                className="btn-base btn-vital btn-slab min-h-11 flex-none text-sm"
+              >
+                去換禮品 <ArrowRight size={15} />
+              </Link>
+            </div>
+          </div>
+        )}
 
         {/* ===== 紀錄區：節奏式排版 ===== */}
         <div className="mt-12 grid gap-8 lg:grid-cols-12">

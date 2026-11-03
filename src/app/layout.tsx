@@ -8,6 +8,7 @@ import { NavProgress } from "@/components/NavProgress";
 import { PageViewBeacon } from "@/components/tracking/PageViewBeacon";
 import { getCurrentProfile } from "@/lib/supabase/server";
 import { getSiteContact, getSiteNav, getSiteSeo, getSiteTheme } from "@/lib/queries";
+import { getRewardsEnabled } from "@/lib/rewards";
 import { DEFAULT_THEME, themeCssVars } from "@/lib/theme";
 import { publicAssetUrl } from "@/lib/assets";
 
@@ -77,11 +78,12 @@ export default async function RootLayout({
 }: {
   children: React.ReactNode;
 }) {
-  const [profile, theme, nav, contact] = await Promise.all([
+  const [profile, theme, nav, contact, rewardsEnabled] = await Promise.all([
     getCurrentProfile(),
     getSiteTheme(),
     getSiteNav(),
     getSiteContact(),
+    getRewardsEnabled(),
   ]);
   const cssVars = themeCssVars(theme);
 
@@ -108,6 +110,7 @@ export default async function RootLayout({
           brandName={theme.brand_name}
           brandNameEn={theme.brand_name_en}
           navLinks={nav.links}
+          rewardsEnabled={rewardsEnabled}
         />
         <main id="main" tabIndex={-1} className="flex-1">
           {children}

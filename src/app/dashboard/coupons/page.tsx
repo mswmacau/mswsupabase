@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
-import { ArrowLeft, ArrowRight, Ticket } from "lucide-react";
+import { ArrowLeft, ArrowRight, Info, Ticket } from "lucide-react";
 import { CouponCard } from "@/components/CouponCard";
 import { getCurrentProfile } from "@/lib/supabase/server";
 import { getUserCoupons } from "@/lib/queries";
@@ -55,6 +55,21 @@ export default async function CouponsPage() {
             <p className="mt-8 max-w-xl text-base leading-relaxed text-white/70">
               月度任務達標後由後台發放，出示 QR Code 或券碼即可在 MSW 街健館兌換。
             </p>
+
+            {/* 過渡期提示：舊券照用，新的積分換領在另一頁 */}
+            <div className="slab mt-6 flex items-start gap-2.5 border border-amber-500/40 bg-amber-500/10 px-4 py-3 text-sm leading-relaxed text-amber-100">
+              <Info size={17} className="mt-0.5 flex-none" />
+              <p>
+                原有優惠券即將推出，積分換領請到{" "}
+                <Link
+                  href="/dashboard/rewards"
+                  className="whitespace-nowrap font-semibold text-vital-bright underline underline-offset-4"
+                >
+                  禮品換領
+                </Link>
+                。下面已發出的優惠券仍可照常使用。
+              </p>
+            </div>
           </div>
         </div>
 

@@ -133,7 +133,11 @@ export default function VerifyPanel({ code }: { code: string }) {
   }, [code]);
 
   useEffect(() => {
-    void lookup();
+    // 以 timer 延後一跳，避免在 effect 內同步 setState（React 19 lint 規則）
+    const id = window.setTimeout(() => {
+      void lookup();
+    }, 0);
+    return () => window.clearTimeout(id);
   }, [lookup]);
 
   useEffect(() => {

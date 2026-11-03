@@ -41,6 +41,10 @@ const MODULE_LABELS: Record<string, string> = {
   "site-seo": "SEO",
   "site-settings": "網站設定",
   "site-draft": "草稿",
+  rewards: "禮品管理",
+  redemptions: "兌換管理",
+  merchants: "商戶管理",
+  "point-rules": "積分規則",
 };
 
 /** 動作 → 中文（對照 src/lib/audit.ts 已接線的 action 值） */
@@ -50,6 +54,15 @@ const ACTION_LABELS: Record<string, string> = {
   publish: "發佈",
   "save-draft": "儲存草稿",
   "discard-draft": "丟棄草稿",
+  create: "新增",
+  update: "更新",
+  deactivate: "停用",
+  activate: "啟用",
+  pin_generate: "產生 PIN",
+  pin_reset: "重設 PIN",
+  review: "審批兌換",
+  fulfill: "核銷",
+  award: "手動補發",
 };
 
 /** 澳門時區（UTC+8，全年無日光節約）的人話時間：2026/10/23 14:05 */

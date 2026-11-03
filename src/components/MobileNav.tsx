@@ -5,7 +5,7 @@ import { useEffect, useSyncExternalStore, useState } from "react";
 import { createPortal } from "react-dom";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Menu, Shield, Ticket, User, X } from "lucide-react";
+import { Gift, Menu, Shield, Ticket, User, X } from "lucide-react";
 import { LogoutButton } from "./LogoutButton";
 
 interface Props {
@@ -16,6 +16,8 @@ interface Props {
   points?: number;
   brandName?: string;
   brandNameEn?: string;
+  /** app_settings.rewards_enabled；false 時隱藏禮品換領入口 */
+  rewardsEnabled?: boolean;
 }
 
 /** 斜切角尺寸 */
@@ -30,6 +32,7 @@ export function MobileNav({
   points = 0,
   brandName = "MSW 街健館",
   brandNameEn = "Macau Street Workout",
+  rewardsEnabled = true,
 }: Props) {
   // 以「開啟時的路徑」推導開啟狀態：換頁後 open 自動變 false，
   // 不需要在 effect 裡 setState（避免連鎖 render）。
@@ -157,6 +160,11 @@ export function MobileNav({
                   <Link href="/dashboard/coupons" className="btn-base btn-ghost btn-slab min-h-11">
                     <Ticket size={17} /> 我的優惠券
                   </Link>
+                  {rewardsEnabled && (
+                    <Link href="/dashboard/rewards" className="btn-base btn-ghost btn-slab min-h-11">
+                      <Gift size={17} /> 禮品換領
+                    </Link>
+                  )}
                   {isAdmin && (
                     <Link href="/admin" className="btn-base btn-ghost btn-slab min-h-11">
                       <Shield size={17} /> 後台管理

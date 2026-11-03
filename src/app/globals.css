@@ -918,3 +918,31 @@ body:has(> main > [data-msw-verify]) > footer,
 body:has(> main > [data-msw-verify]) > [data-setup-banner] {
   display: none;
 }
+
+/* ===== 後台列印（PIN 卡）：只印 #pin-print-card，其餘一律隱藏 =====
+ * 由 /admin/merchants 的「列印 PIN 卡」呼叫 window.print()；
+ * 用 visibility 而非 display，避免影響原本版面高度造成列印分頁錯亂。 */
+@media print {
+  body * {
+    visibility: hidden;
+  }
+  #pin-print-card,
+  #pin-print-card * {
+    visibility: visible;
+  }
+  #pin-print-card {
+    position: absolute;
+    left: 0;
+    top: 0;
+    width: 100%;
+    padding: 18mm 16mm;
+    color: #000;
+    background: #fff;
+    border: 0;
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+  @page {
+    margin: 12mm;
+  }
+}

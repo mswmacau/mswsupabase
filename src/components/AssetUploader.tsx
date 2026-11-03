@@ -21,7 +21,7 @@ import { uploadImageFile } from "@/lib/upload";
 import { publicAssetUrl } from "@/lib/assets";
 
 export interface AssetUploaderProps {
-  kind: "event" | "logo" | "hero" | "coach";
+  kind: "event" | "logo" | "hero" | "coach" | "reward";
   value: string | null;
   onChange: (path: string | null) => void;
   disabled?: boolean;
@@ -35,6 +35,7 @@ const KIND_HINTS: Record<AssetUploaderProps["kind"], string> = {
   hero: "建議 1600×900。",
   event: "活動封面；建議 1600×900（16:9），不符比例會被裁切。",
   coach: "建議 900×1200 直式（3:4）。",
+  reward: "禮品圖；建議 800×800 正方形，不符比例會被裁切。",
 };
 
 /** T-11：iPhone HEIC 常駐提示（V1 O4；選到 HEIC 檔時另有上傳錯誤說明） */

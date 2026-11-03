@@ -4,7 +4,7 @@ import type { CSSProperties } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
-import { ChevronDown, Shield, Ticket, User } from "lucide-react";
+import { ChevronDown, Gift, Shield, Ticket, User } from "lucide-react";
 import { BRAND, NAV_LINKS } from "@/lib/config";
 import type { NavLink } from "@/lib/content";
 import { useSmartNav } from "./fx/useSmartNav";
@@ -21,6 +21,8 @@ interface Props {
   brandNameEn?: string;
   /** 導覽選單（site_nav；由 layout 以 getSiteNav() 讀出後傳入） */
   navLinks?: NavLink[];
+  /** app_settings.rewards_enabled；false 時隱藏禮品換領入口 */
+  rewardsEnabled?: boolean;
 }
 
 /** 斜切角尺寸：小元件用較小的切角，避免切掉過多面積 */
@@ -36,6 +38,7 @@ export function Nav({
   brandName = BRAND.name,
   brandNameEn = BRAND.nameEn,
   navLinks,
+  rewardsEnabled = true,
 }: Props) {
   const [scrolled, setScrolled] = useState(false);
   // F-G1：向下碌收起、向上碌／碌返頂部重現（reduced-motion 時恆為 false）
@@ -180,6 +183,14 @@ export function Nav({
                     >
                       <Ticket size={15} /> 我的優惠券
                     </Link>
+                    {rewardsEnabled && (
+                      <Link
+                        href="/dashboard/rewards"
+                        className="flex min-h-11 items-center gap-2 px-4 text-sm text-white/85 hover:bg-white/10"
+                      >
+                        <Gift size={15} /> 禮品換領
+                      </Link>
+                    )}
                     {isAdmin && (
                       <Link
                         href="/admin"
@@ -224,6 +235,7 @@ export function Nav({
             points={points}
             brandName={brandName}
             brandNameEn={brandNameEn}
+            rewardsEnabled={rewardsEnabled}
           />
         </div>
       </div>

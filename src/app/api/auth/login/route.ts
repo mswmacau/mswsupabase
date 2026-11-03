@@ -81,6 +81,27 @@ export async function POST(request: Request) {
       );
     }
 
+    // 每日登入 +10（best-effort）：fire-and-forget，絕不影響登入結果。
+    // 刻意不 await：RPC 慢、失敗或函式未部署（PGRST202）都只寫 server log，
+    // 登入本身永遠成功——積分是贈品，不是登入的前置條件。
+    try {
+      void Promise.resolve(supabase.rpc("award_daily_login"))
+        .then(({ error: awardError }) => {
+          if (awardError && awardError.code !== "PGRST202") {
+            console.warn(
+              "[login] award_daily_login failed:",
+              awardError.code,
+              awardError.message
+            );
+          }
+        })
+        .catch(() => {
+          /* 忽略：積分發放失敗不影響登入 */
+        });
+    } catch {
+      /* 同步拋錯同樣吞掉 */
+    }
+
     // 防開放重定向：只放行單一斜線開頭的站內相對路徑，擋 //evil.com、/\evil.com、/api/*
     const requested = safeNext(next, "");
     let target = requested && !requested.startsWith("/admin") ? requested : "/dashboard";
