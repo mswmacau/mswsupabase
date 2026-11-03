@@ -53,7 +53,7 @@ where id = (select id from auth.users where email = 'you@example.com');`}
 
         <div className="grid gap-8 lg:grid-cols-[220px_1fr]">
           <aside className="min-w-0 lg:sticky lg:top-24 lg:self-start">
-            <div className="card-dark overflow-hidden p-3">
+            <div className="card-dark overflow-hidden p-3 lg:max-h-[calc(100vh-7.5rem)] lg:overflow-y-auto lg:overscroll-contain">
               <AdminNav />
             </div>
           </aside>

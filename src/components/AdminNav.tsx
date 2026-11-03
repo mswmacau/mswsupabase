@@ -43,7 +43,7 @@ export function AdminNav() {
   const pathname = usePathname();
 
   return (
-    <nav className="flex gap-2 overflow-x-auto lg:flex-col lg:overflow-visible">
+    <nav className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:flex lg:flex-col lg:overflow-visible">
       {LINKS.map((l) => {
         const active = l.exact
           ? pathname === l.href
@@ -53,7 +53,7 @@ export function AdminNav() {
           <Link
             key={l.href}
             href={l.href}
-            className={`flex shrink-0 items-center gap-2.5 rounded-xl px-4 py-2.5 text-sm font-semibold transition ${
+            className={`flex items-center gap-2.5 rounded-xl px-3 py-2.5 text-sm font-semibold transition lg:shrink-0 lg:px-4 ${
               active
                 ? "bg-vital text-white"
                 : "text-white/75 hover:bg-white/5 hover:text-white"
