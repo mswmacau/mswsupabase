@@ -33,6 +33,15 @@ export function RewardsManager({
 }) {
   const router = useRouter();
   const [rows, setRows] = useState<RewardRow[]>(initialRewards);
+  const [syncedFrom, setSyncedFrom] = useState(initialRewards);
+
+  // router.refresh() 只更新 server prop，不會更新 useState 初始值。
+  // React 官方做法：在 render 期間比對 prop，變了就同步 state（不是副作用，不會多跑一次 commit）。
+  if (syncedFrom !== initialRewards) {
+    setSyncedFrom(initialRewards);
+    setRows(initialRewards);
+  }
+
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [busyId, setBusyId] = useState<string | null>(null);
