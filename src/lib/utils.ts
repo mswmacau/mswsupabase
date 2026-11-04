@@ -10,14 +10,33 @@ import { RULES } from "./config";
  */
 const MACAU_OFFSET_MS = 8 * 60 * 60 * 1000;
 
+/**
+ * 把某一時刻位移到澳門時區（UTC+8，全年無日光節約）；之後一律用 getUTC* 取值。
+ *
+ * 為什麼要這樣做：本檔所有日期輸出都可能同時在兩個時區執行——
+ * Server Component 在 Vercel（UTC）渲染，Client Component 在瀏覽器
+ * （Asia/Macau，UTC+8）hydrate。若用 getFullYear()/getMonth()/getDate()
+ * 這些「執行環境本地時區」getter，同一筆時間在兩邊會算出不同日期，
+ * 造成會員端日期差一天，並觸發 React hydration mismatch（#418）。
+ * 位移後改用 getUTC* 取值，輸出就與執行環境時區完全無關。
+ */
+function toMacau(d: Date): Date {
+  return new Date(d.getTime() + MACAU_OFFSET_MS);
+}
+
+function pad2(n: number): string {
+  return String(n).padStart(2, "0");
+}
+
 export function todayISO(d: Date = new Date()): string {
-  return new Date(d.getTime() + MACAU_OFFSET_MS).toISOString().slice(0, 10);
+  return toMacau(d).toISOString().slice(0, 10);
 }
 
 
-/** 目前月份 key，格式 'YYYY-MM' */
+/** 目前月份 key，格式 'YYYY-MM'（以澳門時區為準） */
 export function currentMonth(d: Date = new Date()): string {
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
+  const t = toMacau(d);
+  return `${t.getUTCFullYear()}-${pad2(t.getUTCMonth() + 1)}`;
 }
 
 /** 'YYYY-MM' → '2026 年 9 月' */
@@ -28,24 +47,27 @@ export function monthLabel(month: string): string {
 
 /** 產生最近 n 個月的 key（含本月），由新到舊 */
 export function recentMonths(n = 6, from: Date = new Date()): string[] {
+  const base = currentMonth(from);
   const out: string[] = [];
-  for (let i = 0; i < n; i++) {
-    const d = new Date(from.getFullYear(), from.getMonth() - i, 1);
-    out.push(currentMonth(d));
-  }
+  for (let i = 0; i < n; i++) out.push(addMonths(base, -i));
   return out;
 }
 
+/** 月份加減：純整數運算，不受執行環境時區影響 */
 export function addMonths(month: string, delta: number): string {
   const [y, m] = month.split("-").map(Number);
-  const d = new Date(y, m - 1 + delta, 1);
-  return currentMonth(d);
+  const idx = y * 12 + (m - 1) + delta;
+  const ny = Math.floor(idx / 12);
+  return `${ny}-${pad2(idx - ny * 12 + 1)}`;
 }
 
-/** 該月還剩幾天（用來顯示挑戰倒數） */
+/** 該月還剩幾天（用來顯示挑戰倒數，以澳門時區為準） */
 export function daysLeftInMonth(d: Date = new Date()): number {
-  const last = new Date(d.getFullYear(), d.getMonth() + 1, 0).getDate();
-  return last - d.getDate();
+  const t = toMacau(d);
+  const last = new Date(
+    Date.UTC(t.getUTCFullYear(), t.getUTCMonth() + 1, 0)
+  ).getUTCDate();
+  return last - t.getUTCDate();
 }
 
 export function formatKm(v: number | string | null | undefined): string {
@@ -53,22 +75,27 @@ export function formatKm(v: number | string | null | undefined): string {
   return Number.isInteger(n) ? n.toString() : n.toFixed(1);
 }
 
+/** 時間戳 → 'YYYY/MM/DD'（以澳門時區為準，不受執行環境時區影響） */
 export function formatDate(iso: string | null | undefined): string {
   if (!iso) return "—";
   const d = new Date(iso);
   if (Number.isNaN(d.getTime())) return "—";
-  return `${d.getFullYear()}/${String(d.getMonth() + 1).padStart(2, "0")}/${String(
-    d.getDate()
-  ).padStart(2, "0")}`;
+  const t = toMacau(d);
+  return `${t.getUTCFullYear()}/${pad2(t.getUTCMonth() + 1)}/${pad2(
+    t.getUTCDate()
+  )}`;
 }
 
+/** 時間戳 → 'YYYY/MM/DD HH:mm'（以澳門時區為準，不受執行環境時區影響） */
 export function formatDateTime(iso: string | null | undefined): string {
   if (!iso) return "—";
   const d = new Date(iso);
   if (Number.isNaN(d.getTime())) return "—";
-  return `${formatDate(iso)} ${String(d.getHours()).padStart(2, "0")}:${String(
-    d.getMinutes()
-  ).padStart(2, "0")}`;
+  const t = toMacau(d);
+  const date = `${t.getUTCFullYear()}/${pad2(t.getUTCMonth() + 1)}/${pad2(
+    t.getUTCDate()
+  )}`;
+  return `${date} ${pad2(t.getUTCHours())}:${pad2(t.getUTCMinutes())}`;
 }
 
 /** 星期一路訓練：下一個（或今天）的星期一 */
