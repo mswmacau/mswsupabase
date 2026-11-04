@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useTransition } from "react";
 import Image from "next/image";
 import { useRouter } from "next/navigation";
 import {
@@ -51,7 +51,7 @@ export function RewardsManager({
   const [offTarget, setOffTarget] = useState<RewardRow | null>(null);
   const [offPending, setOffPending] = useState(false);
   const [offError, setOffError] = useState<string | null>(null);
-  const [refreshing, setRefreshing] = useState(false);
+  const [isPending, startTransition] = useTransition();
 
   function afterChange(message: string) {
     setNotice(message);
@@ -99,10 +99,11 @@ export function RewardsManager({
   }
 
   function refresh() {
-    setRefreshing(true);
-    router.refresh();
-    // router.refresh 沒有 promise；給使用者一個短暫的載入感
-    setTimeout(() => setRefreshing(false), 800);
+    // useTransition 的 isPending 會一直 true 到 RSC 重新渲染完成，
+    // 比固定 800ms 的假動畫誠實：按鈕何時真的更新完，spinner 就何時停。
+    startTransition(() => {
+      router.refresh();
+    });
   }
 
   const activeCount = rows.filter((r) => r.status === "active").length;
@@ -120,10 +121,12 @@ export function RewardsManager({
           <button
             type="button"
             onClick={refresh}
-            className="btn-base btn-ghost px-3 py-2 text-sm"
+            disabled={isPending}
+            aria-busy={isPending}
+            className="btn-base btn-ghost px-3 py-2 text-sm disabled:opacity-60"
             aria-label="重新整理禮品列表"
           >
-            {refreshing ? (
+            {isPending ? (
               <Loader2 size={16} className="animate-spin" />
             ) : (
               <RefreshCw size={16} />
