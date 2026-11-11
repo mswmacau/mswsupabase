@@ -2,9 +2,11 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { AlertCircle, ArrowRight, CheckCircle2, Loader2, MailCheck } from "lucide-react";
 import { DEFAULT_PAGES, type SitePageSignup } from "@/lib/content";
+import { GoogleAuthButton } from "@/components/GoogleAuthButton";
+import { safeNext } from "@/lib/safe-next";
 
 /** F-S1：密碼最短長度（前端較 API 嚴格，見交付說明） */
 const PASSWORD_MIN = 8;
@@ -132,6 +134,12 @@ export function SignupForm({
   labels?: SitePageSignup;
 }) {
   const router = useRouter();
+  const searchParams = useSearchParams();
+  /** 保留登入頁帶過來的 next；沒有就回 /dashboard（與 Google 登入落點一致） */
+  const next = safeNext(searchParams.get("next"), "/dashboard");
+  /** 只有非預設 next 才附上 query，避免無謂參數 */
+  const loginHref =
+    next === "/dashboard" ? "/login" : `/login?next=${encodeURIComponent(next)}`;
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [done, setDone] = useState<string | null>(null);
@@ -253,277 +261,297 @@ export function SignupForm({
   }
 
   return (
-    <form onSubmit={onSubmit} onBlur={handleBlur} className="space-y-5">
-      {error && (
-        <div
-          role="alert"
-          aria-live="polite"
-          className="slab flex items-start gap-2.5 border border-red-500/40 bg-red-500/10 px-4 py-3 text-sm text-red-200"
-        >
-          <AlertCircle size={17} className="mt-0.5 shrink-0" />
-          <span>{error}</span>
-        </div>
-      )}
-
-      {/* 1 電子郵箱 */}
-      <div>
-        <label className="label" htmlFor="email">
-          {labels.email_label}
-        </label>
-        <input
-          id="email"
-          name="email"
-          type="email"
-          autoComplete="email"
-          required
-          placeholder={labels.email_placeholder}
-          aria-invalid={fieldErrors.email ? true : undefined}
-          aria-describedby={fieldErrors.email ? "email-error" : undefined}
-          className={`field ${fieldErrors.email ? "border-red-500/70" : ""}`}
-        />
-        {fieldErrors.email && (
-          <p id="email-error" className="mt-1.5 text-xs text-red-300">
-            {fieldErrors.email}
-          </p>
-        )}
-      </div>
-
-      {/* 2 密碼 */}
-      <div>
-        <label className="label" htmlFor="password">
-          {labels.password_label}
-        </label>
-        <input
-          id="password"
-          name="password"
-          type="password"
-          autoComplete="new-password"
-          required
-          minLength={PASSWORD_MIN}
-          placeholder={labels.password_placeholder}
-          aria-invalid={fieldErrors.password ? true : undefined}
-          aria-describedby={fieldErrors.password ? "password-error" : undefined}
-          className={`field ${fieldErrors.password ? "border-red-500/70" : ""}`}
-        />
-        {fieldErrors.password && (
-          <p id="password-error" className="mt-1.5 text-xs text-red-300">
-            {fieldErrors.password}
-          </p>
-        )}
-      </div>
-
-      {/* 3 確認密碼 */}
-      <div>
-        <label className="label" htmlFor="confirm_password">
-          {labels.confirm_label}
-        </label>
-        <input
-          id="confirm_password"
-          name="confirm_password"
-          type="password"
-          autoComplete="new-password"
-          required
-          placeholder={labels.confirm_placeholder}
-          aria-describedby={
-            fieldErrors.confirm_password
-              ? "confirm-password-hint confirm-password-error"
-              : "confirm-password-hint"
-          }
-          aria-invalid={fieldErrors.confirm_password ? true : undefined}
-          className={`field ${
-            fieldErrors.confirm_password ? "border-red-500/70" : ""
-          }`}
-        />
-        {fieldErrors.confirm_password && (
-          <p
-            id="confirm-password-error"
-            className="mt-1.5 text-xs text-red-300"
-          >
-            {fieldErrors.confirm_password}
-          </p>
-        )}
-        <p id="confirm-password-hint" className="mt-1.5 text-xs text-white/55">
-          {labels.confirm_hint}
+    <>
+      {/* 表單卡頂部：用途標籤（讓用戶一眼分辨這一頁是註冊不是登入） */}
+      <div className="mb-5">
+        <h2 className="flex flex-wrap items-center gap-x-2 text-[11px] font-semibold uppercase tracking-[0.18em] text-white/50">
+          <span>立即加入</span>
+          <span aria-hidden="true" className="text-white/30">
+            /
+          </span>
+          <span>JOIN NOW</span>
+        </h2>
+        <p className="mt-2 text-sm leading-relaxed text-white/70">
+          新會員建立帳號。註冊後可報名活動、上傳跑步紀錄、兌換禮品與累積積分。
         </p>
       </div>
 
-      {/* 4 姓名 / 5 顯示名稱：390 寬單欄，sm 以上並排 */}
-      <div className="grid gap-5 sm:grid-cols-2">
-        <div className="min-w-0">
-          <label className="label" htmlFor="full_name">
-            姓名（真實姓名）
+      {/* OAuth 走整頁導向，刻意放在 <form> 之外，不混進 submit 流程 */}
+      <GoogleAuthButton next={next} />
+
+      <form onSubmit={onSubmit} onBlur={handleBlur} className="space-y-5">
+        {error && (
+          <div
+            role="alert"
+            aria-live="polite"
+            className="slab flex items-start gap-2.5 border border-red-500/40 bg-red-500/10 px-4 py-3 text-sm text-red-200"
+          >
+            <AlertCircle size={17} className="mt-0.5 shrink-0" />
+            <span>{error}</span>
+          </div>
+        )}
+
+        {/* 1 電子郵箱 */}
+        <div>
+          <label className="label" htmlFor="email">
+            {labels.email_label}
           </label>
           <input
-            id="full_name"
-            name="full_name"
-            type="text"
-            autoComplete="name"
+            id="email"
+            name="email"
+            type="email"
+            autoComplete="email"
             required
-            minLength={2}
-            maxLength={40}
-            placeholder="陳大文"
-            aria-invalid={fieldErrors.full_name ? true : undefined}
-            aria-describedby={
-              fieldErrors.full_name ? "full-name-error" : undefined
-            }
-            className={`field ${fieldErrors.full_name ? "border-red-500/70" : ""}`}
+            placeholder={labels.email_placeholder}
+            aria-invalid={fieldErrors.email ? true : undefined}
+            aria-describedby={fieldErrors.email ? "email-error" : undefined}
+            className={`field ${fieldErrors.email ? "border-red-500/70" : ""}`}
           />
-          {fieldErrors.full_name && (
-            <p id="full-name-error" className="mt-1.5 text-xs text-red-300">
-              {fieldErrors.full_name}
+          {fieldErrors.email && (
+            <p id="email-error" className="mt-1.5 text-xs text-red-300">
+              {fieldErrors.email}
             </p>
           )}
         </div>
 
-        <div className="min-w-0">
-          <label className="label" htmlFor="display_name">
-            {labels.display_name_label}
+        {/* 2 密碼 */}
+        <div>
+          <label className="label" htmlFor="password">
+            {labels.password_label}
           </label>
           <input
-            id="display_name"
-            name="display_name"
-            type="text"
-            autoComplete="nickname"
+            id="password"
+            name="password"
+            type="password"
+            autoComplete="new-password"
             required
-            minLength={2}
-            maxLength={20}
-            placeholder={labels.display_name_placeholder}
-            aria-invalid={fieldErrors.display_name ? true : undefined}
+            minLength={PASSWORD_MIN}
+            placeholder={labels.password_placeholder}
+            aria-invalid={fieldErrors.password ? true : undefined}
+            aria-describedby={fieldErrors.password ? "password-error" : undefined}
+            className={`field ${fieldErrors.password ? "border-red-500/70" : ""}`}
+          />
+          {fieldErrors.password && (
+            <p id="password-error" className="mt-1.5 text-xs text-red-300">
+              {fieldErrors.password}
+            </p>
+          )}
+        </div>
+
+        {/* 3 確認密碼 */}
+        <div>
+          <label className="label" htmlFor="confirm_password">
+            {labels.confirm_label}
+          </label>
+          <input
+            id="confirm_password"
+            name="confirm_password"
+            type="password"
+            autoComplete="new-password"
+            required
+            placeholder={labels.confirm_placeholder}
             aria-describedby={
-              fieldErrors.display_name ? "display-name-error" : undefined
+              fieldErrors.confirm_password
+                ? "confirm-password-hint confirm-password-error"
+                : "confirm-password-hint"
             }
+            aria-invalid={fieldErrors.confirm_password ? true : undefined}
             className={`field ${
-              fieldErrors.display_name ? "border-red-500/70" : ""
+              fieldErrors.confirm_password ? "border-red-500/70" : ""
             }`}
           />
-          {fieldErrors.display_name && (
-            <p id="display-name-error" className="mt-1.5 text-xs text-red-300">
-              {fieldErrors.display_name}
+          {fieldErrors.confirm_password && (
+            <p
+              id="confirm-password-error"
+              className="mt-1.5 text-xs text-red-300"
+            >
+              {fieldErrors.confirm_password}
+            </p>
+          )}
+          <p id="confirm-password-hint" className="mt-1.5 text-xs text-white/55">
+            {labels.confirm_hint}
+          </p>
+        </div>
+
+        {/* 4 姓名 / 5 顯示名稱：390 寬單欄，sm 以上並排 */}
+        <div className="grid gap-5 sm:grid-cols-2">
+          <div className="min-w-0">
+            <label className="label" htmlFor="full_name">
+              姓名（真實姓名）
+            </label>
+            <input
+              id="full_name"
+              name="full_name"
+              type="text"
+              autoComplete="name"
+              required
+              minLength={2}
+              maxLength={40}
+              placeholder="陳大文"
+              aria-invalid={fieldErrors.full_name ? true : undefined}
+              aria-describedby={
+                fieldErrors.full_name ? "full-name-error" : undefined
+              }
+              className={`field ${fieldErrors.full_name ? "border-red-500/70" : ""}`}
+            />
+            {fieldErrors.full_name && (
+              <p id="full-name-error" className="mt-1.5 text-xs text-red-300">
+                {fieldErrors.full_name}
+              </p>
+            )}
+          </div>
+
+          <div className="min-w-0">
+            <label className="label" htmlFor="display_name">
+              {labels.display_name_label}
+            </label>
+            <input
+              id="display_name"
+              name="display_name"
+              type="text"
+              autoComplete="nickname"
+              required
+              minLength={2}
+              maxLength={20}
+              placeholder={labels.display_name_placeholder}
+              aria-invalid={fieldErrors.display_name ? true : undefined}
+              aria-describedby={
+                fieldErrors.display_name ? "display-name-error" : undefined
+              }
+              className={`field ${
+                fieldErrors.display_name ? "border-red-500/70" : ""
+              }`}
+            />
+            {fieldErrors.display_name && (
+              <p id="display-name-error" className="mt-1.5 text-xs text-red-300">
+                {fieldErrors.display_name}
+              </p>
+            )}
+          </div>
+        </div>
+
+        {/* 6 性別 */}
+        <div>
+          <label className="label" htmlFor="gender">
+            性別
+          </label>
+          <select
+            id="gender"
+            name="gender"
+            required
+            defaultValue=""
+            aria-invalid={fieldErrors.gender ? true : undefined}
+            aria-describedby={fieldErrors.gender ? "gender-error" : undefined}
+            className={`field ${fieldErrors.gender ? "border-red-500/70" : ""}`}
+          >
+            <option value="" disabled>
+              請選擇
+            </option>
+            {GENDERS.map((g) => (
+              <option key={g.value} value={g.value}>
+                {g.label}
+              </option>
+            ))}
+          </select>
+          {fieldErrors.gender && (
+            <p id="gender-error" className="mt-1.5 text-xs text-red-300">
+              {fieldErrors.gender}
             </p>
           )}
         </div>
-      </div>
 
-      {/* 6 性別 */}
-      <div>
-        <label className="label" htmlFor="gender">
-          性別
-        </label>
-        <select
-          id="gender"
-          name="gender"
-          required
-          defaultValue=""
-          aria-invalid={fieldErrors.gender ? true : undefined}
-          aria-describedby={fieldErrors.gender ? "gender-error" : undefined}
-          className={`field ${fieldErrors.gender ? "border-red-500/70" : ""}`}
+        {/* 7 電話號碼 */}
+        <div>
+          <label className="label" htmlFor="phone">
+            電話號碼
+          </label>
+          <input
+            id="phone"
+            name="phone"
+            type="tel"
+            inputMode="tel"
+            autoComplete="tel"
+            required
+            placeholder="+853 6666 7777"
+            aria-invalid={fieldErrors.phone ? true : undefined}
+            aria-describedby={fieldErrors.phone ? "phone-error" : undefined}
+            className={`field ${fieldErrors.phone ? "border-red-500/70" : ""}`}
+          />
+          {fieldErrors.phone && (
+            <p id="phone-error" className="mt-1.5 text-xs text-red-300">
+              {fieldErrors.phone}
+            </p>
+          )}
+        </div>
+
+        {/* 8 身份證後四位 */}
+        <div>
+          <label className="label" htmlFor="id_last4">
+            身份證後四位
+          </label>
+          <input
+            id="id_last4"
+            name="id_last4"
+            type="text"
+            inputMode="numeric"
+            autoComplete="off"
+            required
+            maxLength={4}
+            placeholder="1234"
+            aria-invalid={fieldErrors.id_last4 ? true : undefined}
+            aria-describedby={
+              fieldErrors.id_last4
+                ? "id-last4-hint id-last4-error"
+                : "id-last4-hint"
+            }
+            className={`field ${fieldErrors.id_last4 ? "border-red-500/70" : ""}`}
+          />
+          {fieldErrors.id_last4 && (
+            <p id="id-last4-error" className="mt-1.5 text-xs text-red-300">
+              {fieldErrors.id_last4}
+            </p>
+          )}
+          <p id="id-last4-hint" className="mt-1.5 text-xs text-white/55">
+            用於活動報名及保險登記，只會儲存最後四位。
+          </p>
+        </div>
+
+        <button
+          type="submit"
+          disabled={pending}
+          className="btn-base btn-vital btn-slab min-h-11 w-full"
         >
-          <option value="" disabled>
-            請選擇
-          </option>
-          {GENDERS.map((g) => (
-            <option key={g.value} value={g.value}>
-              {g.label}
-            </option>
-          ))}
-        </select>
-        {fieldErrors.gender && (
-          <p id="gender-error" className="mt-1.5 text-xs text-red-300">
-            {fieldErrors.gender}
-          </p>
-        )}
-      </div>
+          {pending ? (
+            <>
+              <Loader2 size={17} className="animate-spin" /> {labels.pending_label}
+            </>
+          ) : (
+            <>
+              {labels.submit_label} <ArrowRight size={17} />
+            </>
+          )}
+        </button>
 
-      {/* 7 電話號碼 */}
-      <div>
-        <label className="label" htmlFor="phone">
-          電話號碼
-        </label>
-        <input
-          id="phone"
-          name="phone"
-          type="tel"
-          inputMode="tel"
-          autoComplete="tel"
-          required
-          placeholder="+853 6666 7777"
-          aria-invalid={fieldErrors.phone ? true : undefined}
-          aria-describedby={fieldErrors.phone ? "phone-error" : undefined}
-          className={`field ${fieldErrors.phone ? "border-red-500/70" : ""}`}
-        />
-        {fieldErrors.phone && (
-          <p id="phone-error" className="mt-1.5 text-xs text-red-300">
-            {fieldErrors.phone}
-          </p>
-        )}
-      </div>
+        <div className="border-l-2 border-cobalt/60 bg-white/[0.03] px-4 py-3 text-xs leading-relaxed text-white/70">
+          <span className="mb-1 flex items-center gap-1.5 font-semibold text-white/85">
+            <MailCheck size={14} className="text-accent-blue" /> 關於電郵驗證
+          </span>
+          {renderVerifyNote(labels.verify_note)}
+        </div>
 
-      {/* 8 身份證後四位 */}
-      <div>
-        <label className="label" htmlFor="id_last4">
-          身份證後四位
-        </label>
-        <input
-          id="id_last4"
-          name="id_last4"
-          type="text"
-          inputMode="numeric"
-          autoComplete="off"
-          required
-          maxLength={4}
-          placeholder="1234"
-          aria-invalid={fieldErrors.id_last4 ? true : undefined}
-          aria-describedby={
-            fieldErrors.id_last4
-              ? "id-last4-hint id-last4-error"
-              : "id-last4-hint"
-          }
-          className={`field ${fieldErrors.id_last4 ? "border-red-500/70" : ""}`}
-        />
-        {fieldErrors.id_last4 && (
-          <p id="id-last4-error" className="mt-1.5 text-xs text-red-300">
-            {fieldErrors.id_last4}
-          </p>
-        )}
-        <p id="id-last4-hint" className="mt-1.5 text-xs text-white/55">
-          用於活動報名及保險登記，只會儲存最後四位。
+        <p className="text-xs leading-relaxed text-white/70">{labels.rules_note}</p>
+
+        <p className="flex min-h-11 flex-wrap items-center justify-center gap-x-1.5 border-t border-[var(--line-fine)] pt-5 text-center text-sm text-white/70">
+          {labels.login_prompt}{" "}
+          <Link
+            href={loginHref}
+            className="inline-flex min-h-11 items-center gap-1 font-semibold text-accent-blue hover:underline"
+          >
+            {labels.login_link}
+            <span aria-hidden="true">→</span>
+          </Link>
         </p>
-      </div>
-
-      <button
-        type="submit"
-        disabled={pending}
-        className="btn-base btn-vital btn-slab min-h-11 w-full"
-      >
-        {pending ? (
-          <>
-            <Loader2 size={17} className="animate-spin" /> {labels.pending_label}
-          </>
-        ) : (
-          <>
-            {labels.submit_label} <ArrowRight size={17} />
-          </>
-        )}
-      </button>
-
-      <div className="border-l-2 border-cobalt/60 bg-white/[0.03] px-4 py-3 text-xs leading-relaxed text-white/70">
-        <span className="mb-1 flex items-center gap-1.5 font-semibold text-white/85">
-          <MailCheck size={14} className="text-accent-blue" /> 關於電郵驗證
-        </span>
-        {renderVerifyNote(labels.verify_note)}
-      </div>
-
-      <p className="text-xs leading-relaxed text-white/70">{labels.rules_note}</p>
-
-      <p className="border-t border-[var(--line-fine)] pt-5 text-center text-sm text-white/70">
-        {labels.login_prompt}{" "}
-        <Link
-          href="/login"
-          className="font-semibold text-accent-blue hover:underline"
-        >
-          {labels.login_link}
-        </Link>
-      </p>
-    </form>
+      </form>
+    </>
   );
 }

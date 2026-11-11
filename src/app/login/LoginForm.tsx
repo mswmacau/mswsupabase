@@ -21,6 +21,9 @@ export function LoginForm({
   const router = useRouter();
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(oauthError);
+  /** 只有非預設 next 才附上 query，避免無謂參數 */
+  const signupHref =
+    next === "/dashboard" ? "/signup" : `/signup?next=${encodeURIComponent(next)}`;
 
   async function onSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
@@ -61,6 +64,20 @@ export function LoginForm({
 
   return (
     <>
+      {/* 表單卡頂部：用途標籤（讓用戶一眼分辨這一頁是登入不是註冊） */}
+      <div className="mb-5">
+        <h2 className="flex flex-wrap items-center gap-x-2 text-[11px] font-semibold uppercase tracking-[0.18em] text-white/50">
+          <span>會員登入</span>
+          <span aria-hidden="true" className="text-white/30">
+            /
+          </span>
+          <span>MEMBER LOGIN</span>
+        </h2>
+        <p className="mt-2 text-sm leading-relaxed text-white/70">
+          已有帳號。用 Email 或 Google 登入，繼續累積你的紀錄。
+        </p>
+      </div>
+
       {/* OAuth 走整頁導向，刻意放在 <form> 之外，不混進 submit 流程 */}
       <GoogleAuthButton next={next} />
 
@@ -122,13 +139,14 @@ export function LoginForm({
           )}
         </button>
 
-        <p className="border-t border-[var(--line-fine)] pt-5 text-center text-sm text-white/70">
+        <p className="flex min-h-11 flex-wrap items-center justify-center gap-x-1.5 border-t border-[var(--line-fine)] pt-5 text-center text-sm text-white/70">
           {labels.signup_prompt}{" "}
           <Link
-            href="/signup"
-            className="font-semibold text-accent-blue hover:underline"
+            href={signupHref}
+            className="inline-flex min-h-11 items-center gap-1 font-semibold text-accent-blue hover:underline"
           >
             {labels.signup_link}
+            <span aria-hidden="true">→</span>
           </Link>
         </p>
       </form>
