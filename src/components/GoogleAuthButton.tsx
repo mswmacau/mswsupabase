@@ -15,8 +15,8 @@ import { safeNext } from "@/lib/safe-next";
  * 若在 render 期間直接讀，server 畫的是「有按鈕」、client 首渲可能畫「沒按鈕」→ hydration mismatch（#418）。
  * 故用 useSyncExternalStore：server snapshot 固定 false（與 SSR 輸出一致），
  * hydration 完成後才換成真實 UA 判斷，全程不在 effect 內 setState。
+ * 下方三個模組層函式刻意放在元件外，維持參考穩定（UA 不會在同一個頁面生命週期內改變）。
  */
-/** UA 不會在同一個頁面生命週期內改變，故不需要訂閱任何外部來源 */
 const subscribeNever = () => () => {};
 const getIsWeChatSnapshot = () => /MicroMessenger/i.test(navigator.userAgent);
 const getIsWeChatServerSnapshot = () => false;
