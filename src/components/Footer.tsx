@@ -174,6 +174,13 @@ export function Footer({
             >
               聯絡我們
             </Link>
+            {/* 私隱政策：Google OAuth 同意畫面需要一個公開可達的政策頁 */}
+            <Link
+              href="/privacy"
+              className="inline-flex min-h-11 items-center text-sm font-semibold text-white/75 transition hover:text-vital-bright"
+            >
+              私隱政策
+            </Link>
           </div>
         </div>
 

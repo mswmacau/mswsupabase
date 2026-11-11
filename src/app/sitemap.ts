@@ -15,6 +15,7 @@ export default function sitemap(): MetadataRoute.Sitemap {
     "/run",
     "/leaderboard",
     "/about",
+    "/privacy",
     "/coaches",
     "/signup",
     "/login",
