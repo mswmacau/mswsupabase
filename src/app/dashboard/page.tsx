@@ -20,6 +20,7 @@ import {
   getSitePages,
 } from "@/lib/queries";
 import { ProgressBar } from "@/components/ProgressBar";
+import { ProfileCompletionNotice } from "@/components/ProfileCompletionNotice";
 import { RunSubmissionList } from "@/components/RunSubmissionList";
 import { getRewardsEnabled } from "@/lib/rewards";
 import { RULES } from "@/lib/config";
@@ -56,6 +57,19 @@ export default async function DashboardPage() {
   const activeCoupons = coupons.filter((c) => c.status === "active").length;
   const goal = RULES.MONTHLY_GOAL_KM;
 
+  // 資料補填提示：full_name / gender / id_last4 任一為空就提醒（不擋任何操作）。
+  // 型別在本檔本地宣告，避免與 src/lib/types.ts 的 Profile 定義時序耦合。
+  const completion = profile as typeof profile & {
+    full_name?: string | null;
+    gender?: string | null;
+    id_last4?: string | null;
+  };
+  const filled = (v?: string | null) => typeof v === "string" && v.trim() !== "";
+  const needsProfileCompletion =
+    !filled(completion.full_name) ||
+    !filled(completion.gender) ||
+    !filled(completion.id_last4);
+
   return (
     <section className="relative overflow-hidden pb-20 pt-24 md:pt-28">
       {/* 單側光暈（只在右上，刻意不對稱） */}
@@ -85,6 +99,8 @@ export default async function DashboardPage() {
             </h1>
           </div>
         </div>
+
+        {needsProfileCompletion && <ProfileCompletionNotice />}
 
         {/* ===== 不對稱 Bento：積分／里程用超大數字主導 ===== */}
         <div className="mt-10 grid gap-4 lg:grid-cols-12">

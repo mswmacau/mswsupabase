@@ -23,12 +23,16 @@ const FACTS = [
 export default async function LoginPage({
   searchParams,
 }: {
-  searchParams: Promise<{ next?: string }>;
+  searchParams: Promise<{ next?: string; error?: string }>;
 }) {
-  const { next } = await searchParams;
+  const { next, error } = await searchParams;
   // 防開放重定向：與 api/auth/login、auth/callback、LoginForm 用同一套白名單
   //（自行用 startsWith("/") 會放行 //evil.com 與 /\evil.com）
   const target = safeNext(next, "/dashboard");
+
+  // /auth/callback 換 session 失敗時導回 /login?error=oauth（見 src/app/auth/callback/route.ts）
+  const oauthError =
+    error === "oauth" ? "Google 登入失敗，請再試一次或改用 Email。" : null;
 
   const [profile, pages] = await Promise.all([
     getCurrentProfile(),
@@ -116,7 +120,7 @@ export default async function LoginPage({
             )}
 
             <div className="mt-7">
-              <LoginForm next={target} labels={t} />
+              <LoginForm next={target} labels={t} oauthError={oauthError} />
             </div>
           </div>
         </div>
