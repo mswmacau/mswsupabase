@@ -48,6 +48,92 @@ export interface Event {
   updated_at: string;
 }
 
+/* =============================================================
+ * 付費活動（HYROX）— migration-paid-events-1.sql B/C 段
+ * ============================================================= */
+
+/**
+ * HYROX 場次。
+ *
+ * 為什麼不是 `interface HyroxEvent extends Event`：
+ *   DB 的 events.event_date 目前仍是 `date not null`（schema-r6.sql），但交付契約
+ *   要求後台可建立「日期待定」場次（event_date = null）。若直接 extends 再放寬
+ *   event_date 成 `string | null`，TypeScript 會因為「屬性型別必須相容」而報錯
+ *   （string | null 不是 string 的子型別）。故用 Omit 換掉該欄位再補回。
+ */
+export type HyroxEvent = Omit<Event, "event_date"> & {
+  /** YYYY-MM-DD；null = 日期待定（需 DB 端把 event_date 改成可為 null 才寫得進去） */
+  event_date: string | null;
+  /** 系列標籤；HYROX 場次一律 'hyrox'（既有活動為 null） */
+  series: string | null;
+  /** 報名費（分）。0 = 免費 */
+  fee_cents: number;
+  /** 收款 QR 圖片的 Storage 路徑（site-assets 內） */
+  payment_qr_path: string | null;
+  /** 收款電話（純文字） */
+  payment_phone: string | null;
+  /** 付款說明（純文字） */
+  payment_note: string | null;
+};
+
+/** 後台列表用：場次 + 統計（註冊數／待審數） */
+export type HyroxEventWithCounts = HyroxEvent & {
+  /** status='registered' 的報名筆數 */
+  registrations_count: number;
+  /** status='registered' 且 payment_status='pending_review' 的筆數 */
+  pending_count: number;
+};
+
+/** 報名狀態（event_registrations.status） */
+export type RegistrationStatus = "registered" | "cancelled";
+
+/** 報名表三題（自由文字；空白時存 null） */
+export interface HyroxAnswers {
+  group_pref: string | null;
+  weekly_freq: string | null;
+  longest_run: string | null;
+}
+
+/** 會員自己的 HYROX 報名（含付款狀態與審核備註，給 /dashboard 顯示） */
+export interface HyroxRegistration extends HyroxAnswers {
+  id: string;
+  event_id: string;
+  user_id: string;
+  status: RegistrationStatus;
+  payment_status: PaymentStatus;
+  payment_proof_path: string | null;
+  payment_amount_cents: number | null;
+  disclaimer_accepted_at: string | null;
+  reviewed_by: string | null;
+  reviewed_at: string | null;
+  admin_note: string | null;
+  created_at: string;
+  /** 關聯場次（getMyHyroxRegistrations 一併取回，減少一次往返） */
+  event?: HyroxEvent | null;
+  /** 付款截圖的 signed URL（後台名單用；會員端不回） */
+  proof_url?: string | null;
+}
+
+/** 後台報名名單的一列（契約見 GET /api/admin/hyrox/registrations） */
+export interface HyroxAdminRegistrationRow {
+  registration_id: string;
+  display_name: string | null;
+  full_name: string | null;
+  gender: Gender | null;
+  phone: string | null;
+  id_last4: string | null;
+  group_pref: string | null;
+  weekly_freq: string | null;
+  longest_run: string | null;
+  payment_status: PaymentStatus;
+  /** 會員自填金額（分）；契約外加欄位，見交付說明「建議契約調整」 */
+  payment_amount_cents: number | null;
+  admin_note: string | null;
+  created_at: string;
+  /** 付款截圖 signed URL（1 小時）；無截圖為 null */
+  proof_url: string | null;
+}
+
 export interface Profile {
   id: string;
   display_name: string | null;

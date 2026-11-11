@@ -11,13 +11,25 @@ import { createClient } from "./supabase/client";
 import { compressImage, extFromMime, ImgError } from "./image-compress";
 import type { AssetKind } from "./assets";
 
-const BUCKET: Record<AssetKind, string> = {
+/**
+ * 可上傳的種類 = 既有 AssetKind ＋ 付費活動的付款截圖 "payment"。
+ *
+ * 【為什麼不是直接改 AssetKind】AssetKind 定義在 src/lib/assets.ts，那份型別
+ * 同時被前台元件（封面／教練／優惠券等）使用。本次交付的檔案範圍不含
+ * assets.ts，所以在 upload.ts 就地擴充一個 union，既有 kind 的行為與
+ * BUCKET 對應完全不變，只是多一個 "payment" 分支。
+ */
+export type UploadKind = AssetKind | "payment";
+
+const BUCKET: Record<UploadKind, string> = {
   event: "site-assets",
   logo: "site-assets",
   hero: "site-assets",
   run: "run-screenshots",
   coach: "site-assets",
   reward: "site-assets",
+  // 付款截圖與跑步截圖同性質（個人隱私資料）→ 私有桶＋signed URL 讀取
+  payment: "run-screenshots",
 };
 
 /** 由 Storage 錯誤映射到給終端客戶看的中文訊息（SPEC §3.2） */
@@ -46,7 +58,7 @@ function yyyymm(): string {
 }
 
 /** 產生不覆寫的同名物件路徑（含 Date.now() + 6 位亂數，SPEC §1.4 硬規則） */
-function buildPath(kind: AssetKind, ext: string, uid?: string): string {
+function buildPath(kind: UploadKind, ext: string, uid?: string): string {
   const ts = Date.now();
   const rand = Math.random().toString(36).slice(2, 8);
   const base = `${ts}-${rand}.${ext}`;
@@ -63,6 +75,10 @@ function buildPath(kind: AssetKind, ext: string, uid?: string): string {
       return `coaches/${base}`;
     case "reward":
       return `rewards/${yyyymm()}/${base}`;
+    // 付款截圖：與 "run" 同一套 {uid}/{ts}-{rand}.{ext} 規則（run-screenshots 的
+    // RLS 以第一層資料夾等於 auth.uid() 判定寫入權，見 schema.sql 的 runshots_*）
+    case "payment":
+      return `${uid}/${base}`;
   }
 }
 
@@ -72,7 +88,7 @@ function buildPath(kind: AssetKind, ext: string, uid?: string): string {
  */
 export async function uploadImageFile(
   file: File,
-  kind: AssetKind
+  kind: UploadKind
 ): Promise<string> {
   const supabase = createClient();
   if (!supabase) {
@@ -82,7 +98,7 @@ export async function uploadImageFile(
   const blob = await compressImage(file);
 
   let uid: string | undefined;
-  if (kind === "run") {
+  if (kind === "run" || kind === "payment") {
     const {
       data: { user },
     } = await supabase.auth.getUser();

@@ -27,9 +27,12 @@ import {
   type DraftSectionKey,
 } from "./draft";
 import { currentMonth, monthLabel, todayISO } from "./utils";
+import { isUuid } from "./api";
 import type {
   Coupon,
   Event,
+  HyroxEvent,
+  HyroxRegistration,
   LeaderRow,
   MonthlyStat,
   PointTransaction,
@@ -417,6 +420,110 @@ export function getCachedPublishedEvents(limit = 50): Promise<Event[]> {
   )();
 }
 
+/* =============================================================
+ * 付費活動（HYROX）— migration-paid-events-1.sql
+ *
+ * 篩選口徑：events.series = 'hyrox'（一般活動 series is null，不受影響）。
+ * 快取紀律（照 getCachedPublishedEvents 的做法）：
+ *   · 只含 published 的查詢 → anonClient + unstable_cache（60 秒 + tag）
+ *   · 任何可能含 draft / archived 的查詢 → **不快取**，走帶 cookie 的
+ *     createClient()（RLS 決定管理員看得到全部、會員只看得到 published），
+ *     否則後台剛存的草稿要等 60 秒才看得到，而且會把草稿內容寫進
+ *     跨請求快取（等於外洩）。
+ * 寫入端（api/admin/hyrox/events）以 revalidateTag(HYROX_EVENTS_TAG) 失效快取。
+ * ============================================================= */
+
+/** HYROX 場次列表的快取 tag（寫入端必須用同一個字串） */
+export const HYROX_EVENTS_TAG = "hyrox-events";
+
+/** HYROX 場次需要的欄位（與契約 GET /api/admin/hyrox/events 一致） */
+const HYROX_EVENT_COLUMNS =
+  "id,title,subtitle,body,event_date,end_date,start_time,end_time,location," +
+  "capacity,fee_cents,payment_qr_path,payment_phone,payment_note,status,sort_order,cover_path,series";
+
+/** 前台：已上架的 HYROX 場次（快取 60 秒；event_date 升冪、null 排前） */
+function getCachedHyroxEvents(): Promise<HyroxEvent[]> {
+  return unstable_cache(
+    cache(async (): Promise<HyroxEvent[]> => {
+      const supabase = anonClient();
+      if (!supabase) return [];
+      const { data, error } = await supabase
+        .from("events")
+        .select(HYROX_EVENT_COLUMNS)
+        .eq("series", "hyrox")
+        .eq("status", "published")
+        .order("event_date", { ascending: true, nullsFirst: true })
+        .order("sort_order", { ascending: false })
+        .limit(50);
+      logQueryError("getCachedHyroxEvents", error);
+      return (data as unknown as HyroxEvent[]) ?? [];
+    }),
+    ["hyrox-events"],
+    { tags: [HYROX_EVENTS_TAG], revalidate: 60 }
+  )();
+}
+
+/**
+ * HYROX 場次列表。
+ *
+ * @param opts.includeArchived
+ *   false（預設，前台）：只回 published，走快取。
+ *   true（後台）：回全部（draft / published / archived），**不快取**，
+ *   排序為「published 優先 → event_date 升冪（null 排前）→ sort_order 降冪」。
+ *   依 status 排序在 PostgREST 做不到自訂優先序，故在 JS 內排。
+ */
+export async function getHyroxEvents(
+  opts: { includeArchived?: boolean } = {}
+): Promise<HyroxEvent[]> {
+  if (!opts.includeArchived) return getCachedHyroxEvents();
+
+  const supabase = await createClient();
+  if (!supabase) return [];
+
+  const { data, error } = await supabase
+    .from("events")
+    .select(HYROX_EVENT_COLUMNS)
+    .eq("series", "hyrox")
+    .limit(200);
+
+  logQueryError("getHyroxEvents(includeArchived)", error);
+
+  const rank: Record<string, number> = { published: 0, draft: 1, archived: 2 };
+  return ((data as unknown as HyroxEvent[]) ?? []).sort((a, b) => {
+    const byStatus = (rank[a.status] ?? 9) - (rank[b.status] ?? 9);
+    if (byStatus !== 0) return byStatus;
+    // null（日期待定）排最前
+    const ad = a.event_date ?? "";
+    const bd = b.event_date ?? "";
+    if (ad !== bd) return ad < bd ? -1 : 1;
+    return (b.sort_order ?? 0) - (a.sort_order ?? 0);
+  });
+}
+
+/** 單場 HYROX 場次（只回 published；快取 60 秒，依 id 分鍵） */
+export async function getHyroxEventById(id: string): Promise<HyroxEvent | null> {
+  // 非 uuid 直接回 null：不讓 Postgres 22P02 變成 500（同 api.ts 的 isUuid 口徑）
+  if (!isUuid(id)) return null;
+
+  return unstable_cache(
+    cache(async (): Promise<HyroxEvent | null> => {
+      const supabase = anonClient();
+      if (!supabase) return null;
+      const { data, error } = await supabase
+        .from("events")
+        .select(HYROX_EVENT_COLUMNS)
+        .eq("id", id)
+        .eq("series", "hyrox")
+        .eq("status", "published")
+        .maybeSingle();
+      logQueryError("getHyroxEventById", error);
+      return (data as unknown as HyroxEvent) ?? null;
+    }),
+    ["hyrox-event", id],
+    { tags: [HYROX_EVENTS_TAG], revalidate: 60 }
+  )();
+}
+
 /** 月度排行榜（快取 60 秒，首頁 + 排行榜頁用） */
 export function getCachedMonthlyLeaderboard(
   month: string,
@@ -700,8 +807,42 @@ export async function getMyEventRegistrations(userId: string): Promise<string[]>
   return ((data as { event_id: string }[]) ?? []).map((r) => r.event_id);
 }
 
-/* ================= 後台查詢 ================= */
+/**
+ * 會員自己的 HYROX 報名（含付款狀態／審核備註／報名表三題），給 /dashboard 顯示。
+ *
+ * 不快取（個人化資料）。RLS 的 event_reg_select_own_or_admin 已限制只能讀自己的列，
+ * 這裡再帶 user_id 條件，雙重把關。
+ * 付款截圖只回 path、不回 URL：會員端不需要看自己的截圖，也避免簽出多餘的連結。
+ */
+export async function getMyHyroxRegistrations(
+  userId: string
+): Promise<HyroxRegistration[]> {
+  const supabase = await createClient();
+  if (!supabase) return [];
 
+  const { data, error } = await supabase
+    .from("event_registrations")
+    .select(
+      "id,event_id,user_id,status,payment_status,payment_proof_path," +
+        "payment_amount_cents,group_pref,weekly_freq,longest_run," +
+        "disclaimer_accepted_at,reviewed_by,reviewed_at,admin_note,created_at," +
+        "event:events(id,title,series,event_date,end_date,start_time,location," +
+        "fee_cents,payment_phone,payment_note,status,cover_path)"
+    )
+    .eq("user_id", userId)
+    .eq("status", "registered")
+    .order("created_at", { ascending: false })
+    .limit(50);
+
+  logQueryError("getMyHyroxRegistrations", error);
+
+  // 同一支查詢會連免費活動的報名一起取回；HYROX 頁只列系列場次
+  return ((data as unknown as HyroxRegistration[]) ?? []).filter(
+    (r) => r.event?.series === "hyrox"
+  );
+}
+
+/* ================= 後台查詢 ================= */
 /**
  * 注意：run_submissions 有兩條指向 profiles 的外鍵（user_id / reviewed_by），
  * training_checkins 也有兩條（user_id / confirmed_by）。
