@@ -2,6 +2,22 @@ export type Role = "member" | "admin";
 export type ReviewStatus = "pending" | "approved" | "rejected";
 export type CouponStatus = "active" | "used" | "expired";
 
+/**
+ * 性別（migration-paid-events-1.sql A 段 profiles.gender 的 check 值）。
+ * DB 允許 null（既有會員尚未填），所以 Profile.gender 也是 optional。
+ */
+export type Gender = "male" | "female" | "undisclosed";
+
+/**
+ * 報名付款狀態（migration-paid-events-1.sql C 段）。
+ * not_required 免費活動 / pending_review 待審 / confirmed 已通過 / rejected 已退回（可重交）
+ */
+export type PaymentStatus =
+  | "not_required"
+  | "pending_review"
+  | "confirmed"
+  | "rejected";
+
 /** 活動的三態：draft 與 archived 都不出現在前台，只有 archived 不出現在後台預設列表 */
 export type EventStatus = "draft" | "published" | "archived";
 
@@ -41,6 +57,16 @@ export interface Profile {
   points: number;
   total_km: number;
   created_at: string;
+  /**
+   * 實名資料（migration-paid-events-1.sql A 段新增）。
+   * 全部 optional：DB 允許 null（既有會員未補資料），且仍有查詢是
+   * `.select("id, display_name, avatar_url")` 這種部分欄位，標成 optional
+   * 才不會逼那些地方一起改。前端要顯示時請用 `profile.full_name ?? ""`。
+   */
+  full_name?: string | null;
+  gender?: Gender | null;
+  /** 身分證件號後四位（只存後四位，用途：活動報名及保險登記） */
+  id_last4?: string | null;
 }
 
 export interface TrainingSession {
