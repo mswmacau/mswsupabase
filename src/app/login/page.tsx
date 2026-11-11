@@ -109,10 +109,6 @@ export default async function LoginPage({
 
           {/* ===== 右：表單（去膠囊，斜切角 + 玻璃底） ===== */}
           <div className="clip-notch-br border border-[var(--line-fine)] bg-[var(--glass-bg-strong)] p-7 backdrop-blur-xl md:p-9">
-            <p className="mt-4 text-sm leading-relaxed text-white/70">
-              {t.form_intro}
-            </p>
-
             {target.startsWith("/admin") && (
               <p className="slab mt-5 border border-cobalt/40 bg-cobalt/10 px-3 py-2.5 text-xs leading-relaxed text-blue-200">
                 {t.admin_notice}

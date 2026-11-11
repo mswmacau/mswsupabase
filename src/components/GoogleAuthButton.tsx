@@ -21,7 +21,14 @@ const subscribeNever = () => () => {};
 const getIsWeChatSnapshot = () => /MicroMessenger/i.test(navigator.userAgent);
 const getIsWeChatServerSnapshot = () => false;
 
-export function GoogleAuthButton({ next }: { next: string }) {
+export function GoogleAuthButton({
+  next,
+  emailFallbackLabel = "登入",
+}: {
+  next: string;
+  /** 微信內無法用 Google 時，引導改用 Email 的動作名稱（登入／註冊） */
+  emailFallbackLabel?: "登入" | "註冊";
+}) {
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
   /** server snapshot = false：SSR 與 hydration 首渲都渲染按鈕，之後才依 UA 切換 */
@@ -72,7 +79,7 @@ export function GoogleAuthButton({ next }: { next: string }) {
           className="slab border border-amber-500/30 bg-amber-500/10 px-3.5 py-3 text-xs leading-relaxed text-amber-200"
         >
           微信內無法使用 Google 登入。請點右上角 ⋯ → 在瀏覽器開啟，或直接用
-          Email 登入。
+          Email {emailFallbackLabel}。
         </p>
       ) : (
         <button

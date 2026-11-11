@@ -105,10 +105,6 @@ export default async function SignupPage() {
 
           {/* ===== 右：表單 + 會員權益 ===== */}
           <div className="clip-notch-br border border-[var(--line-fine)] bg-[var(--glass-bg-strong)] p-7 backdrop-blur-xl md:p-9">
-            <p className="mt-4 text-sm leading-relaxed text-white/70">
-              {t.form_intro}
-            </p>
-
             <div className="mt-7">
               <SignupForm labels={t} />
             </div>

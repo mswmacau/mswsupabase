@@ -277,7 +277,7 @@ export function SignupForm({
       </div>
 
       {/* OAuth 走整頁導向，刻意放在 <form> 之外，不混進 submit 流程 */}
-      <GoogleAuthButton next={next} />
+      <GoogleAuthButton next={next} emailFallbackLabel="註冊" />
 
       <form onSubmit={onSubmit} onBlur={handleBlur} className="space-y-5">
         {error && (
