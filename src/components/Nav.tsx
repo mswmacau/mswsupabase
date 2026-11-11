@@ -7,6 +7,7 @@ import { useEffect, useState } from "react";
 import { ChevronDown, Gift, Shield, Ticket, User } from "lucide-react";
 import { BRAND, NAV_LINKS } from "@/lib/config";
 import type { NavLink } from "@/lib/content";
+import { withHyroxNav } from "./hyrox/shared";
 import { useSmartNav } from "./fx/useSmartNav";
 import { MobileNav } from "./MobileNav";
 import { LogoutButton } from "./LogoutButton";
@@ -57,9 +58,13 @@ export function Nav({
 
   // T-6：選單改讀 site_nav（layout 傳入）；未傳入時回落 config 的 NAV_LINKS。
   // visible=false 的項目保留在資料中但不顯示（桌面與手機選單同步）。
-  const links = (navLinks ?? NAV_LINKS.map((l) => ({ ...l, visible: true })))
-    .filter((l) => l.visible)
-    .map((l) => ({ href: l.href, label: l.label }));
+  // HYROX 系列入口固定插在「活動」之後（DB 的 site_nav 未必有這一項，
+  // 只改 config 的話線上不會出現，理由見 components/hyrox/shared.ts）。
+  const links = withHyroxNav(
+    (navLinks ?? NAV_LINKS.map((l) => ({ ...l, visible: true })))
+      .filter((l) => l.visible)
+      .map((l) => ({ href: l.href, label: l.label }))
+  );
 
   return (
     <header

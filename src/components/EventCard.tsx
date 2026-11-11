@@ -14,8 +14,10 @@
  *       前者一行未動（回歸紅線），後者由 EventRegisterAction 渲染。
  */
 
-import { CalendarDays, MapPin, Ticket, Users } from "lucide-react";
+import Link from "next/link";
+import { ArrowRight, CalendarDays, MapPin, Ticket, Users } from "lucide-react";
 import type { Event } from "@/lib/types";
+import type { HyroxEvent } from "@/components/hyrox/shared";
 import { DEFAULT_PAGES, type SitePageEvents } from "@/lib/content";
 import { publicAssetUrl } from "@/lib/assets";
 import { formatDate, weekdayLabel } from "@/lib/utils";
@@ -83,6 +85,15 @@ export function EventCard({
     : false;
   // 維持原行為：連結與 note 皆為空時整塊不渲染
   const showNote = selfPointing || Boolean(event.registration_note);
+
+  /**
+   * HYROX 系列：站內報名入口改連到系列主頁（/hyrox），不走行內報名——
+   * HYROX 有自己的三步報名流程（實名資料＋免責聲明＋付款截圖），
+   * 行內那個一鍵報名不適用。上方「外部報名連結／報名方式文字」維持原樣。
+   * series 只定義在 HyroxEvent（@/lib/types），Event 本身沒有這個欄位，
+   * 所以這裡取交集型別讀它；一般活動（series 為 null）行為完全不變。
+   */
+  const isHyrox = ((event as HyroxEvent).series ?? null) === "hyrox";
 
   return (
     // fx-weight-card：hover 時下沉＋斜向掃光（街健＝重量感，故意不用上浮）
@@ -162,11 +173,20 @@ export function EventCard({
           ) : null}
 
           {/* T-26：站內報名入口（與外部連結並存，不互相影響） */}
-          <EventRegisterAction
-            eventId={event.id}
-            isLoggedIn={isLoggedIn}
-            registered={registered}
-          />
+          {isHyrox ? (
+            <Link
+              href="/hyrox"
+              className="btn-base btn-vital btn-slab min-h-11 w-full text-sm"
+            >
+              了解 HYROX 系列與報名 <ArrowRight size={16} />
+            </Link>
+          ) : (
+            <EventRegisterAction
+              eventId={event.id}
+              isLoggedIn={isLoggedIn}
+              registered={registered}
+            />
+          )}
         </div>
       </div>
     </article>

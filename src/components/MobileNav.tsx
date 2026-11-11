@@ -6,6 +6,7 @@ import { createPortal } from "react-dom";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { Gift, Menu, Shield, Ticket, User, X } from "lucide-react";
+import { withHyroxNav } from "./hyrox/shared";
 import { LogoutButton } from "./LogoutButton";
 
 interface Props {
@@ -125,7 +126,8 @@ export function MobileNav({
           )}
 
           <nav className="relative flex flex-col px-5 pt-4">
-            {links.map((l, i) => {
+            {/* HYROX 固定插在「活動」之後；已在清單內時不會重複（見 hyrox/shared.ts） */}
+            {withHyroxNav(links).map((l, i) => {
               const active =
                 pathname === l.href || pathname.startsWith(l.href + "/");
               return (
