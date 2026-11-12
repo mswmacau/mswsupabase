@@ -11,7 +11,9 @@
  *        → RPC admin_adjust_points（有 points_delta 時；非零整數且 |delta| ≤ 10000）
  *        兩段一律「先資料、後積分」依序執行，任一段失敗回 400 並標明是哪一段。
  * DELETE ?userId=  → 有 service_role：auth.admin.deleteUser + admin_delete_member
- *                    沒有：軟刪除（status='disabled'），回應帶 note
+ *                    沒有：RPC admin_purge_member（SECURITY DEFINER，自己刪
+ *                          auth.users，見 supabase/migration-member-purge.sql）；
+ *                          函式不存在／權限不足才降級軟刪除（status='disabled'）
  *
  * 契約：
  *  - 鑑權與錯誤信封复刻 /api/admin/site-content（authorizeAdmin + lib/api）
@@ -21,7 +23,9 @@
  *  - 建立／刪除 auth 使用者需要 service_role；本站只有 anon key，
  *    未配置 SUPABASE_SERVICE_ROLE_KEY 時：
  *      POST   → 501 SERVICE_ROLE_REQUIRED（不可假裝成功）
- *      DELETE → 只把 status 設為 'disabled'（軟刪除），並在回應說明
+ *      DELETE → 走 SECURITY DEFINER RPC admin_purge_member 真正永久刪除；
+ *               RPC 不存在（尚未跑 migration-member-purge.sql）時才降級為
+ *               status='disabled' 軟刪除，並在回應的 note 說明要跑哪支 SQL
  *  - 成功後寫一筆 admin_audit_log（module=members，
  *    action=create/update/delete/soft_delete；best-effort，見 src/lib/audit.ts）
  *
@@ -561,6 +565,76 @@ export async function PATCH(request: Request) {
 }
 
 /* =============================================================
+ * 永久刪除（security definer RPC）— 沒有 service_role 時的唯一途徑
+ * ============================================================= */
+
+type ServerClient = NonNullable<Awaited<ReturnType<typeof createClient>>>;
+
+/**
+ * 呼叫 admin_purge_member 永久刪除會員（含 auth.users）。
+ *
+ * 回 Response  = 已處理完（成功 200，或 NOT_ADMIN→403 / SELF、LAST_ADMIN→400 /
+ *                NOT_FOUND→404），呼叫端直接回傳即可
+ * 回 null      = RPC 不可用（尚未執行 migration-member-purge.sql → PGRST202，
+ *                或權限不足 → 42501），呼叫端自行決定降級方式
+ *
+ * 為什麼不 raise 而是回 jsonb code：函式內的 is_admin() 被呼叫者
+ * 用自己的身分觸發，非管理員會拿到 ok:false，API 才能回乾淨的 403
+ * 而不是把 P0001 的資料庫訊息丟給瀏覽器。
+ */
+async function purgeMemberViaRpc(
+  supabase: ServerClient,
+  actorId: string,
+  userId: string
+): Promise<Response | null> {
+  const { data, error } = await supabase.rpc("admin_purge_member", { p_id: userId });
+
+  if (error) {
+    // 只寫 server log：函式不存在／權限不足是可預期的部署狀態，
+    // 不該讓管理員看到 500，也不該把 DB 錯誤字串丟給瀏覽器。
+    console.warn(
+      `[api] DELETE /api/admin/members admin_purge_member unavailable: code=${error.code ?? "-"} msg=${error.message ?? "-"}`
+    );
+    return null;
+  }
+
+  const purge = (data ?? {}) as { ok?: boolean; code?: string };
+
+  if (purge.ok === true) {
+    await writeAuditLog(
+      supabase,
+      actorId,
+      "members",
+      "delete",
+      `永久刪除會員 ${userId}（RPC admin_purge_member，含 auth 使用者）。`
+    );
+    return jsonOk({ data: { deleted: true }, message: "已永久刪除會員。" });
+  }
+
+  switch (purge.code) {
+    case "NOT_ADMIN":
+      return jsonForbidden();
+    case "SELF":
+      return jsonValidation({ userId: "不可刪除自己的帳號。" }, "不可刪除自己的帳號。");
+    case "LAST_ADMIN":
+      return jsonValidation(
+        { userId: "至少要保留一位管理員。" },
+        "至少要保留一位管理員。"
+      );
+    case "NOT_FOUND":
+      return jsonNotFound("找不到這位會員。");
+    default:
+      // 未知 code（函式回傳格式變了）→ 不假裝成功，讓呼叫端降級
+      console.warn(
+        `[api] DELETE /api/admin/members purge returned unknown code: ${String(
+          purge.code
+        )}`
+      );
+      return null;
+  }
+}
+
+/* =============================================================
  * DELETE — 刪除會員（有 service_role 真刪，沒有則軟刪除）
  * ============================================================= */
 export async function DELETE(request: Request) {
@@ -585,7 +659,18 @@ export async function DELETE(request: Request) {
       .eq("id", userId)
       .maybeSingle();
     if (targetError) return jsonInternal("DELETE /api/admin/members read", targetError);
-    if (!target) return jsonNotFound("找不到這位會員。");
+
+    if (!target) {
+      // profile 已不存在，但 auth.users 可能還留著（先前只刪了 profile 的孤兒帳號）。
+      // 沒有 service_role 時唯一能碰到 auth.users 的就是 admin_purge_member——
+      // 它用 auth.users 判斷存在性：真的還有就順手清掉，完全沒有才回 NOT_FOUND。
+      // 少了這一段，客戶即使跑完 migration 也永遠清不掉這種孤兒帳號（API 會先 404）。
+      if (!isServiceRoleConfigured) {
+        const orphanPurged = await purgeMemberViaRpc(supabase, actorId, userId);
+        if (orphanPurged) return orphanPurged;
+      }
+      return jsonNotFound("找不到這位會員。");
+    }
 
     if (target.role === "admin") {
       const { count, error: countError } = await supabase
@@ -603,29 +688,43 @@ export async function DELETE(request: Request) {
       }
     }
 
-    /* ---------- 沒有 service_role：只能軟刪除 ---------- */
+    /* -------------------------------------------------------------
+     * 沒有 service_role：先試 SECURITY DEFINER RPC 永久刪除
+     *
+     * 本專案刻意不配置 SUPABASE_SERVICE_ROLE_KEY，所以 auth.admin.deleteUser()
+     * 永遠走不到。改用 supabase/migration-member-purge.sql 的
+     * admin_purge_member——函式以 postgres 身分執行，自己 delete from
+     * auth.users，應用層不需要持有任何高權限金鑰。
+     *
+     * 只有「函式不存在（PGRST202）／權限不足（42501）」才降級成軟刪除，
+     * 並在 note 說明要跑哪支 SQL；業務規則錯誤一律照契約回對應狀態碼。
+     * ------------------------------------------------------------- */
     if (!isServiceRoleConfigured) {
-      const { data, error } = await supabase.rpc("admin_update_member", {
+      const purged = await purgeMemberViaRpc(supabase, actorId, userId);
+      if (purged) return purged;
+
+      /* ---------- 降級：軟刪除（status='disabled'） ---------- */
+      const { data, error: softError } = await supabase.rpc("admin_update_member", {
         p_id: userId,
         p_display_name: null,
         p_phone: null,
         p_role: null,
         p_status: "disabled",
-        p_status_reason: "後台刪除（未設定 service_role，僅停用）",
+        p_status_reason: "後台刪除（永久刪除未啟用，僅停用）",
       });
-      if (error) return rpcFailure("DELETE /api/admin/members soft delete", error);
+      if (softError) return rpcFailure("DELETE /api/admin/members soft delete", softError);
 
       await writeAuditLog(
         supabase,
         actorId,
         "members",
         "soft_delete",
-        `停用會員 ${userId}（未設定 SUPABASE_SERVICE_ROLE_KEY，僅軟刪除）。`
+        `停用會員 ${userId}（永久刪除未啟用，僅軟刪除）。`
       );
 
       return jsonOk({
         data: { soft_deleted: true, member: data },
-        note: "未設定 SUPABASE_SERVICE_ROLE_KEY，僅將帳號設為停用（status=disabled）；登入憑證仍存在，需在 Supabase 後台手動刪除 auth 使用者。",
+        note: "永久刪除未啟用（請執行 migration-member-purge.sql）：本次僅將帳號設為停用（status=disabled），登入憑證仍存在，需在 Supabase 後台手動刪除 auth 使用者。",
         message: "已停用會員帳號。",
       });
     }
