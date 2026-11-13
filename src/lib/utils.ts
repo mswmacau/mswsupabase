@@ -111,6 +111,44 @@ export function weekdayLabel(d: Date | string): string {
   return ["日", "一", "二", "三", "四", "五", "六"][date.getDay()];
 }
 
+/**
+ * 'YYYY-MM-DD' → '六'（只回單一字，呼叫端自己寫「週」）。
+ *
+ * 為什麼不能直接用 weekdayLabel('2026-11-14')：
+ * 它走 `new Date(str).getDay()`，純日期字串會被當成 UTC 午夜，在 UTC-x 的
+ * 執行環境（例如美洲的 CI／瀏覽器）取到的其實是前一天，星期就錯一天。
+ * 這裡改用 Date.UTC + getUTCDay，與執行環境時區完全無關。
+ * 解析失敗（格式不對、空字串）回 ""，呼叫端自然不顯示星期。
+ */
+export function weekdayLabelOfDate(iso: string): string {
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(iso ?? "").trim());
+  if (!m) return "";
+  const d = new Date(Date.UTC(Number(m[1]), Number(m[2]) - 1, Number(m[3])));
+  return ["日", "一", "二", "三", "四", "五", "六"][d.getUTCDay()];
+}
+
+/** 'HH:MM:SS' / 'HH:MM' → 'HH:MM'；null／空字串回 ''（方便直接做 falsy 判斷） */
+export function shortTime(value: string | null | undefined): string {
+  const s = String(value ?? "").trim();
+  return s.slice(0, 5);
+}
+
+/**
+ * 時段文字：'19:00–20:30'。缺一邊就退化成單邊（'19:00'），兩邊都空回 ''。
+ *
+ * 資料來源是 training_sessions.start_time / end_time（Postgres time，帶秒），
+ * 這裡統一轉成 HH:MM；回空字串讓呼叫端自己決定顯示「時間待公布」還是整塊隱藏。
+ */
+export function formatTimeRange(
+  start: string | null | undefined,
+  end: string | null | undefined
+): string {
+  const s = shortTime(start);
+  const e = shortTime(end);
+  if (s && e) return `${s}–${e}`;
+  return s || e || "";
+}
+
 export const STATUS_META: Record<
   string,
   { label: string; className: string }

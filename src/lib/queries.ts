@@ -37,6 +37,7 @@ import type {
   HyroxRegistration,
   LeaderRow,
   MonthlyStat,
+  NextSessionInfo,
   PointTransaction,
   Profile,
   RunSubmission,
@@ -384,6 +385,70 @@ export const getScheduleMonth = unstable_cache(
     }
   ),
   ["training-schedule-published-month"],
+  { tags: [TRAINING_SCHEDULE_TAG], revalidate: 60 }
+);
+
+/** getNextSession() 查詢列的內部形狀（課程名以別名 class 內嵌，回傳後攤平） */
+type NextSessionRowRaw = {
+  id: string;
+  session_date: string;
+  start_time: string | null;
+  end_time: string | null;
+  title: string;
+  coach_name: string | null;
+  location: string;
+  location_override: string | null;
+  class: { name: string | null } | null;
+};
+
+/**
+ * 未來最近一場定期訓練（首頁「下一場定期訓練」卡片、頁尾徽章用）。
+ *
+ * 「所屬月份已發布」這一條由 RLS 的 sessions_select_visible + is_month_visible()
+ * 保證——anonClient 讀不到未發布／未到生效時間的月份，所以查詢端不必再
+ * join training_months 自己比一次（重寫規則只會多一份會走鐘的判斷）。
+ *
+ * 排除 cancelled：取消的課不該被當成「下一場」顯示給會員報名。
+ * 排序第二鍵 start_time、第三鍵 id：同一日多堂時順序穩定，不會每次呼叫都換人。
+ *
+ * 「今天」必須用 utils 的 todayISO()（澳門時區）；用 new Date().toISOString()
+ * 會在澳門時間凌晨 0–8 點取到前一天，把昨天的場次當成下一場。
+ */
+export const getNextSession = unstable_cache(
+  cache(async (): Promise<NextSessionInfo | null> => {
+    const supabase = anonClient();
+    if (!supabase) return null;
+
+    const { data, error } = await supabase
+      .from("training_sessions")
+      .select(
+        "id, session_date, start_time, end_time, title, coach_name, location, location_override, class:training_classes(name)"
+      )
+      .gte("session_date", todayISO())
+      .neq("status", "cancelled")
+      .order("session_date", { ascending: true })
+      .order("start_time", { ascending: true, nullsFirst: true })
+      .order("id", { ascending: true })
+      .limit(1);
+
+    logQueryError("getNextSession", error);
+    if (error) return null;
+
+    const row = (data as unknown as NextSessionRowRaw[] | null)?.[0];
+    if (!row) return null;
+
+    return {
+      id: row.id,
+      session_date: row.session_date,
+      start_time: row.start_time,
+      end_time: row.end_time,
+      title: row.title,
+      class_name: row.class?.name ?? null,
+      coach_name: row.coach_name,
+      location: row.location_override ?? row.location,
+    };
+  }),
+  ["next-session"],
   { tags: [TRAINING_SCHEDULE_TAG], revalidate: 60 }
 );
 

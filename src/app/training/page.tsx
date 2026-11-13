@@ -4,6 +4,7 @@ import { ArrowRight, CalendarDays, Clock, MapPin, Users } from "lucide-react";
 import { getCurrentProfile } from "@/lib/supabase/server";
 import {
   getCachedAllSessions,
+  getNextSession,
   getUserCheckins,
   getSitePages,
   getSiteTheme,
@@ -13,7 +14,7 @@ import { NextSessionCard } from "@/components/fx/NextSessionCard";
 import { SessionFilter } from "@/components/fx/SessionFilter";
 import { BRAND, RULES } from "@/lib/config";
 import type { SitePageTraining } from "@/lib/content";
-import { formatDate, weekdayLabel } from "@/lib/utils";
+import { formatDate, formatTimeRange, weekdayLabel } from "@/lib/utils";
 import type { TrainingSession } from "@/lib/types";
 
 /** T-19：頁面標題改讀 site_pages.training（DB 無值 → 回落預設＝現有硬編碼） */
@@ -54,11 +55,15 @@ function heroFacts(t: SitePageTraining) {
 
 export default async function TrainingPage() {
   // FE-17：profile 與 sessions 平行發出，wall-clock 由加總變最大值
-  const [profile, supabaseSessions, theme, pages] = await Promise.all([
+  const [profile, supabaseSessions, theme, pages, nextSession] = await Promise.all([
     getCurrentProfile(),
     getCachedAllSessions(60),
     getSiteTheme(),
     getSitePages(),
+    // 「下場訓練」卡改讀與首頁同一份資料（getNextSession）：
+    // 原本用 upcoming[0]，但 getCachedAllSessions 是 session_date 降冪，
+    // upcoming[0] 其實是「本月最後一堂」，卡片因此寫成 11/30 而不是 11/14。
+    getNextSession(),
   ]);
   const checkins = profile ? await getUserCheckins(profile.id, 60) : [];
 
@@ -205,9 +210,11 @@ export default async function TrainingPage() {
 
       {/* ============ 近期場次：標題 sticky，內容滾動覆蓋 ============ */}
       <section className="container-msw section-pad">
-        {/* F-T1 / F-T2：下場訓練倒數卡（無場次時完全唔 render） */}
-        {upcoming.length > 0 && (
-          <NextSessionCard session={upcoming[0]} brandNameEn={theme.brand_name_en} />
+        {/* F-T1 / F-T2：下場訓練倒數卡（無場次時完全唔 render）
+            資料來源與首頁「下一場定期訓練」同一個 getNextSession()，
+            日期、時段、課名不會兩邊各講一套。 */}
+        {nextSession && (
+          <NextSessionCard session={nextSession} brandNameEn={theme.brand_name_en} />
         )}
 
         <div className="grid gap-12 lg:grid-cols-12">
@@ -449,7 +456,7 @@ function SessionCard({
         <div className="mt-4 space-y-2 text-sm text-white/70">
           <div className="flex items-center gap-2">
             <Clock size={15} className="shrink-0 text-vital-bright" />
-            {RULES.TRAINING_TIME}
+            {formatTimeRange(session.start_time, session.end_time) || "時間待公布"}
           </div>
           <div className="flex items-center gap-2">
             <MapPin size={15} className="shrink-0 text-vital-bright" />

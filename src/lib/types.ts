@@ -201,6 +201,15 @@ export interface TrainingSession {
   note: string | null;
   status: "open" | "closed" | "cancelled";
   created_at: string;
+  /**
+   * 班表場次的開始／結束時刻（migration-training-schedule.sql 之後才有）。
+   *
+   * Postgres time 型別，PostgREST 回傳帶秒（例如 "19:00:00"），顯示前要 slice(0,5)。
+   * 標成 optional 的原因：本型別被 `select("*")` 與部分欄位查詢共用，
+   * 舊資料（class_id 為 null 的場次）也可能沒有值；補上才不用在元件裡 any。
+   */
+  start_time?: string | null;
+  end_time?: string | null;
 }
 
 /* ── 定期訓練班表（migration-training-schedule.sql）───────────────────
@@ -283,6 +292,26 @@ export interface TrainingSessionRow {
   class_name: string | null;
   class_color_key: string | null;
   class_category: TrainingCategory | null;
+}
+
+/**
+ * 首頁「下一場定期訓練」／頁尾徽章要的欄位（getNextSession 的回傳形狀）。
+ *
+ * 刻意不用 TrainingSessionRow：那一個是「某月全部場次」的完整列（含顏色、
+ * 狀態、名額），首頁只要一支卡片需要的最小集合，少搬一堆用不到的欄位。
+ */
+export interface NextSessionInfo {
+  id: string;
+  session_date: string;
+  /** 'HH:MM:SS'；舊資料可能為 null */
+  start_time: string | null;
+  end_time: string | null;
+  title: string;
+  /** 課程名稱（join training_classes）；舊資料為 null，顯示時退回 title */
+  class_name: string | null;
+  coach_name: string | null;
+  /** 已套用 location_override ?? location */
+  location: string;
 }
 
 /* ── 日曆色彩圖例（migration-schedule-legend.sql）──────────────────────

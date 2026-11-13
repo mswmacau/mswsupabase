@@ -18,15 +18,22 @@ import { getActiveSlides } from "@/lib/home-slides";
 import {
   getCachedMonthlyLeaderboard,
   getCachedSiteStats,
+  getNextSession,
   getSiteBlocks,
   getSiteContent,
   getSiteTheme,
-  getCachedUpcomingSessions,
 } from "@/lib/queries";
 import { RULES } from "@/lib/config";
 import type { BlockId } from "@/lib/content";
 import { publicAssetUrl } from "@/lib/assets";
-import { currentMonth, formatKm, monthLabel, weekdayLabel } from "@/lib/utils";
+import {
+  currentMonth,
+  formatKm,
+  formatTimeRange,
+  monthLabel,
+  shortTime,
+  weekdayLabelOfDate,
+} from "@/lib/utils";
 import { isSupabaseConfigured } from "@/lib/supabase/env";
 import { getCurrentProfile } from "@/lib/supabase/server";
 
@@ -48,18 +55,12 @@ import { Countdown } from "@/components/fx/home/Countdown";
 
 export const dynamic = "force-dynamic";
 
-/** 訓練開始時間（"20:00 – 21:00" → "20:00"），Hero / Bento 大字用 */
-const TRAINING_START = (RULES.TRAINING_TIME.split("–")[0] ?? "").trim();
-
 /**
- * H-09 倒數目標時間：由 TRAINING_TIME 反推小時／分鐘，
- * 改 config 嘅訓練時間就會跟住改，唔使改元件。
- * 用 split(":") 而唔係 slice(3,5) 硬切：config 若寫 "9:30"（得 4 個字元）
- * 硬切會切錯，split 先至穩。
+ * 訓練開始時間（"20:00 – 21:00" → "20:00"），只給 Program 01 介紹卡的
+ * 大字排版用（那是「每週固定訓練」的介紹性文案，不是「下一場幾點」）。
+ * 「下一場是哪一場、幾點」一律讀 getNextSession()，不要用這裡的值。
  */
-const [TRAINING_HOUR_RAW, TRAINING_MINUTE_RAW] = TRAINING_START.split(":");
-const TRAINING_HOUR = Number.parseInt(TRAINING_HOUR_RAW ?? "", 10) || 20;
-const TRAINING_MINUTE = Number.parseInt(TRAINING_MINUTE_RAW ?? "", 10) || 0;
+const TRAINING_START = (RULES.TRAINING_TIME.split("–")[0] ?? "").trim();
 
 const TRAINING_ROWS = [
   { icon: <Timer size={15} />, text: "每週固定，可隨時報名當週場次" },
@@ -115,10 +116,11 @@ export default async function HomePage() {
   const month = currentMonth();
   // T-5 / T-20：首頁文案與區塊設定改讀 DB（site_content / site_blocks），
   // DB 無值時回落 DEFAULT_*（逐字等於原有硬編碼，沙箱渲染與基線一致）。
-  const [stats, sessions, leaders, profile, theme, content, blocks, slides] =
+  const [stats, nextSession, leaders, profile, theme, content, blocks, slides] =
     await Promise.all([
       getCachedSiteStats(),
-      getCachedUpcomingSessions(3),
+      // 「下一場定期訓練」改讀真實班表（training_sessions），不再用 config 的固定時間
+      getNextSession(),
       getCachedMonthlyLeaderboard(month, 5),
       getCurrentProfile(),
       getSiteTheme(),
@@ -127,7 +129,14 @@ export default async function HomePage() {
       getActiveSlides(),
     ]);
 
-  const nextSession = sessions[0] ?? null;
+  /**
+   * H-09 倒數目標：澳門牆上時間（session_date + start_time）→ 帶 +08:00 偏移的
+   * 絕對時刻。用絕對時刻而不是「下個週一 20:00」，倒數才會對準真正的那一場；
+   * 瀏覽器在任何時區算出來都是同一個瞬間。
+   */
+  const countdownTargetISO = nextSession?.start_time
+    ? `${nextSession.session_date}T${shortTime(nextSession.start_time)}:00+08:00`
+    : null;
   const isLoggedIn = Boolean(profile);
 
   // Hero 背景圖（後台設定）：有則顯示並覆上黑色遮罩，無則維持預設漸層 + 網格
@@ -304,10 +313,13 @@ export default async function HomePage() {
                   )}
                 </div>
 
-                {nextSession && (
+                {/* 「下一場定期訓練」：日期／星期／時段／課程名全部來自
+                    training_sessions（getNextSession），不再用 config 的固定字串。
+                    沒有場次時不編造時間，改成「班表整理中」空狀態。 */}
+                {nextSession ? (
                   <div className="mt-8 border-l-2 border-vital bg-white/[0.03] px-5 py-4">
                     <div className="flex items-center gap-2 text-[11px] font-semibold uppercase tracking-[0.22em] text-white/55">
-                      <CalendarDays size={14} className="text-vital-bright" />
+                      <CalendarDays size={14} className="flex-none text-vital-bright" />
                       下一場定期訓練
                     </div>
                     <div className="mt-2 flex flex-wrap items-baseline gap-x-3 gap-y-1">
@@ -315,25 +327,38 @@ export default async function HomePage() {
                         {nextSession.session_date}
                       </span>
                       <span className="text-sm text-white/70">
-                        （週
-                        {weekdayLabel(nextSession.session_date)}）{" "}
-                        {RULES.TRAINING_TIME}
+                        （週{weekdayLabelOfDate(nextSession.session_date)}）{" "}
+                        {formatTimeRange(
+                          nextSession.start_time,
+                          nextSession.end_time
+                        ) || "時間待公布"}
                       </span>
                     </div>
-                    {/* H-09 倒數到下個週一訓練時間（首次 render 係 "--"，mount 後先計） */}
-                    <div className="mt-2 text-sm text-white/70">
-                      倒數{" "}
-                      <Countdown
-                        hour={TRAINING_HOUR}
-                        minute={TRAINING_MINUTE}
-                      />
-                    </div>
+                    <p className="mt-1.5 min-w-0 break-words text-sm font-semibold text-white/85">
+                      {nextSession.class_name ?? nextSession.title}
+                    </p>
+                    {/* H-09 倒數到這一場的開始時刻（首次 render 係 "--"，mount 後先計） */}
+                    {countdownTargetISO && (
+                      <div className="mt-2 text-sm text-white/70">
+                        倒數 <Countdown targetISO={countdownTargetISO} />
+                      </div>
+                    )}
                     <Link
                       href="/training"
                       className="mt-3 inline-flex items-center gap-1 text-sm font-semibold text-accent-blue hover:text-white"
                     >
                       報名 <ChevronRight size={15} />
                     </Link>
+                  </div>
+                ) : (
+                  <div className="mt-8 border-l-2 border-vital bg-white/[0.03] px-5 py-4">
+                    <div className="flex items-center gap-2 text-[11px] font-semibold uppercase tracking-[0.22em] text-white/55">
+                      <CalendarDays size={14} className="flex-none text-vital-bright" />
+                      下一場定期訓練
+                    </div>
+                    <p className="mt-2 break-words text-sm leading-relaxed text-white/70">
+                      班表整理中，請留意公告
+                    </p>
                   </div>
                 )}
               </div>

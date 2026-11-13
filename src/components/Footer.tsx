@@ -2,6 +2,8 @@ import Link from "next/link";
 import type { ReactNode } from "react";
 import { ArrowUpRight, AtSign, Mail, MapPin, Shield } from "lucide-react";
 import { BRAND, RULES } from "@/lib/config";
+import { formatTimeRange, weekdayLabelOfDate } from "@/lib/utils";
+import type { NextSessionInfo } from "@/lib/types";
 import { DEFAULT_CONTACT, DEFAULT_NAV, type NavLink, type SiteContact } from "@/lib/content";
 
 /** 聯絡方式：以細分隔線逐條列出，不做等寬欄位堆砌 */
@@ -39,6 +41,7 @@ export function Footer({
   brandNameEn = BRAND.nameEn,
   contact = DEFAULT_CONTACT,
   navLinks,
+  nextSession = null,
 }: {
   isLoggedIn?: boolean;
   isAdmin?: boolean;
@@ -48,8 +51,16 @@ export function Footer({
   contact?: SiteContact;
   /** 導覽選單（site_nav；visible=false 不顯示） */
   navLinks?: NavLink[];
+  /**
+   * 下一場定期訓練（layout 以 getNextSession() 傳入）。
+   * 徽章顯示真實的星期與時段；沒有場次就整顆不顯示——不在頁尾編造時間。
+   */
+  nextSession?: NextSessionInfo | null;
 }) {
   const CONTACT = contactItems(contact);
+  const nextSessionTime = nextSession
+    ? formatTimeRange(nextSession.start_time, nextSession.end_time)
+    : "";
   // 選單顯隱與導覽列同步：隱藏的項目在頁尾導航行一併不顯示。
   // 2026 導覽收斂後「活動」底下多了子項，頁尾一律攤平列出（父子都列），
   // 否則 /hyrox、/training、/run 會從頁尾消失。
@@ -78,9 +89,12 @@ export function Footer({
             </h2>
 
             <div className="mt-7 flex flex-wrap items-center gap-3">
-              <span className="slab inline-flex -skew-x-6 items-center border border-white/15 bg-white/5 px-3 py-1.5 text-[10px] font-bold uppercase tracking-[0.22em] text-white/70">
-                Mon {RULES.TRAINING_TIME}
-              </span>
+              {/* 訓練時間徽章：讀真實班表（getNextSession），沒有場次就不顯示 */}
+              {nextSession && nextSessionTime && (
+                <span className="slab inline-flex -skew-x-6 items-center border border-white/15 bg-white/5 px-3 py-1.5 text-[10px] font-bold uppercase tracking-[0.22em] text-white/70">
+                  週{weekdayLabelOfDate(nextSession.session_date)} {nextSessionTime}
+                </span>
+              )}
               <span className="slab inline-flex -skew-x-6 items-center border border-vital/40 bg-vital/10 px-3 py-1.5 text-[10px] font-bold uppercase tracking-[0.22em] text-vital-bright">
                 {RULES.MONTHLY_GOAL_KM} km / month
               </span>

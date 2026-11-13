@@ -48,8 +48,14 @@ export const RULES = {
   MONTHLY_GOAL_KM: 300,
   /** 單次提交上限（防誤填，與 DB check 約束一致） */
   MAX_KM_PER_SUBMISSION: 200,
-  /** 訓練時間 */
+  /** 訓練時間（週期規則的預設值） */
   TRAINING_WEEKDAY: 1, // 星期一
+  /**
+   * ⚠️ 只能用於「介紹性文案」（首頁 Program 01 卡、/training 頁的每週固定敘述）。
+   * 「下一場是哪一場、幾點」一律讀 getNextSession()（src/lib/queries.ts）
+   * 與 training_sessions 的 start_time / end_time——用這個常數顯示事實性時間
+   * 會出現舊的 20:00 – 21:00 假時間（實際班表已非單一時段）。
+   */
   TRAINING_TIME: "20:00 – 21:00",
   /**
    * 使用者在瀏覽器選的「原檔」上限（僅前端提示用，檔案不會經過伺服器）。

@@ -3,8 +3,9 @@
 /**
  * F-T1 下場訓練倒數卡 / F-T2 加入日曆（Brief §2.2）
  *
- * 數據全部由 props（page 已有嘅 upcoming[0]）同 RULES 提供，唔加新 query、
- * 唔 hardcode 任何日期時間。
+ * 數據全部由 props（page 傳入的 upcoming[0]）提供：日期、時段、地點、課名都來自
+ * training_sessions 那一列，唔加新 query、唔 hardcode 任何日期時間。
+ * 時段讀 session.start_time / end_time（舊資料可能係 null，顯示「時間待公布」）。
  *
  * Hydration 安全：server / client 第一次 render 一律輸出同一份內容
  * （倒數位置顯示佔位符），一定要喺 useEffect（mount 後）先開始計，
@@ -13,19 +14,28 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { CalendarDays, CalendarPlus, Clock, MapPin } from "lucide-react";
-import { BRAND, RULES } from "@/lib/config";
-import { weekdayLabel } from "@/lib/utils";
-import type { TrainingSession } from "@/lib/types";
+import { BRAND } from "@/lib/config";
+import { formatTimeRange, shortTime, weekdayLabel } from "@/lib/utils";
+
+/**
+ * 這張卡實際會用到的欄位。
+ *
+ * 刻意不收 TrainingSession / TrainingSessionRow 整包：
+ * /training 頁面改餵 getNextSession()（NextSessionInfo），欄位剛好是這幾個。
+ * 結構型別讓兩邊都能傳進來，不必為了傳參數多撈一堆用不到的欄位。
+ */
+export type NextSessionCardData = {
+  id: string;
+  session_date: string;
+  title: string;
+  location: string;
+  start_time?: string | null;
+  end_time?: string | null;
+};
 
 const MINUTE_MS = 60 * 1000;
 const HOUR_MS = 60 * MINUTE_MS;
 const DAY_MS = 24 * HOUR_MS;
-
-/** 由 RULES.TRAINING_TIME（例如 "20:00 – 21:00"）抽出開始 / 結束時間 */
-function trainingClock(): { start: string; end: string } {
-  const times = RULES.TRAINING_TIME.match(/\d{1,2}:\d{2}/g) ?? [];
-  return { start: times[0] ?? "", end: times[1] ?? "" };
-}
 
 /** 'YYYY-MM-DD' → [年, 月, 日]。逐段切分，唔用 new Date(str)（UTC parse 會差一日） */
 function splitDate(value: string): [number, number, number] | null {
@@ -70,14 +80,14 @@ function utcStamp(): string {
 
 /**
  * 組 ICS 字串。DTSTART / DTEND 用「浮動本地時間」（唔帶 Z、唔帶 TZID）——
- * session_date 同 TRAINING_TIME 本身就係本地時間，加時區反而會被日曆 App
- * 再轉一次；浮動時間會直接按使用者日曆時區顯示，最貼近原意。
+ * session_date 同 start_time / end_time 本身就係澳門本地時間，
+ * 加時區反而會被日曆 App 再轉一次；浮動時間會直接按使用者日曆時區顯示，最貼近原意。
  *
  * T-4：PRODID 的品牌英文名改讀 site_theme.brand_name_en（由 page 傳入，
  * 回落 BRAND.nameEn），與導覽列／頁尾同源。
  */
 function buildIcs(
-  session: TrainingSession,
+  session: NextSessionCardData,
   start: string,
   end: string,
   brandNameEn: string
@@ -114,18 +124,21 @@ export function NextSessionCard({
   session,
   brandNameEn = BRAND.nameEn,
 }: {
-  session: TrainingSession;
+  session: NextSessionCardData;
   /** 品牌英文名（site_theme.brand_name_en；用於 ICS PRODID，回落 BRAND.nameEn） */
   brandNameEn?: string;
 }) {
-  const { start, end } = trainingClock();
+  // 時段一律讀這一場自己的 start_time / end_time（training_sessions），
+  // 不再從 config 抽固定時間——那個值只屬於「每週固定」的介紹性文案。
+  const start = shortTime(session.start_time);
+  const end = shortTime(session.end_time);
+  const timeText = formatTimeRange(session.start_time, session.end_time);
 
   const startMs = useMemo(() => {
-    const d = splitDate(session.session_date);
-    const s = splitClock(start);
-    if (!d || !s) return null;
-    // 明確用本地時間建 Date（逐段傳入），避免字串 parse 嘅時區偏移
-    return new Date(d[0], d[1] - 1, d[2], s[0], s[1], 0, 0).getTime();
+    if (!start) return null;
+    // 澳門牆上時間 + 明確 +08:00 偏移 → 絕對時刻，與瀏覽器所在時區無關
+    const t = Date.parse(`${session.session_date}T${start}:00+08:00`);
+    return Number.isFinite(t) ? t : null;
   }, [session.session_date, start]);
 
   // null = 仲未 mount（server / client 首次 render 完全一致，唔會 hydration mismatch）
@@ -229,7 +242,7 @@ export function NextSessionCard({
             </div>
             <div className="flex items-center gap-2">
               <Clock size={15} className="shrink-0 text-vital-bright" />
-              {RULES.TRAINING_TIME}
+              {timeText || "時間待公布"}
             </div>
             <div className="flex items-center gap-2">
               <MapPin size={15} className="shrink-0 text-vital-bright" />
