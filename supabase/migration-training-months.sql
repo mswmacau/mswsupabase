@@ -422,9 +422,16 @@ notify pgrst, 'reload schema';
 
 
 -- =============================================================
--- 附註 A：貼完之後客戶自己驗（Supabase SQL Editor 逐段執行）
+-- 附註 A：貼完之後客戶自己驗（Supabase SQL Editor 逐「段」執行）
 -- =============================================================
--- A-1 檢查表與政策都在
+-- ⚠️ 為何以 `begin; … rollback;` 包起來：
+--    RLS 只對 anon / authenticated 生效，SQL Editor 預設用 postgres（superuser）
+--    身分執行，直接查詢會看到全部資料 —— 那不是 bug，是你繞過了 RLS。
+--    要驗證「會員看到什麼」，必須 `set local role anon;` 模擬匿名使用者，
+--    而 SET LOCAL 只在交易區塊內有效，所以一定要用 begin … rollback 包住，
+--    否則分開執行時 SET LOCAL 會被忽略，你會誤以為政策沒生效。
+--
+-- A-1 檢查表與政策都在（這段用預設身分即可，只查目錄）
 --   select year, month, status, publish_at from public.training_months order by year, month;
 --   -- 預期兩列：2026-11 published（publish_at 2026-11-01 00:00+08）、2026-12 draft（publish_at 空）
 --
@@ -434,41 +441,54 @@ notify pgrst, 'reload schema';
 --   -- 預期 training_sessions 有 sessions_select_visible / sessions_admin_all
 --   --      training_months 有 months_select_published / months_admin_all
 --
--- A-2 驗證「11 月可見」（要模擬匿名使用者，不能用自己的管理員身分測）
---   -- 在 SQL Editor 用 anon 角色測（會繞過 RLS 的只有 service_role / postgres，
---   -- 用 set role 模擬 anon 才會真的套 RLS）：
---   set local role anon;
---   select count(*) from public.training_sessions
---    where session_date >= '2026-11-01' and session_date < '2026-12-01';
---   -- 預期 35（非 0）
---   reset role;
+-- A-2 驗證「11 月可見」（以匿名身分查，11 月種子已發布且生效時間已過）
+--   begin;
+--     set local role anon;
+--     select count(*) from public.training_sessions
+--      where session_date >= '2026-11-01' and session_date < '2026-12-01';
+--   rollback;
+--   -- 預期 35（非 0）。若得到 0，檢查 training_months 是否有 2026-11 且 status='published'
 --
--- A-3 驗證「12 月 draft 時 anon 看不到」
---   set local role anon;
---   select count(*) from public.training_sessions
---    where session_date >= '2026-12-01' and session_date < '2027-01-01';
+-- A-3 驗證「12 月仍是 draft 時，匿名看不到」
+--   begin;
+--     set local role anon;
+--     select count(*) from public.training_sessions
+--      where session_date >= '2026-12-01' and session_date < '2027-01-01';
+--   rollback;
 --   -- 預期 0
---   reset role;
 --
 -- A-4 驗證「發布 12 月但生效時間未到，仍不可見」
---   -- 先把 12 月標成 published，但生效時間設在未來：
+--   -- 4-1 先標成 published，但生效時間設在未來（這一步會真的改資料，屬預期）
 --   update public.training_months
---      set status='published', publish_at = timestamptz '2027-01-01 00:00:00+08', updated_at = now()
---    where year=2026 and month=12;
---   set local role anon;
---   select count(*) from public.training_sessions
---    where session_date >= '2026-12-01' and session_date < '2027-01-01';
---   -- 預期仍為 0（狀態已發布，但時間沒到）
---   reset role;
---   -- 再把生效時間改回過去：
+--      set status = 'published',
+--          publish_at = timestamptz '2027-01-01 00:00:00+08',
+--          updated_at = now()
+--    where year = 2026 and month = 12;
+--
+--   -- 4-2 匿名查：狀態已發布但時間沒到 → 應仍為 0
+--   begin;
+--     set local role anon;
+--     select count(*) from public.training_sessions
+--      where session_date >= '2026-12-01' and session_date < '2027-01-01';
+--   rollback;
+--
+--   -- 4-3 把生效時間改回過去
 --   update public.training_months
 --      set publish_at = timestamptz '2026-01-01 00:00:00+08', updated_at = now()
---    where year=2026 and month=12;
---   set local role anon;
---   select count(*) from public.training_sessions
---    where session_date >= '2026-12-01' and session_date < '2027-01-01';
---   -- 預期變成該月場次數（12 月若還沒建場次就是 0，先複製再驗）
---   reset role;
+--    where year = 2026 and month = 12;
+--
+--   -- 4-4 匿名查：這次應該看得到（12 月還沒建場次時會是 0，
+--   --     先在後台「複製 11 月到 12 月」再驗，預期變成該月場次數）
+--   begin;
+--     set local role anon;
+--     select count(*) from public.training_sessions
+--      where session_date >= '2026-12-01' and session_date < '2027-01-01';
+--   rollback;
+--
+--   -- 4-5 驗完若不想讓 12 月提前上架，改回草稿：
+--   update public.training_months
+--      set status = 'draft', publish_at = null, updated_at = now()
+--    where year = 2026 and month = 12;
 --
 -- 附註 B：可見性判定只看 training_months，與 training_sessions.status 無關。
 --   某場次 status='cancelled' 仍然「可見」，由前台畫成取消樣式 ——
