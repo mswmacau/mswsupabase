@@ -238,7 +238,9 @@ export default async function HyroxEventDetailPage({ params }: PageProps) {
 
           {registerOpen && (
             <Link
-              href="/hyrox/register"
+              // 帶上場次 id：不加參數的話報名頁會自己挑「下一場」，
+              // 會員在 A 場的詳情頁按「報名這一場」就會報到 B 場。
+              href={`/hyrox/register?event=${event.id}`}
               className="btn-base btn-vital btn-slab min-h-11 w-full sm:w-auto"
             >
               報名這一場 <ArrowRight size={16} />

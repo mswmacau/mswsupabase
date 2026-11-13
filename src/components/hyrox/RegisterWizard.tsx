@@ -237,6 +237,14 @@ export function RegisterWizard({ event, qrUrl, profile }: RegisterWizardProps) {
       }}
       className="min-w-0 space-y-5"
     >
+      {/*
+        契約第 5 點：?event= 要一路帶到送出。
+        頁面顯示的是哪一場，送出的 event_id 就必須是那一場——
+        這裡用 hidden field 把「這一頁在報哪一場」固定在 DOM 上，
+        submit() 的 body 也用同一個 event.id，兩邊不可能走鐘。
+      */}
+      <input type="hidden" name="event_id" value={event.id} />
+
       <StepIndicator current={step} />
 
       {/* 錯誤區：可讀訊息 + 依 code 的下一步 */}
@@ -254,7 +262,7 @@ export function RegisterWizard({ event, qrUrl, profile }: RegisterWizardProps) {
           </p>
           {error.code === "ALREADY_REGISTERED" && (
             <Link
-              href="/hyrox/register"
+              href={`/hyrox/register?event=${event.id}`}
               className="mt-2 inline-flex min-h-11 items-center gap-1 text-xs font-semibold text-red-100 underline underline-offset-4"
             >
               重新整理查看報名狀態 <ExternalLink size={12} />
@@ -262,7 +270,9 @@ export function RegisterWizard({ event, qrUrl, profile }: RegisterWizardProps) {
           )}
           {error.code === "UNAUTHENTICATED" && (
             <Link
-              href="/login?next=/hyrox/register"
+              href={`/login?next=${encodeURIComponent(
+                `/hyrox/register?event=${event.id}`
+              )}`}
               className="mt-2 inline-flex min-h-11 items-center gap-1 text-xs font-semibold text-red-100 underline underline-offset-4"
             >
               重新登入 <ExternalLink size={12} />
