@@ -18,6 +18,7 @@
 import { createServerClient } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
 import { SUPABASE_ANON_KEY, SUPABASE_URL, isSupabaseConfigured } from "@/lib/supabase/env";
+import { withAuthCookieOptions } from "@/lib/supabase/cookie-options";
 
 export default async function proxy(request: NextRequest) {
   let response = NextResponse.next({ request });
@@ -35,7 +36,8 @@ export default async function proxy(request: NextRequest) {
         );
         response = NextResponse.next({ request });
         cookiesToSet.forEach(({ name, value, options }) =>
-          response.cookies.set(name, value, options)
+          // 寫回 response 的 session cookie 一律帶 secure / sameSite=lax / path=/
+          response.cookies.set(name, value, withAuthCookieOptions(options))
         );
       },
     },

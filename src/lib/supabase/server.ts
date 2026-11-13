@@ -4,6 +4,7 @@ import { cookies } from "next/headers";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Profile } from "@/lib/types";
 import { SUPABASE_ANON_KEY, SUPABASE_URL, isSupabaseConfigured } from "./env";
+import { withAuthCookieOptions } from "./cookie-options";
 
 /** Server Component / Server Action / Route Handler 用；未設定時回傳 null */
 export async function createClient(): Promise<SupabaseClient | null> {
@@ -19,7 +20,8 @@ export async function createClient(): Promise<SupabaseClient | null> {
       setAll(cookiesToSet) {
         try {
           cookiesToSet.forEach(({ name, value, options }) => {
-            cookieStore.set(name, value, options);
+            // 統一加上 secure / sameSite=lax / path=/（production 才帶 secure）
+            cookieStore.set(name, value, withAuthCookieOptions(options));
           });
         } catch {
           // Server Component 內無法寫 cookie，交由 middleware 處理，忽略即可

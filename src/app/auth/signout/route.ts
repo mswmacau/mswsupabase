@@ -1,6 +1,7 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { createServerClient } from "@supabase/ssr";
 import { SUPABASE_ANON_KEY, SUPABASE_URL, isSupabaseConfigured } from "@/lib/supabase/env";
+import { withAuthCookieOptions } from "@/lib/supabase/cookie-options";
 
 /**
  * Nav 的無 JS 備援登出（<form method="post">）。
@@ -22,7 +23,8 @@ export async function POST(request: NextRequest) {
       },
       setAll(cookiesToSet) {
         cookiesToSet.forEach(({ name, value, options }) => {
-          response.cookies.set(name, value, options);
+          // 與寫入端一致的屬性，確保刪除時能命中同一組 cookie
+          response.cookies.set(name, value, withAuthCookieOptions(options));
         });
       },
     },
