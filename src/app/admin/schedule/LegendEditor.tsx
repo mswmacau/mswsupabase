@@ -356,37 +356,41 @@ export function LegendEditor() {
                         }`}
                       />
 
-                      <label className="inline-flex shrink-0 cursor-pointer items-center gap-1.5 text-xs text-white/70">
-                        <input
-                          type="checkbox"
-                          checked={item.is_active}
-                          onChange={(e) =>
-                            patchItem(item.color_key, { is_active: e.target.checked })
-                          }
-                          className="h-3.5 w-3.5 accent-vital"
-                        />
-                        啟用
-                      </label>
+                      {/* 啟用 + 上下移綁成同一組：390 寬時整組一起換行，
+                          不會出現「開關留在上一行、箭頭掉到下一行右邊」的空洞 */}
+                      <div className="ml-auto flex shrink-0 items-center gap-2">
+                        <label className="inline-flex cursor-pointer items-center gap-1.5 text-xs text-white/70">
+                          <input
+                            type="checkbox"
+                            checked={item.is_active}
+                            onChange={(e) =>
+                              patchItem(item.color_key, { is_active: e.target.checked })
+                            }
+                            className="h-3.5 w-3.5 accent-vital"
+                          />
+                          啟用
+                        </label>
 
-                      <div className="ml-auto flex shrink-0 items-center gap-1">
-                        <button
-                          type="button"
-                          onClick={() => move(index, -1)}
-                          disabled={index === 0}
-                          aria-label={`上移 ${item.label || item.color_key}`}
-                          className="inline-flex h-8 w-8 items-center justify-center rounded-lg text-white/60 transition hover:bg-white/10 hover:text-white disabled:cursor-not-allowed disabled:opacity-30"
-                        >
-                          <ChevronUp size={14} />
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => move(index, 1)}
-                          disabled={index === items.length - 1}
-                          aria-label={`下移 ${item.label || item.color_key}`}
-                          className="inline-flex h-8 w-8 items-center justify-center rounded-lg text-white/60 transition hover:bg-white/10 hover:text-white disabled:cursor-not-allowed disabled:opacity-30"
-                        >
-                          <ChevronDown size={14} />
-                        </button>
+                        <div className="flex items-center gap-1">
+                          <button
+                            type="button"
+                            onClick={() => move(index, -1)}
+                            disabled={index === 0}
+                            aria-label={`上移 ${item.label || item.color_key}`}
+                            className="inline-flex h-8 w-8 items-center justify-center rounded-lg text-white/60 transition hover:bg-white/10 hover:text-white disabled:cursor-not-allowed disabled:opacity-30"
+                          >
+                            <ChevronUp size={14} />
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => move(index, 1)}
+                            disabled={index === items.length - 1}
+                            aria-label={`下移 ${item.label || item.color_key}`}
+                            className="inline-flex h-8 w-8 items-center justify-center rounded-lg text-white/60 transition hover:bg-white/10 hover:text-white disabled:cursor-not-allowed disabled:opacity-30"
+                          >
+                            <ChevronDown size={14} />
+                          </button>
+                        </div>
                       </div>
                     </li>
                   );
