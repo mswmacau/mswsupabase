@@ -11,11 +11,21 @@
  *     所以付款審核分頁要先選場次——由 PaymentReview 自己負責。
  *
  * 邊界：載入中（3 秒後補文字）、錯誤（可重試）、空狀態（兩個分頁都有文案）。
+ *
+ * 客戶實測回饋（「按上架無反應」）的三個修正：
+ *   1. 儲存成功後在列表頂部顯示「已儲存（狀態：已上架）」，3 秒後淡出；
+ *      並同時 loadEvents() + router.refresh()，卡片狀態即時反映。
+ *   2. 每張卡加一鍵「上架／下架」（直接 POST update 只改 status），有 loading 與結果提示。
+ *   3. 儲存／上架失敗一律顯示可讀錯誤（之前非 200 完全靜默）。
+ *      卡片上的「未上傳收款碼」改成可點 → 開啟編輯並滾到收款 QR 區。
  */
 
 import { useCallback, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import {
+  AlertTriangle,
+  ArrowDownCircle,
+  ArrowUpCircle,
   CalendarDays,
   ClipboardCheck,
   Loader2,
@@ -25,7 +35,7 @@ import {
   Users,
 } from "lucide-react";
 import { AdminError, AdminNotice } from "@/components/admin/ui";
-import { getHyrox } from "@/components/hyrox/api";
+import { getHyrox, postHyrox } from "@/components/hyrox/api";
 import {
   eventDateValue,
   feeLabel,
@@ -54,6 +64,7 @@ export function HyroxAdmin({ initialEvents }: { initialEvents: HyroxEvent[] }) {
   const router = useRouter();
   const [tab, setTab] = useState<Tab>("events");
   const [notice, setNotice] = useState<string | null>(null);
+  const [noticeFading, setNoticeFading] = useState(false);
 
   /**
    * 場次列表。初始值來自 Server 外殼（沒有統計），載入後換成含統計的版本。
@@ -101,12 +112,121 @@ export function HyroxAdmin({ initialEvents }: { initialEvents: HyroxEvent[] }) {
 
   const [formOpen, setFormOpen] = useState(false);
   const [editing, setEditing] = useState<HyroxEvent | null>(null);
+  /** 表單開啟後要直接跳到的欄位（"qr" = 收款 QR） */
+  const [formFocus, setFormFocus] = useState<"qr" | null>(null);
+
+  /** 一鍵上架／下架的處理中場次，與失敗訊息 */
+  const [busyId, setBusyId] = useState<string | null>(null);
+  const [actionError, setActionError] = useState<string | null>(null);
+
+  /** 成功提示：3 秒後淡出，3.6 秒後移除（手動關閉也可以） */
+  useEffect(() => {
+    if (!notice) return;
+    const fade = setTimeout(() => setNoticeFading(true), 3000);
+    const clear = setTimeout(() => setNotice(null), 3600);
+    return () => {
+      clearTimeout(fade);
+      clearTimeout(clear);
+    };
+  }, [notice]);
+
+  /** 出新提示：先把上一次的淡出狀態歸零（不在 effect 內同步 setState） */
+  function showNotice(message: string) {
+    setNoticeFading(false);
+    setNotice(message);
+  }
+
+  function dismissNotice() {
+    setNoticeFading(false);
+    setNotice(null);
+  }
+
+  function openForm(event: HyroxEvent | null, focus: "qr" | null = null) {
+    setEditing(event);
+    setFormFocus(focus);
+    setFormOpen(true);
+  }
+
+  function closeForm() {
+    setFormOpen(false);
+    setFormFocus(null);
+  }
+
+  /**
+   * 一鍵改狀態。送完整欄位而不是只送 status：
+   * 後端 update 的必填檢查我們看不到，寧願把列表已知的值一併送回，避免
+   * 「只改狀態」被判成缺欄位而失敗。
+   */
+  async function toggleStatus(event: HyroxEventWithCounts) {
+    const nextStatus: HyroxEvent["status"] =
+      event.status === "published" ? "archived" : "published";
+    const actionLabel = nextStatus === "published" ? "上架" : "下架";
+
+    setBusyId(event.id);
+    setActionError(null);
+    dismissNotice();
+
+    const res = await postHyrox<{ message?: string }>(
+      "/api/admin/hyrox/events",
+      {
+        action: "update",
+        id: event.id,
+        title: event.title,
+        subtitle: event.subtitle,
+        body: event.body,
+        event_date: event.event_date,
+        end_date: event.end_date,
+        start_time: event.start_time,
+        end_time: event.end_time,
+        location: event.location,
+        capacity: event.capacity,
+        registration_url: event.registration_url,
+        registration_note: event.registration_note,
+        cover_path: event.cover_path,
+        sort_order: event.sort_order,
+        fee_cents: event.fee_cents,
+        payment_qr_path: event.payment_qr_path,
+        payment_phone: event.payment_phone,
+        payment_note: event.payment_note,
+        status: nextStatus,
+      }
+    );
+
+    setBusyId(null);
+
+    if (!res.ok) {
+      setActionError(`「${event.title}」${actionLabel}失敗：${res.error}`);
+      return;
+    }
+
+    // 先樂觀更新卡片狀態（不等伺服器回來的那一輪），再向伺服器對齊
+    setEvents((prev) =>
+      prev.map((row) =>
+        row.id === event.id ? { ...row, status: nextStatus } : row
+      )
+    );
+    showNotice(`「${event.title}」已${actionLabel}。`);
+    await loadEvents();
+    router.refresh();
+  }
 
   const pendingTotal = events.reduce((n, e) => n + (e.pending_count ?? 0), 0);
 
   return (
     <div className="min-w-0 space-y-5">
-      {notice && <AdminNotice message={notice} onDismiss={() => setNotice(null)} />}
+      {notice && (
+        <div
+          className={`sticky top-2 z-30 transition-opacity duration-500 ${
+            noticeFading ? "opacity-0" : "opacity-100"
+          }`}
+        >
+          <AdminNotice message={notice} onDismiss={dismissNotice} />
+        </div>
+      )}
+
+      {actionError && (
+        <AdminError message={actionError} onDismiss={() => setActionError(null)} />
+      )}
 
       {/* 分頁 */}
       <div
@@ -161,10 +281,7 @@ export function HyroxAdmin({ initialEvents }: { initialEvents: HyroxEvent[] }) {
               </button>
               <button
                 type="button"
-                onClick={() => {
-                  setEditing(null);
-                  setFormOpen(true);
-                }}
+                onClick={() => openForm(null)}
                 className="btn-base btn-cobalt px-4 py-2 text-sm"
               >
                 <Plus size={16} /> 新增場次
@@ -199,10 +316,7 @@ export function HyroxAdmin({ initialEvents }: { initialEvents: HyroxEvent[] }) {
               </p>
               <button
                 type="button"
-                onClick={() => {
-                  setEditing(null);
-                  setFormOpen(true);
-                }}
+                onClick={() => openForm(null)}
                 className="btn-base btn-cobalt mt-5 px-4 py-2 text-sm"
               >
                 <Plus size={16} /> 新增場次
@@ -248,22 +362,53 @@ export function HyroxAdmin({ initialEvents }: { initialEvents: HyroxEvent[] }) {
                           ) : (
                             <span className="text-white/40">待審 0</span>
                           )}
-                          {!e.payment_qr_path && (
-                            <span className="text-white/40">未上傳收款碼</span>
+                          {e.payment_qr_path ? (
+                            <span className="text-white/40">收款碼已上傳</span>
+                          ) : (
+                            <button
+                              type="button"
+                              onClick={() => openForm(e, "qr")}
+                              className="inline-flex min-h-11 items-center gap-1.5 rounded border border-amber-500/40 bg-amber-500/10 px-2.5 text-xs font-semibold text-amber-200 transition hover:bg-amber-500/20"
+                            >
+                              <AlertTriangle size={13} className="flex-none" />
+                              未上傳收款碼（點擊上傳）
+                            </button>
                           )}
                         </div>
                       </div>
 
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setEditing(e);
-                          setFormOpen(true);
-                        }}
-                        className="btn-base btn-ghost min-h-11 w-full flex-none px-3 py-2 text-sm sm:w-auto"
-                      >
-                        <Pencil size={15} /> 編輯
-                      </button>
+                      <div className="flex w-full flex-none flex-col gap-2 sm:w-auto">
+                        <button
+                          type="button"
+                          onClick={() => openForm(e)}
+                          disabled={busyId === e.id}
+                          className="btn-base btn-ghost min-h-11 w-full px-3 py-2 text-sm sm:w-auto"
+                        >
+                          <Pencil size={15} /> 編輯
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => void toggleStatus(e)}
+                          disabled={busyId === e.id}
+                          className={`btn-base min-h-11 w-full px-3 py-2 text-sm sm:w-auto ${
+                            e.status === "published" ? "btn-ghost" : "btn-cobalt"
+                          } disabled:opacity-60`}
+                        >
+                          {busyId === e.id ? (
+                            <>
+                              <Loader2 size={15} className="animate-spin" /> 處理中…
+                            </>
+                          ) : e.status === "published" ? (
+                            <>
+                              <ArrowDownCircle size={15} /> 下架
+                            </>
+                          ) : (
+                            <>
+                              <ArrowUpCircle size={15} /> 上架
+                            </>
+                          )}
+                        </button>
+                      </div>
                     </div>
                   </li>
                 );
@@ -283,10 +428,12 @@ export function HyroxAdmin({ initialEvents }: { initialEvents: HyroxEvent[] }) {
       {formOpen && (
         <HyroxEventForm
           event={editing}
-          onClose={() => setFormOpen(false)}
+          focus={formFocus}
+          onClose={closeForm}
           onSaved={(msg) => {
-            setNotice(msg);
+            showNotice(msg);
             void loadEvents();
+            router.refresh();
           }}
         />
       )}

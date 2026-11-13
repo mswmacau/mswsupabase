@@ -6,9 +6,11 @@
  *   2. 下一場卡片（日期未定 → 顯示「日期待定」＋「開放報名後通知我」）
  *   3. 報名 CTA（未登入 / 已報名 / 未報名 三態）
  *   4. 活動資訊（訓練內容、教練、費用、天氣取消聲明）
- *   5. 往期場次（archived；沒有就整段不顯示）
+ *   5. 往期場次（getHyroxPastEvents；沒有就整段不顯示，整張卡可點進詳情頁）
  *
- * 資料全部經 src/components/hyrox/data.ts 取得（該檔處理並行開發期間的降級）。
+ * 資料：
+ *   · 下一場／活動資訊 → getHyroxEvents()（只回 published，有快取）
+ *   · 往期場次 → src/components/hyrox/data.ts 的 loadPastEvents()（公開可讀）
  * 390 寬不橫向溢出：所有 flex 子項都有 min-w-0，長字串一律 break-words。
  */
 
@@ -18,6 +20,7 @@ import {
   ArrowRight,
   BellRing,
   CalendarDays,
+  Camera,
   CloudRainWind,
   Clock,
   History,
@@ -32,11 +35,14 @@ import { getHyroxEvents, getMyHyroxRegistrations } from "@/lib/queries";
 import { formatDate, todayISO, weekdayLabel } from "@/lib/utils";
 import { publicAssetUrl } from "@/lib/assets";
 import { PaymentBadge } from "@/components/hyrox/PaymentBadge";
+import { loadPastEvents } from "@/components/hyrox/data";
 import {
   HYROX_GROUP_OPTIONS,
+  HYROX_STATIONS,
   WEATHER_NOTICE,
   eventDateValue,
   feeLabel,
+  photoCountLabel,
   pickNextEvent,
 } from "@/components/hyrox/shared";
 
@@ -48,29 +54,20 @@ export const metadata: Metadata = {
     "MSW 每月一次的戶外綜合體能訓練。跑步加上推雪橇、划船機、負重行走等站點，零基礎都可以參加。",
 };
 
-/** 訓練內容：HYROX 標準站點（站主可日後改成自家版本，這裡只列大項） */
-const STATIONS = [
-  { k: "跑步", v: "每完成一站跑 1 公里，全程 8 公里" },
-  { k: "推／拉雪橇", v: "下肢與核心的爆發力" },
-  { k: "划船機 · 滑雪機", v: "上肢與心肺耐力" },
-  { k: "負重行走 · 沙袋箭步", v: "負重下的穩定與肌耐力" },
-  { k: "波比跳 · 藥球上拋", v: "最後階段的意志力" },
-] as const;
+/** 訓練內容：HYROX 標準站點。文案移到 shared（往期詳情頁共用同一份） */
 
 export default async function HyroxPage() {
   const profile = await getCurrentProfile();
 
   /**
-   * 一次取回全部狀態的 HYROX 場次（含 archived），自己分派：
-   *   published → 下一場／活動資訊；archived → 往期場次。
-   * ⚠️ 前台訪客的 RLS 只放行 published，所以 archived 這一段對一般訪客
-   *    通常是空的（＝整段不顯示，符合「沒有就不顯示」的驗收）；
-   *    要讓訪客看到往期場次，需要後端提供一支公開的往期查詢。
+   * 下一場：只取已上架的場次（RLS 對訪客只放行 published，走快取路徑）。
+   * 往期場次另有公開查詢 loadPastEvents()——archived 對訪客不可見，
+   * 靠這裡的舊寫法（includeArchived）永遠會是空的。
    */
-  const events = await getHyroxEvents({ includeArchived: true });
+  const events = await getHyroxEvents();
   const today = todayISO();
   const next = pickNextEvent(events, today);
-  const past = events.filter((e) => e.status === "archived");
+  const past = await loadPastEvents();
 
   const mine = profile ? await getMyHyroxRegistrations(profile.id) : [];
   const myReg = next ? mine.find((r) => r.event_id === next.id) ?? null : null;
@@ -326,7 +323,7 @@ export default async function HyroxPage() {
               訓練內容
             </h3>
             <dl className="mt-4 divide-y divide-[var(--line-fine)]">
-              {STATIONS.map((s) => (
+              {HYROX_STATIONS.map((s) => (
                 <div
                   key={s.k}
                   className="flex flex-col gap-1 py-3 sm:flex-row sm:items-baseline sm:justify-between sm:gap-6"
@@ -430,26 +427,49 @@ export default async function HyroxPage() {
         </div>
       </section>
 
-      {/* ===== 5. 往期場次（沒有就整段不顯示） ===== */}
+      {/* ===== 5. 往期場次（沒有就整段不顯示；整張卡可點進詳情頁） ===== */}
       {past.length > 0 && (
         <section className="section-pad container-msw">
-          <h2 className="flex items-center gap-2 text-2xl font-black tracking-tight md:text-3xl">
-            <History size={22} className="text-white/45" /> 往期場次
-          </h2>
+          <div className="flex flex-wrap items-end justify-between gap-3">
+            <h2 className="flex items-center gap-2 text-2xl font-black tracking-tight md:text-3xl">
+              <History size={22} className="text-white/45" /> 往期場次
+            </h2>
+            <p className="text-xs text-white/50">
+              按場次睇相片回顧與當日資訊
+            </p>
+          </div>
+
           <ul className="stagger mt-6 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-            {past.map((e) => (
-              <li
-                key={e.id}
-                className="slab flex min-w-0 items-baseline justify-between gap-3 border border-[var(--line-fine)] bg-white/[0.03] px-4 py-3"
-              >
-                <span className="min-w-0 truncate text-sm font-semibold text-white/80">
-                  {e.title}
-                </span>
-                <span className="stat-figure flex-none text-xs text-white/50">
-                  {eventDateValue(e.event_date) ? formatDate(e.event_date) : "日期待定"}
-                </span>
-              </li>
-            ))}
+            {past.map((e) => {
+              const date = eventDateValue(e.event_date);
+              return (
+                <li key={e.id} className="min-w-0">
+                  <Link
+                    href={`/hyrox/${e.id}`}
+                    className="card-dark group flex min-h-11 items-center gap-3 p-4 transition hover:border-white/30 md:p-5"
+                  >
+                    <div className="min-w-0 flex-1">
+                      <p className="stat-figure text-[11px] font-bold tracking-[0.08em] text-white/45">
+                        {date
+                          ? `${formatDate(date)}（週${weekdayLabel(date)}）`
+                          : "日期待定"}
+                      </p>
+                      <p className="mt-1.5 min-w-0 break-words text-sm font-bold leading-snug text-white/90">
+                        {e.title}
+                      </p>
+                      <p className="mt-1.5 inline-flex items-center gap-1.5 text-xs text-white/55">
+                        <Camera size={13} className="text-vital-bright" />
+                        {photoCountLabel(e.photo_count)}
+                      </p>
+                    </div>
+                    <ArrowRight
+                      size={18}
+                      className="flex-none text-white/35 transition group-hover:translate-x-0.5 group-hover:text-white/70"
+                    />
+                  </Link>
+                </li>
+              );
+            })}
           </ul>
         </section>
       )}

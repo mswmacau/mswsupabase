@@ -59,6 +59,25 @@ export const PAYMENT_META: Record<
   },
 };
 
+/**
+ * 訓練內容：HYROX 標準站點。
+ * `/hyrox` 主頁與往期場次詳情頁共用同一份，兩邊文案不會走樣。
+ */
+export const HYROX_STATIONS = [
+  { k: "跑步", v: "每完成一站跑 1 公里，全程 8 公里" },
+  { k: "推／拉雪橇", v: "下肢與核心的爆發力" },
+  { k: "划船機 · 滑雪機", v: "上肢與心肺耐力" },
+  { k: "負重行走 · 沙袋箭步", v: "負重下的穩定與肌耐力" },
+  { k: "波比跳 · 藥球上拋", v: "最後階段的意志力" },
+] as const;
+
+/** 往期卡片的相片數文案；還沒有相片時照實說「整理中」，不顯示 0 張 */
+export function photoCountLabel(count: number | null | undefined): string {
+  const n = Number(count ?? 0);
+  if (!Number.isFinite(n) || n <= 0) return "相片整理中";
+  return `${Math.trunc(n)} 張相片`;
+}
+
 /** 費用（分）→ '澳門幣 50 元'；未設定或 0 回 '免費' */
 export function feeLabel(feeCents: number | null | undefined): string {
   const cents = Number(feeCents ?? 0);
