@@ -43,7 +43,6 @@ import { ScrollProgress } from "@/components/fx/home/ScrollProgress";
 import { BackToTop } from "@/components/fx/home/BackToTop";
 import { RevealHome } from "@/components/fx/home/RevealHome";
 import { MarqueeBoost } from "@/components/fx/home/MarqueeBoost";
-import { CursorFx } from "@/components/fx/home/CursorFx";
 import { HeroSpotlight } from "@/components/fx/home/HeroSpotlight";
 import { HoverFx } from "@/components/fx/home/HoverFx";
 import { ScrubText } from "@/components/fx/home/ScrubText";
@@ -136,6 +135,13 @@ export default async function HomePage() {
   const heroBgUrl = publicAssetUrl(theme.hero_bg_path);
   const heroOverlayOpacity = theme.hero_overlay_opacity;
 
+  /**
+   * 輪播有冇實際可顯示嘅圖（與 SlideCarousel 內部同一套過濾：組不出公開網址就當冇）。
+   * 用途：輪播本身會回 null，但外面嗰層留白容器仍然會佔高度，
+   * 所以要喺呢邊先判斷，冇圖就整塊（連留白）都唔渲染。
+   */
+  const hasSlides = slides.some((slide) => Boolean(publicAssetUrl(slide.path)));
+
   // H-15 背景漂移大字：用既有品牌字串做裝飾（aria-hidden，唔新增文案）。
   // T-4：英文名改讀 site_theme.brand_name_en（Nav/Footer 同源），回落 BRAND.nameEn。
   const driftText = `${theme.brand_name_en} ・ ${theme.brand_name_en}`;
@@ -220,8 +226,31 @@ export default async function HomePage() {
       <div className="grid-lines absolute inset-0" />
       <div className="noise-overlay" />
 
+      {/* 首頁圖片輪播：主標題之前、導覽列之下。
+          包一層 relative z-10 蓋過上面嘅 absolute 裝飾層（.noise-overlay z-1、
+          .fx-spot z-0），否則輪播會被網格／噪點／聚光燈壓住。
+          pt-20 / md:pt-24 讓開 fixed Nav（h-16 / md:h-20，量得 65px / 81px）；
+          其餘內距由 SlideCarousel 自己嘅 pt-8 / md:pt-12 提供。輪播根節點自帶
+          container-msw，所以唔可以再放進下面嗰個 container-msw 內
+          （會變雙層內距、與 h1 不對齊）。
+          冇圖時整塊唔渲染，避免留一段空白內距。 */}
+      {hasSlides && (
+        <div className="relative z-10 pt-20 md:pt-24">
+          <SlideCarousel slides={slides} />
+        </div>
+      )}
+
       <div className="container-msw relative z-10">
-        <div className="relative pb-16 pt-24 md:pt-32 lg:pb-20 lg:pt-36">
+        {/* 有輪播時：頂部留白只需做「輪播與大字之間」嘅呼吸空間（Nav 已由上面
+            嗰層讓開）。冇輪播時：回落原本嘅 pt-24/md:pt-32/lg:pt-36，靠佢讓開
+            fixed Nav，與改動前完全一致。 */}
+        <div
+          className={`relative pb-16 lg:pb-20 ${
+            hasSlides
+              ? "pt-12 md:pt-16 lg:pt-20"
+              : "pt-24 md:pt-32 lg:pt-36"
+          }`}
+        >
           {/* 豎排小標籤 */}
           <div className="absolute left-0 top-44 hidden lg:block">
             <span className="vlabel text-white/50">Macau · Est. 2026</span>
@@ -802,18 +831,13 @@ export default async function HomePage() {
       <MarqueeBoost />
       <HoverFx />
       <HeroSpotlight />
-      <CursorFx />
       <BackToTop />
 
-      {/* T-20：依 site_blocks 的 visible / order 渲染（預設順序 = 現行版面） */}
+      {/* T-20：依 site_blocks 的 visible / order 渲染（預設順序 = 現行版面）
+          首頁輪播已移到 hero 區塊內、主標題之前（見 heroSection），
+          所以這裡不再跟在 hero 之後插入輪播。 */}
       {orderedBlocks.map((b) => (
-        <Fragment key={b.id}>
-          {sections[b.id]}
-          {/* 首頁輪播：緊貼 hero 之後、數據帶之前。
-              用 b.id === "hero" 判斷，後台調區塊順序時輪播仍然跟在 hero 後。
-              slides 為空時 SlideCarousel 自己回 null，不會留空白區塊。 */}
-          {b.id === "hero" && <SlideCarousel slides={slides} />}
-        </Fragment>
+        <Fragment key={b.id}>{sections[b.id]}</Fragment>
       ))}
     </>
   );
