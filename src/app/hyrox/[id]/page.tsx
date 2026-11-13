@@ -23,9 +23,11 @@ import {
   Wallet,
 } from "lucide-react";
 import { publicAssetUrl } from "@/lib/assets";
+import { getCurrentUser } from "@/lib/supabase/server";
 import { formatDate, todayISO, weekdayLabel } from "@/lib/utils";
 import { PhotoGallery } from "@/components/hyrox/PhotoGallery";
 import { loadEventPhotos, loadPastEvent } from "@/components/hyrox/data";
+import { RegisterBar, type RegisterBarState } from "./RegisterBar";
 import {
   HYROX_GROUP_OPTIONS,
   HYROX_STATIONS,
@@ -88,12 +90,39 @@ export default async function HyroxEventDetailPage({ params }: PageProps) {
   const timeText =
     [event.start_time, event.end_time].filter(Boolean).join(" – ") || "待公布";
 
-  // 只有「已上架且未過期（或日期待定）」的場次才有報名入口
-  const registerOpen =
-    event.status === "published" && (date === null || date >= todayISO());
+  // 場次是否已結束：已封存，或日期已過（日期待定不算結束）
+  const ended =
+    event.status === "archived" || (date !== null && date < todayISO());
+
+  /**
+   * 名額判定
+   *
+   * 「已滿」需要兩個數字：capacity（活動自帶）與已報名人數。
+   * 已報名人數目前**拿不到**：`event_registrations` 的 RLS 只放行
+   * 「自己的列或 admin」（supabase/migration-event-registrations.sql:98），
+   * 正式環境也只配置 anon key，公開頁無法取得聚合人數。
+   *
+   * 所以 seatsTaken 傳 null（未知）→ 不顯示「名額已滿」，也不假裝還有位；
+   * 名額與報名狀態一律以報名頁／後端為準（頁尾既有說明文字）。
+   * 後端一旦提供公開聚合數（security definer RPC 或 service role 的 count），
+   * 只要把下面這行換成該查詢，full 與「名額已滿」的 CTA 就會自動生效。
+   */
+  const seatsTaken: number | null = null;
+  const capacity = event.capacity ?? null;
+  const full = capacity !== null && seatsTaken !== null && seatsTaken >= capacity;
+
+  // 未登入 → 先登入再回報名頁；已登入且可報名 → 直接進報名頁
+  const isLoggedIn = Boolean(await getCurrentUser());
+  const barState: RegisterBarState = ended
+    ? "ended"
+    : full
+      ? "full"
+      : isLoggedIn
+        ? "open"
+        : "guest";
 
   return (
-    <div className="pb-24 pt-24 md:pt-28">
+    <div className="pb-24 pt-24 md:pb-20 md:pt-28">
       {/* ===== 標題區 ===== */}
       <section className="relative overflow-hidden">
         <div className="grid-lines absolute inset-0" />
@@ -226,7 +255,7 @@ export default async function HyroxEventDetailPage({ params }: PageProps) {
         </div>
       </section>
 
-      {/* ===== 底部：返回 ＋ 報名 ===== */}
+      {/* ===== 底部：返回（報名入口統一由下方固定報名條提供） ===== */}
       <section className="container-msw">
         <div className="flex flex-col gap-3 border-t border-[var(--line-fine)] pt-6 sm:flex-row sm:items-center sm:justify-between">
           <Link
@@ -235,17 +264,6 @@ export default async function HyroxEventDetailPage({ params }: PageProps) {
           >
             <ArrowLeft size={16} /> 返回 HYROX
           </Link>
-
-          {registerOpen && (
-            <Link
-              // 帶上場次 id：不加參數的話報名頁會自己挑「下一場」，
-              // 會員在 A 場的詳情頁按「報名這一場」就會報到 B 場。
-              href={`/hyrox/register?event=${event.id}`}
-              className="btn-base btn-vital btn-slab min-h-11 w-full sm:w-auto"
-            >
-              報名這一場 <ArrowRight size={16} />
-            </Link>
-          )}
         </div>
 
         <p className="mt-5 flex items-center gap-1.5 text-xs text-white/45">
@@ -253,6 +271,20 @@ export default async function HyroxEventDetailPage({ params }: PageProps) {
           名額與報名狀態以報名頁為準。
         </p>
       </section>
+
+      {/* ===== 固定報名條：手機 fixed 滿寬、桌面同寬但內層對齊 container =====
+          條子是 fixed，會蓋住站尾最後一行，所以在這一頁輸出一個 scoped <style>，
+          給 footer 補上與條子等高的 padding（桌面實測條高 73px，取 80px 保險）。
+          規則只在本頁 mount 期間存在，其他頁不受影響；純 CSS，不依賴 JS。 */}
+      <style>{`footer{padding-bottom:calc(80px + env(safe-area-inset-bottom))}`}</style>
+      <RegisterBar
+        eventId={event.id}
+        dateText={
+          date ? `${formatDate(date)}（週${weekdayLabel(date)}）` : "日期待定"
+        }
+        feeText={feeLabel(event.fee_cents)}
+        state={barState}
+      />
     </div>
   );
 }
