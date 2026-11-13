@@ -12,6 +12,7 @@ import { writeAuditLog } from "@/lib/audit";
 import {
   jsonBadJson,
   jsonConflict,
+  jsonInUse,
   jsonInternal,
   jsonMethodNotAllowed,
   jsonNotFound,
@@ -50,13 +51,13 @@ const LIMITS = {
   description: 2000,
 } as const;
 
-/** 409：課程仍被場次引用（語意碼 IN_USE，見回報說明） */
+/** 409：課程仍被場次引用（語意碼 IN_USE，與唯一鍵撞號的 CONFLICT 分開） */
 function jsonErrInUse(used: number): Response {
   const message =
     used > 0
       ? `這門課仍有 ${used} 場次引用，請先刪除或改綁那些場次。`
       : "這門課仍被場次引用，無法刪除。";
-  return jsonConflict(message);
+  return jsonInUse(message);
 }
 
 export async function GET() {

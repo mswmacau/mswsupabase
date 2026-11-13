@@ -17,6 +17,7 @@ export type ApiErrorCode =
   | "VALIDATION"
   | "NOT_FOUND"
   | "CONFLICT"
+  | "IN_USE"
   | "STORAGE"
   | "SCHEMA_OUTDATED"
   | "INTERNAL";
@@ -86,6 +87,12 @@ export const jsonNotFound = (error = "找不到這筆資料。") =>
 
 /** 409 狀態衝突 */
 export const jsonConflict = (error: string) => jsonErr(error, "CONFLICT", 409);
+
+/**
+ * 409 資源仍被引用（語意碼 IN_USE）。
+ * 與 CONFLICT 分開，讓前端與測試能區分「唯一鍵撞號」與「刪不掉因為還有子資料」。
+ */
+export const jsonInUse = (error: string) => jsonErr(error, "IN_USE", 409);
 
 /** 502 圖片處理失敗，請重新上傳圖片。 */
 export const jsonStorage = (error = "圖片處理失敗，請重新上傳圖片。") =>
