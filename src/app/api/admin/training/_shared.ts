@@ -10,7 +10,8 @@
  * 契約：supabase/migration-training-schedule.sql（表與 RPC 為唯一真相）
  */
 
-import { revalidateTag } from "next/cache";
+import { revalidatePath, revalidateTag } from "next/cache";
+import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { isSupabaseConfigured } from "@/lib/supabase/env";
 import {
@@ -105,6 +106,72 @@ export function requireUuid(value: unknown): string | null {
 }
 
 /* =============================================================
+ * 時間：Asia/Macau
+ * ============================================================= */
+
+/**
+ * Asia/Macau 無夏令時間，固定 UTC+8。
+ * 「澳門牆上時間」＝帶 +08:00 偏移的 ISO 字串，
+ * 與 SQL 的 `at time zone 'Asia/Macau'` 結果一致。
+ *
+ * 一定要帶偏移：若寫成 `2026-12-01T20:00:00`（無偏移），PostgREST 會用
+ * DB session 時區（UTC）解析，20:00 會被存成 20:00 UTC，
+ * 以澳門時間呈現變成隔日 04:00 —— 也就是原本那個 8 小時偏移 bug。
+ */
+export const MACAU_OFFSET = "+08:00";
+
+/** 「澳門日期 + HH:MM(:SS)」→ 帶偏移的 ISO 字串 */
+export function macauTimestamp(date: string, time: string): string {
+  return `${date}T${time}${MACAU_OFFSET}`;
+}
+
+/**
+ * 該月生效時間的預設值：該月 1 日 00:00（Asia/Macau）。
+ * 對應 SQL 的 `(make_date(year, month, 1)::timestamp at time zone 'Asia/Macau')`。
+ */
+export function monthStartISO(year: number, month: number): string {
+  return `${year}-${String(month).padStart(2, "0")}-01T00:00:00${MACAU_OFFSET}`;
+}
+
+/** 澳門當下的年月（不能用伺服器 UTC 日期，月初／月末會差一個月） */
+export function currentMacauMonth(): { year: number; month: number } {
+  const parts = new Intl.DateTimeFormat("en-CA", {
+    timeZone: "Asia/Macau",
+    year: "numeric",
+    month: "2-digit",
+  }).format(new Date());
+  const [y, m] = parts.split("-");
+  return { year: Number(y), month: Number(m) };
+}
+
+/** year / month 是否為合法整數且在允許範圍（2024–2100 / 1–12） */
+export function isMonthInRange(year: unknown, month: unknown): boolean {
+  return isIntInRange(year, 2024, 2100) && isIntInRange(month, 1, 12);
+}
+
+/* =============================================================
+ * 409：業務衝突
+ * ============================================================= */
+
+/**
+ * 409 業務衝突（自建，不用 jsonErr）。
+ *
+ * 原因：`ApiErrorCode`（src/lib/api.ts:13-23）只有 CONFLICT / IN_USE 等通用碼，
+ * 沒有本次需要的 DUPLICATE / HAS_CHECKINS；而 api.ts 不在本模組可改範圍內
+ * （改它會影響全站 30+ 支路由的錯誤碼契約）。
+ * 因此這裡直接組 Response，形狀仍是 { ok:false, error, code }，與 jsonErr 一致，
+ * 前端與測試端只需多辨識這幾個 code 值。
+ */
+export type TrainingConflictCode = "DUPLICATE" | "HAS_CHECKINS";
+
+export function jsonTrainingConflict(
+  code: TrainingConflictCode,
+  error: string
+): Response {
+  return NextResponse.json({ ok: false, error, code }, { status: 409 });
+}
+
+/* =============================================================
  * DB 錯誤對映
  * ============================================================= */
 
@@ -150,11 +217,18 @@ export function isForeignKeyViolation(error: unknown): boolean {
  * 統一的 DB 錯誤回應：
  * 未建表 → 500 SCHEMA_OUTDATED（文案含 migration 檔名，方便客戶照着貼；不含任何 SQL／路徑細節）
  * 其餘走 jsonDbError（P0001 查無資料 → 404、22P02 → 400、其他 → 500 並寫 server log）
+ *
+ * @param migration 要提示客戶執行的 migration 檔名。
+ *   月份相關功能用 migration-training-months.sql；其餘沿用預設的舊檔名。
  */
-export function jsonTrainingDbError(where: string, error: unknown): Response {
+export function jsonTrainingDbError(
+  where: string,
+  error: unknown,
+  migration = "supabase/migration-training-schedule.sql"
+): Response {
   if (isSchemaMissing(error)) {
     return jsonErr(
-      "訓練班表資料表尚未建立，請先執行 supabase/migration-training-schedule.sql。",
+      `訓練班表資料尚未建立，請先執行 ${migration}。`,
       "SCHEMA_OUTDATED",
       500
     );
@@ -168,10 +242,14 @@ export function jsonTrainingDbError(where: string, error: unknown): Response {
 
 /**
  * 寫入後失效班表快取。
- * - revalidateTag：前台 getMonthSchedule / getTrainingClasses（tag `training-schedule`）
- *   Next 16 的 revalidateTag 需要第二個參數（cache life profile），
- *   這裡與 queries.ts 的 `revalidate: 60` 對齊；寫法复刻 site-content / site-settings。
- * - 不做 revalidatePath：本次不動任何頁面，路徑由頁面作者自行決定。
+ * - revalidateTag：前台 getScheduleMonth / getAvailableMonths / getTrainingClasses
+ *   （tag `training-schedule`）。Next 16 的 revalidateTag 需要第二個參數
+ *   （cache life profile），這裡與 queries.ts 的 `revalidate: 60` 對齊；
+ *   寫法复刻 site-content / site-settings。
+ * - revalidatePath：前台活動頁與後台班表頁（本次由頁面作者決定路徑，
+ *   後端只負責在資料變動時通知這兩個路徑失效）。
+ *   註：這兩個路徑會連帶被既有的 classes / rules / generate 三支路由一併失效，
+ *   屬無害副作用（多失效一次只是多算一次，不會出錯）。
  */
 export function revalidateTrainingSchedule(): void {
   try {
@@ -179,5 +257,13 @@ export function revalidateTrainingSchedule(): void {
   } catch (err) {
     // 在非請求情境（例如指令碼）呼叫時 revalidateTag 會拋錯，不影響已完成的 DB 寫入
     console.warn("[training] revalidateTag 失敗（不影響主流程）：", err);
+  }
+
+  for (const path of ["/events", "/admin/schedule"]) {
+    try {
+      revalidatePath(path);
+    } catch (err) {
+      console.warn(`[training] revalidatePath(${path}) 失敗（不影響主流程）：`, err);
+    }
   }
 }

@@ -44,6 +44,7 @@ import type {
   TrainingCategory,
   TrainingCheckin,
   TrainingClass,
+  TrainingMonth,
   TrainingSession,
   TrainingSessionRow,
 } from "./types";
@@ -234,9 +235,156 @@ export const getTrainingClasses = unstable_cache(
   { tags: [TRAINING_SCHEDULE_TAG], revalidate: 60 }
 );
 
+/* ── 月份發布與自動上架（migration-training-months.sql）──────────────────
+ * 客戶語義：「到 12 月 1 日自動上架 12 月、同步下架 11 月」。
+ * 沒有 cron：可見性由 DB 的 is_month_visible() 在「讀取時」比較 now()，
+ * 前台再自己比一次 publish_at 當第二道保險。
+ *
+ * 為什麼用 anonClient：RLS 的 sessions_select_visible 已經擋掉
+ * 未發布／未到時間的月份，這裡直接吃 RLS 的結果，不必在應用層重寫一次規則。
+ *
+ * 快取時效：unstable_cache 60 秒 TTL 意味著「每月 1 日 00:00 到點」與
+ * 「後台按發布」最多延遲 60 秒生效（後台發布會 revalidateTag 立即失效，
+ * 時間到點那一瞬間靠 TTL 自然過期）。刻意不改成 force-dynamic：
+ * 為了一個月一次的 60 秒誤差放棄整頁快取不划算。
+ * ──────────────────────────────────────────────────────────────────── */
+
+/** training_months 的讀取列 */
+type MonthPublishRow = {
+  year: number;
+  month: number;
+  status: "draft" | "published";
+  publish_at: string | null;
+};
+
+/**
+ * 該月生效時間的預設值：該月 1 日 00:00（Asia/Macau）。
+ * 與 SQL 的 `(make_date(year, month, 1)::timestamp at time zone 'Asia/Macau')` 等效。
+ *
+ * 註：同名邏輯在 api/admin/training/_shared.ts 也有一份（monthStartISO）。
+ * 刻意不從 queries.ts 反向 import `src/app/**`：那會把 Route Handler 拉進
+ * client bundle 的模組圖。三行重複比錯誤的依賴方向划算。
+ */
+function monthStartMacauISO(year: number, month: number): string {
+  return `${year}-${String(month).padStart(2, "0")}-01T00:00:00+08:00`;
+}
+
+/** 生效時間是否已到（解析失敗視為未到，寧可少顯示也不要提前洩漏） */
+function isEffective(row: MonthPublishRow): boolean {
+  const at = row.publish_at ?? monthStartMacauISO(row.year, row.month);
+  const ts = new Date(at).getTime();
+  return Number.isFinite(ts) && ts <= Date.now();
+}
+
+/**
+ * 已發布且已到生效時間的月份清單（前台月份切換器用）。
+ * 依年月升冪 —— 前台可直接把最後一個當「當月」。
+ */
+export const getAvailableMonths = unstable_cache(
+  cache(async (): Promise<TrainingMonth[]> => {
+    const supabase = anonClient();
+    if (!supabase) return [];
+
+    const { data, error } = await supabase
+      .from("training_months")
+      .select("year, month, status, publish_at")
+      .eq("status", "published")
+      .order("year", { ascending: true })
+      .order("month", { ascending: true });
+
+    if (error || !data) return [];
+
+    return (data as MonthPublishRow[])
+      .filter(isEffective)
+      .map((row) => ({
+        year: row.year,
+        month: row.month,
+        status: row.status,
+        publish_at: row.publish_at,
+      }));
+  }),
+  ["training-months-available"],
+  { tags: [TRAINING_SCHEDULE_TAG], revalidate: 60 }
+);
+
+/**
+ * 某年某月的班表（含 cancelled 場次，供前台標示「這堂取消」）＋該月發布狀態。
+ *
+ * 回 null 的三種情況（前台據此顯示「本月班表尚未公布」）：
+ *   1. 參數非法，或該月沒有 training_months 列（從未建立）
+ *   2. 該月不是 published（RLS 也會讓 anon 讀不到這一列，這裡是第二道保險）
+ *   3. 已發布但生效時間還沒到（客戶預先發布未來月份的情況）
+ */
+export const getScheduleMonth = unstable_cache(
+  cache(
+    async (
+      year: number,
+      month: number
+    ): Promise<{ month: TrainingMonth; sessions: TrainingSessionRow[] } | null> => {
+      const range = trainingMonthRange(year, month);
+      if (!range) return null;
+
+      const supabase = anonClient();
+      if (!supabase) return null;
+
+      const { data: monthData, error: monthError } = await supabase
+        .from("training_months")
+        .select("year, month, status, publish_at")
+        .eq("year", year)
+        .eq("month", month)
+        .maybeSingle();
+
+      if (monthError || !monthData) return null;
+
+      const pub = monthData as MonthPublishRow;
+      if (pub.status !== "published" || !isEffective(pub)) return null;
+
+      const { data, error } = await supabase
+        .from("training_sessions")
+        .select(MONTH_SELECT)
+        .gte("session_date", range.from)
+        .lte("session_date", range.to)
+        .order("session_date", { ascending: true })
+        .order("start_time", { ascending: true, nullsFirst: true })
+        .order("id", { ascending: true });
+
+      if (error || !data) return null;
+
+      const sessions: TrainingSessionRow[] = (data as unknown as MonthRow[]).map((row) => ({
+        id: row.id,
+        session_date: row.session_date,
+        start_time: row.start_time,
+        end_time: row.end_time,
+        class_id: row.class_id,
+        title: row.title,
+        location: row.location,
+        coach_name: row.coach_name,
+        capacity: row.capacity,
+        status: row.status,
+        note: row.note,
+        class_name: row.class?.name ?? null,
+        class_color_key: row.class?.color_key ?? null,
+        class_category: row.class?.category ?? null,
+      }));
+
+      return {
+        month: {
+          year,
+          month,
+          status: "published",
+          publish_at: pub.publish_at,
+          sessions_count: sessions.length,
+        },
+        sessions,
+      };
+    }
+  ),
+  ["training-schedule-published-month"],
+  { tags: [TRAINING_SCHEDULE_TAG], revalidate: 60 }
+);
+
 /** getSiteTheme() 的 cache tag；revalidateTag 必須用同一個字串（see api/admin/site-settings） */
 export const SITE_THEME_TAG = "site-theme";
-
 /* ── 站點內容五鍵（T-3；播種見 supabase/migration-site-content.sql）──
  * 管理端路由 api/admin/site-* 寫入後以 revalidateTag 失效同名快取；
  * 前台讀取（getSiteContent 等）由方硯接線時補，此處只放 tag 常數，

@@ -280,6 +280,29 @@ export interface TrainingSessionRow {
   class_category: TrainingCategory | null;
 }
 
+/* ── 月份發布（migration-training-months.sql）─────────────────────────
+ * 班表的發布單位是「月」，不是「場次」也不是「課程」。
+ * 客戶原話：「到 12 月 1 日自動上架 12 月、同步下架 11 月」——
+ * 所以每月一列，帶一個狀態與一個生效時間，可見性在「讀取時」比較 now()。
+ * ─────────────────────────────────────────────────────────────────── */
+
+/** 'draft' 只有管理員看得到；'published' 到達生效時間後所有人可見 */
+export type TrainingMonthStatus = "draft" | "published";
+
+export interface TrainingMonth {
+  year: number;
+  month: number;
+  status: TrainingMonthStatus;
+  /**
+   * 生效時間（timestamptz）。
+   * `null` 代表「該月 1 日 00:00（Asia/Macau）」——由 is_month_visible() 補算，
+   * 前端不需要自己拼時間。
+   */
+  publish_at: string | null;
+  /** 該月場次數（後台月份列表用；前台查詢通常不帶） */
+  sessions_count?: number;
+}
+
 export interface TrainingCheckin {
   id: string;
   session_id: string;
