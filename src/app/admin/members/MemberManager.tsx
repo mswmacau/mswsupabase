@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState, type ReactNode } from "react";
 import {
+  ChevronDown,
   ChevronLeft,
   ChevronRight,
   CheckCircle2,
@@ -50,7 +51,9 @@ import {
  * 設計取捨：
  *  - 搜尋 debounce 300ms，切換條件時 AbortController 中止舊請求，避免舊結果覆蓋新結果
  *  - 所有錯誤都走頁內訊息區（role="alert"），不用 alert()
- *  - 表格在窄螢幕橫向滾動，外層不加固定寬度，避免整頁溢出
+ *  - ≥768px 用表格；<768px 改卡片列表（P1-07 B）：表格 min-w-[840px] 在
+ *    390px 會被裁掉（實測 table.scrollWidth 840 / 容器 348），且需要橫向滾動，
+ *    手機改成「4 個關鍵欄位 + 點卡片展開其餘」，整頁不出現橫向滾動
  */
 
 const PAGE_SIZE = 20;
@@ -87,6 +90,8 @@ export function MemberManager() {
   const [busyId, setBusyId] = useState<string | null>(null);
 
   const [drawerMember, setDrawerMember] = useState<MemberRow | null>(null);
+  /** 手機卡片：同時只展開一張；換頁／改篩選時收合 */
+  const [expandedId, setExpandedId] = useState<string | null>(null);
   const [editMember, setEditMember] = useState<(MemberRow & { phone?: string | null }) | null>(null);
   const [deleteMember, setDeleteMember] = useState<MemberRow | null>(null);
   const [pointsMember, setPointsMember] = useState<MemberRow | null>(null);
@@ -102,6 +107,7 @@ export function MemberManager() {
     const timer = setTimeout(() => {
       setSearch(query.trim());
       setPage(1);
+      setExpandedId(null);
     }, 300);
     return () => clearTimeout(timer);
   }, [query]);
@@ -200,6 +206,7 @@ export function MemberManager() {
     setRoleFilter("all");
     setStatusFilter("all");
     setPage(1);
+    setExpandedId(null);
   }
 
   const summary = useMemo(() => {
@@ -234,7 +241,7 @@ export function MemberManager() {
       {/* ===== 工具列 ===== */}
       <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
         <div className="flex min-w-0 flex-1 flex-wrap items-center gap-2">
-          <div className="relative min-w-[180px] flex-1 sm:max-w-xs">
+          <div className="relative w-full min-w-0 sm:max-w-xs sm:flex-1">
             <Search
               size={16}
               className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-white/40"
@@ -256,6 +263,7 @@ export function MemberManager() {
             onChange={(event) => {
               setRoleFilter(event.target.value as RoleFilter);
               setPage(1);
+              setExpandedId(null);
             }}
           >
             <option value="all">全部角色</option>
@@ -270,6 +278,7 @@ export function MemberManager() {
             onChange={(event) => {
               setStatusFilter(event.target.value as StatusFilter);
               setPage(1);
+              setExpandedId(null);
             }}
           >
             {STATUS_OPTIONS.map((option) => (
@@ -281,7 +290,10 @@ export function MemberManager() {
 
           <button
             type="button"
-            onClick={() => setReloadKey((key) => key + 1)}
+            onClick={() => {
+              setReloadKey((key) => key + 1);
+              setExpandedId(null);
+            }}
             disabled={loading}
             aria-label="重新整理會員列表"
             className="btn-base btn-ghost px-3 py-2 text-sm"
@@ -303,7 +315,7 @@ export function MemberManager() {
             aria-label="新增會員"
             aria-describedby={hasServiceRole ? undefined : "service-role-hint"}
             title={hasServiceRole ? undefined : "未設定服務金鑰，無法新增帳號"}
-            className="btn-base btn-cobalt px-4 py-2 text-sm"
+            className="btn-base btn-cobalt min-h-11 w-full justify-center px-4 py-2 text-sm sm:w-auto"
           >
             <Plus size={16} /> 新增會員
           </button>
@@ -320,8 +332,190 @@ export function MemberManager() {
         </p>
       )}
 
-      {/* ===== 列表 ===== */}
-      <div className="min-w-0 overflow-x-auto rounded-xl border border-ink-line" aria-busy={loading}>
+      {/* ===== 列表：<768px 卡片 / ≥768px 表格 ===== */}
+
+      {/* --- 手機卡片（hidden md:block 的表格不動，這裡是獨立版型） --- */}
+      <ul className="space-y-2 md:hidden" aria-busy={loading}>
+        {loading && members.length === 0 ? (
+          Array.from({ length: 6 }).map((_, index) => (
+            <li
+              key={`m-skeleton-${index}`}
+              className="card-dark animate-pulse p-3.5"
+            >
+              <span className="block h-4 w-2/3 rounded bg-white/10" />
+              <span className="mt-3 flex gap-4">
+                <span className="block h-3 w-14 rounded bg-white/10" />
+                <span className="block h-3 w-14 rounded bg-white/10" />
+              </span>
+            </li>
+          ))
+        ) : members.length === 0 ? (
+          <li className="card-dark px-4 py-12 text-center text-sm text-white/60">
+            {error ? (
+              "暫時無法顯示會員資料。"
+            ) : hasFilters ? (
+              <div className="space-y-3">
+                <p>找不到符合條件的會員。</p>
+                <button
+                  type="button"
+                  onClick={clearFilters}
+                  className="btn-base btn-ghost px-4 py-2 text-xs"
+                >
+                  清除篩選
+                </button>
+              </div>
+            ) : (
+              <div className="space-y-3">
+                <Users size={22} className="mx-auto text-white/30" />
+                <p>尚無會員資料。</p>
+              </div>
+            )}
+          </li>
+        ) : (
+          members.map((member) => {
+            const open = expandedId === member.member_id;
+            const panelId = `member-panel-${member.member_id}`;
+            const name = memberName(member);
+            return (
+              <li key={member.member_id} className="card-dark overflow-hidden">
+                {/* 折疊態：姓名／狀態／積分／總里程（點擊展開）
+                    注意：<button> 只放 phrasing content，所以內層全部用 <span> */}
+                <button
+                  type="button"
+                  aria-expanded={open}
+                  aria-controls={panelId}
+                  onClick={() => setExpandedId(open ? null : member.member_id)}
+                  className="flex min-h-11 w-full flex-col gap-2 px-3.5 py-3 text-left transition hover:bg-white/5"
+                >
+                  <span className="flex w-full min-w-0 items-center gap-2">
+                    <span
+                      className="min-w-0 flex-1 truncate font-semibold"
+                      title={name}
+                    >
+                      {member.display_name?.trim() || "（未具名會員）"}
+                    </span>
+                    <StatusBadge status={member.status} />
+                    <ChevronDown
+                      size={16}
+                      aria-hidden
+                      className={`shrink-0 text-white/50 transition-transform ${
+                        open ? "rotate-180" : ""
+                      }`}
+                    />
+                  </span>
+                  <span className="flex w-full min-w-0 items-baseline gap-4">
+                    <span className="min-w-0 flex-1">
+                      <span className="block text-[11px] text-white/45">
+                        積分
+                      </span>
+                      <span className="block truncate text-sm font-semibold tabular-nums">
+                        {Number(member.points ?? 0).toLocaleString()}
+                      </span>
+                    </span>
+                    <span className="min-w-0 flex-1">
+                      <span className="block text-[11px] text-white/45">
+                        總里程
+                      </span>
+                      <span className="block truncate text-sm font-semibold tabular-nums">
+                        {formatKm(member.total_km)} km
+                      </span>
+                    </span>
+                  </span>
+                </button>
+
+                {/* 展開態：其餘欄位 + 全部操作（與表格版行為一致） */}
+                {open && (
+                  <div
+                    id={panelId}
+                    className="border-t border-ink-line px-3.5 py-3"
+                  >
+                    <dl className="grid grid-cols-1 gap-x-4 gap-y-2 text-xs">
+                      <div className="flex min-w-0 items-baseline gap-2">
+                        <dt className="shrink-0 text-[11px] text-white/45">
+                          電郵
+                        </dt>
+                        <dd className="min-w-0 break-words text-white/80">
+                          {member.email ?? "—"}
+                        </dd>
+                      </div>
+                      <div className="flex min-w-0 items-center gap-2">
+                        <dt className="shrink-0 text-[11px] text-white/45">
+                          角色
+                        </dt>
+                        <dd>
+                          <RoleBadge role={member.role} />
+                        </dd>
+                      </div>
+                      <div className="flex min-w-0 items-baseline gap-2">
+                        <dt className="shrink-0 text-[11px] text-white/45">
+                          加入日期
+                        </dt>
+                        <dd className="min-w-0 break-words text-white/70">
+                          {formatDate(member.created_at)}
+                        </dd>
+                      </div>
+                      <div className="flex min-w-0 items-baseline gap-2">
+                        <dt className="shrink-0 text-[11px] text-white/45">
+                          最後登入
+                        </dt>
+                        <dd className="min-w-0 break-words text-white/70">
+                          {formatDate(member.last_sign_in_at)}
+                        </dd>
+                      </div>
+                    </dl>
+
+                    {member.status_reason && (
+                      <p className="mt-2 break-words text-xs text-white/50">
+                        停用原因：{member.status_reason}
+                      </p>
+                    )}
+
+                    <div className="mt-3 grid grid-cols-2 gap-2">
+                      <CardAction onClick={() => setDrawerMember(member)}>
+                        <Eye size={14} /> 檢視
+                      </CardAction>
+                      <CardAction onClick={() => setEditMember(member)}>
+                        <Pencil size={14} /> 編輯
+                      </CardAction>
+                      <CardAction onClick={() => setPointsMember(member)}>
+                        <Diff size={14} /> 調整積分
+                      </CardAction>
+                      <CardAction onClick={() => setPasswordMember(member)}>
+                        <KeyRound size={14} /> 重設密碼
+                      </CardAction>
+                      <CardAction onClick={() => setVerifyMember(member)}>
+                        <Mail size={14} /> 重寄驗證
+                      </CardAction>
+                      <CardAction
+                        onClick={() => void toggleStatus(member)}
+                        disabled={busyId === member.member_id}
+                        tone={member.status === "active" ? "warn" : "ok"}
+                      >
+                        {busyId === member.member_id ? (
+                          <Loader2 size={14} className="animate-spin" />
+                        ) : (
+                          <Power size={14} />
+                        )}
+                        {member.status === "active" ? "停用" : "啟用"}
+                      </CardAction>
+                      <CardAction
+                        onClick={() => setDeleteMember(member)}
+                        tone="danger"
+                        className="col-span-2"
+                      >
+                        <Trash2 size={14} /> 刪除
+                      </CardAction>
+                    </div>
+                  </div>
+                )}
+              </li>
+            );
+          })
+        )}
+      </ul>
+
+      {/* --- 桌面表格（≥768px；markup 與改動前一致） --- */}
+      <div className="hidden min-w-0 overflow-x-auto rounded-xl border border-ink-line md:block" aria-busy={loading}>
         <table className="w-full min-w-[840px] table-fixed text-sm">
           <caption className="sr-only">
             會員列表，共 {total} 位；點擊列可開啟詳情抽屜
@@ -485,7 +679,10 @@ export function MemberManager() {
         <div className="flex items-center gap-2">
           <button
             type="button"
-            onClick={() => setPage((current) => Math.max(1, current - 1))}
+            onClick={() => {
+              setPage((current) => Math.max(1, current - 1));
+              setExpandedId(null);
+            }}
             disabled={page <= 1 || loading}
             aria-label="上一頁"
             className="btn-base btn-ghost px-3 py-1.5 text-xs"
@@ -497,7 +694,10 @@ export function MemberManager() {
           </span>
           <button
             type="button"
-            onClick={() => setPage((current) => Math.min(totalPages, current + 1))}
+            onClick={() => {
+              setPage((current) => Math.min(totalPages, current + 1));
+              setExpandedId(null);
+            }}
             disabled={page >= totalPages || loading}
             aria-label="下一頁"
             className="btn-base btn-ghost px-3 py-1.5 text-xs"
@@ -632,6 +832,45 @@ function IconAction({
         onClick();
       }}
       className={`rounded-lg border border-white/15 p-1 text-white/65 transition disabled:opacity-50 ${toneClass}`}
+    >
+      {children}
+    </button>
+  );
+}
+
+/**
+ * 手機卡片內的操作按鈕：帶文字、可點區域 44px（純 icon 在觸控上太小）。
+ * 不呼叫 stopPropagation —— 卡片 header 才是展開控制，這些按鈕是它的兄弟節點，
+ * 不是巢狀在 <button> 裡。
+ */
+function CardAction({
+  onClick,
+  disabled = false,
+  tone = "default",
+  className = "",
+  children,
+}: {
+  onClick: () => void;
+  disabled?: boolean;
+  tone?: "default" | "warn" | "ok" | "danger";
+  className?: string;
+  children: ReactNode;
+}) {
+  const toneClass =
+    tone === "danger"
+      ? "border-red-500/40 text-red-300 hover:bg-red-500/10"
+      : tone === "warn"
+        ? "border-amber-500/40 text-amber-300 hover:bg-amber-500/10"
+        : tone === "ok"
+          ? "border-emerald-500/40 text-emerald-300 hover:bg-emerald-500/10"
+          : "border-white/15 text-white/75 hover:bg-white/5 hover:text-white";
+
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      disabled={disabled}
+      className={`inline-flex min-h-11 items-center justify-center gap-1.5 rounded-lg border px-2 text-xs font-semibold transition disabled:opacity-50 ${toneClass} ${className}`}
     >
       {children}
     </button>

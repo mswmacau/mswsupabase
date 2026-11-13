@@ -45,15 +45,16 @@ where id = (select id from auth.users where email = 'you@example.com');`}
   }
 
   return (
-    <section className="pt-24 pb-20 md:pt-28">
+    <section className="pt-20 pb-20 md:pt-28">
       <div className="container-msw">
-        <div className="mb-8">
+        {/* <768px 時由 AdminNav 的 56px 抽屜列帶「後台」標題，這裡不重複佔高度 */}
+        <div className="mb-8 hidden md:block">
           <h1 className="mt-2 text-2xl font-black">MSW 後台管理</h1>
         </div>
 
-        <div className="grid gap-8 lg:grid-cols-[220px_1fr]">
-          <aside className="min-w-0 lg:sticky lg:top-24 lg:self-start">
-            <div className="card-dark overflow-hidden p-3 lg:max-h-[calc(100vh-7.5rem)] lg:overflow-y-auto lg:overscroll-contain">
+        <div className="grid gap-6 md:grid-cols-[220px_1fr] md:gap-8">
+          <aside className="min-w-0 md:sticky md:top-24 md:self-start">
+            <div className="card-dark overflow-hidden p-0 md:p-3 md:max-h-[calc(100vh-7.5rem)] md:overflow-y-auto md:overscroll-contain">
               <AdminNav />
             </div>
           </aside>
