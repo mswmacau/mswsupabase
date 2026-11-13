@@ -252,23 +252,26 @@ export default async function HomePage() {
           </div>
 
           <div className="lg:pl-14">
+            {/* h1 本身就是視覺主標：display-hero 掛在 h1 上，
+                內層 span 只負責換行與顏色（字級／字重由 h1 繼承）。
+                描邊副本改用 data-dup + ::before 產生，避免同一串字
+                在文字節點裡出現兩次（h1.textContent 只會有一份）。 */}
             <h1
-              className="mt-6 lg:-ml-[3vw] lg:w-[112%]"
+              className="display-hero mt-6 lg:-ml-[3vw] lg:w-[112%]"
               data-fx-reveal
               style={fxDelay(0.18)}
             >
-              <span className="display-hero block text-white">
+              <span className="block text-white">
                 {content.hero.title_line1}
               </span>
               <span className="relative mt-1 block">
-                {/* 錯位描邊副本：純裝飾 */}
+                {/* 錯位描邊副本：純裝飾，文字由 CSS content 產生 */}
                 <span
                   aria-hidden
-                  className="display-hero text-outline text-outline-vital absolute left-[0.05em] top-[0.05em] block"
-                >
-                  {content.hero.title_line2}
-                </span>
-                <span className="display-hero relative block text-vital-bright">
+                  data-dup={content.hero.title_line2}
+                  className="text-outline text-outline-vital absolute left-[0.05em] top-[0.05em] block before:content-[attr(data-dup)]"
+                />
+                <span className="relative block text-vital-bright">
                   {content.hero.title_line2}
                 </span>
               </span>
@@ -597,8 +600,13 @@ export default async function HomePage() {
       <div className="container-msw section-pad relative">
         <div className="flex flex-wrap items-end justify-between gap-6">
           <div>
-            {/* H-13 逐字點亮 scrub（文字內容完全不變，只係拆成逐字 span） */}
-            <h2 className="display-xl mt-5 max-w-2xl">
+            {/* H-13 逐字點亮 scrub（文字內容完全不變，只係拆成逐字 span）。
+                可讀的那份由 aria-label 提供，逐字副本是 aria-hidden，
+                所以 DOM 文字裡這句話只出現一次。 */}
+            <h2
+              className="display-xl mt-5 max-w-2xl"
+              aria-label="超越界限，讓訓練增加驅動力"
+            >
               <ScrubText text="超越界限，讓訓練增加驅動力" />
             </h2>
           </div>

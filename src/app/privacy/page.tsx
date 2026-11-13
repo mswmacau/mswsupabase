@@ -112,13 +112,13 @@ function Chapter({
   return (
     <section className="border-t border-[var(--line-fine-strong)] pt-10">
       <div className="grid gap-6 lg:grid-cols-[230px_minmax(0,1fr)] lg:gap-12">
-        <h2 className="flex items-baseline gap-3 lg:sticky lg:top-24 lg:self-start">
+        {/* 字級掛在 h2 本身（原本掛在內層 span 上，h2 的 computed 會是 16px/400，
+            與視覺不符）。搬到 h2 後內層 span 只負責顏色，視覺不變。 */}
+        <h2 className="flex items-baseline gap-3 text-xl font-bold leading-snug lg:sticky lg:top-24 lg:self-start">
           <span className="flex-none text-[11px] font-semibold uppercase tracking-[0.22em] text-vital-bright">
             {no}
           </span>
-          <span className="min-w-0 text-xl font-bold leading-snug text-white">
-            {title}
-          </span>
+          <span className="min-w-0 text-white">{title}</span>
         </h2>
         <div className="min-w-0 space-y-4 text-base leading-[1.9] text-[var(--text-muted)]">
           {children}
@@ -153,16 +153,15 @@ export default function PrivacyPage() {
             </div>
 
             <div className="lg:pl-14">
-              <h1 className="mt-6">
-                <span className="display-xl block text-white">私隱政策</span>
+              <h1 className="display-xl mt-6">
+                <span className="block text-white">私隱政策</span>
                 <span className="relative mt-1 block">
                   <span
                     aria-hidden
-                    className="display-xl text-outline text-outline-vital absolute left-[0.04em] top-[0.04em] block"
-                  >
-                    Privacy
-                  </span>
-                  <span className="display-xl relative block text-vital-bright">
+                    data-dup="Privacy"
+                    className="text-outline text-outline-vital absolute left-[0.04em] top-[0.04em] block before:content-[attr(data-dup)]"
+                  />
+                  <span className="relative block text-vital-bright">
                     Privacy
                   </span>
                 </span>

@@ -46,18 +46,17 @@ export default async function AboutPage() {
 
       <div className="container-msw relative z-10">
         <div className="pb-16 pt-28 md:pb-20 md:pt-36">
-          <h1 className="mt-6">
-            <span className="display-xl block text-white">
+          <h1 className="display-xl mt-6">
+            <span className="block text-white">
               {pages.about.page_title}
             </span>
             <span className="relative mt-1 block">
               <span
                 aria-hidden
-                className="display-xl text-outline text-outline-vital absolute left-[0.04em] top-[0.04em] block"
-              >
-                About
-              </span>
-              <span className="display-xl relative block text-vital-bright">
+                data-dup="About"
+                className="text-outline text-outline-vital absolute left-[0.04em] top-[0.04em] block before:content-[attr(data-dup)]"
+              />
+              <span className="relative block text-vital-bright">
                 About
               </span>
             </span>

@@ -323,16 +323,15 @@ export default async function EventsPage({
             <div className="lg:pl-14">
               <span className="eyebrow">Events</span>
 
-              <h1 className="mt-6 lg:-ml-[3vw] lg:w-[112%]">
-                <span className="display-xl block text-white">活動總覽</span>
+              <h1 className="display-xl mt-6 lg:-ml-[3vw] lg:w-[112%]">
+                <span className="block text-white">活動總覽</span>
                 <span className="relative mt-1 block">
                   <span
                     aria-hidden
-                    className="display-xl text-outline text-outline-vital absolute left-[0.04em] top-[0.04em] block"
-                  >
-                    Overview
-                  </span>
-                  <span className="display-xl relative block text-vital-bright">
+                    data-dup="Overview"
+                    className="text-outline text-outline-vital absolute left-[0.04em] top-[0.04em] block before:content-[attr(data-dup)]"
+                  />
+                  <span className="relative block text-vital-bright">
                     Overview
                   </span>
                 </span>

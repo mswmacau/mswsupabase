@@ -226,9 +226,12 @@ export function NextSessionCard({
         {/* 場次資料：全部由 DB / RULES 提供 */}
         <div className="min-w-0 lg:col-span-5">
           <span className="eyebrow">Next Session</span>
-          <h3 className="mt-4 truncate text-2xl font-black tracking-tight">
+          {/* 這張卡是 /training 首屏的獨立區塊，前面沒有其他 h2，
+              用 h3 會出現「跳級」（h1 → h3）。改成 h2 只動標籤，字級由
+              class 提供，視覺完全不變。 */}
+          <h2 className="mt-4 truncate text-2xl font-black tracking-tight">
             {session.title}
-          </h3>
+          </h2>
 
           <div className="mt-5 space-y-2 text-sm text-white/70">
             <div className="flex items-center gap-2">

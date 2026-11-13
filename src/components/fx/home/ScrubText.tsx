@@ -18,8 +18,9 @@ const DIM_OPACITY = "0.13";
  * 初始 opacity 係 1；只有 JS mount 成功先會加 `fx-scrub-armed` 轉暗。
  * JS 冇跑 → 全部字維持 100% 可讀（呢點同參考 HTML 唔同，參考係 CSS 直接寫死 .13）。
  *
- * 無障礙：逐字 span 會令螢幕閱讀器逐個字讀，所以另外出一份
- * `.fx-sr-only` 原文，逐字嗰份標 `aria-hidden`。
+ * 無障礙：逐字 span 對螢幕閱讀器是噪音，所以逐字那份標 `aria-hidden`。
+ * 可讀的那一份由呼叫端的容器提供（例：`/` 的 h2 直接掛 aria-label），
+ * 這裡不再另外輸出 sr-only 文字副本——否則同一句會在 DOM 文字裡出現兩次。
  */
 export function ScrubText({
   text,
@@ -76,7 +77,6 @@ export function ScrubText({
 
   return (
     <span className={className}>
-      <span className="fx-sr-only">{text}</span>
       <span ref={hostRef} className="fx-scrub" aria-hidden>
         {Array.from(text).map((ch, i) => (
           <span key={i} data-fx-w>

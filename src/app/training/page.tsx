@@ -93,17 +93,16 @@ export default async function TrainingPage() {
         <div className="container-msw relative z-10">
           <div className="relative pb-14 pt-28 md:pt-36 lg:pb-16">
             <div className="lg:pl-14">
-              <h1 className="mt-6 lg:-ml-[3vw] lg:w-[112%]">
-                <span className="display-xl block text-white">{t.page_title}</span>
+              <h1 className="display-xl mt-6 lg:-ml-[3vw] lg:w-[112%]">
+                <span className="block text-white">{t.page_title}</span>
                 <span className="relative mt-1 block">
-                  {/* 錯位描邊副本：純裝飾 */}
+                  {/* 錯位描邊副本：純裝飾，文字由 CSS content 產生 */}
                   <span
                     aria-hidden
-                    className="display-xl text-outline text-outline-vital absolute left-[0.04em] top-[0.04em] block"
-                  >
-                    場次
-                  </span>
-                  <span className="display-xl relative block text-vital-bright">
+                    data-dup="場次"
+                    className="text-outline text-outline-vital absolute left-[0.04em] top-[0.04em] block before:content-[attr(data-dup)]"
+                  />
+                  <span className="relative block text-vital-bright">
                     場次
                   </span>
                 </span>
