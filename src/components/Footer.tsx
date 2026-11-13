@@ -1,8 +1,7 @@
 import Link from "next/link";
 import type { ReactNode } from "react";
 import { ArrowUpRight, AtSign, Mail, MapPin, Shield } from "lucide-react";
-import { BRAND, RULES } from "@/lib/config";
-import { formatTimeRange, weekdayLabelOfDate } from "@/lib/utils";
+import { BRAND } from "@/lib/config";
 import type { NextSessionInfo } from "@/lib/types";
 import { DEFAULT_CONTACT, DEFAULT_NAV, type NavLink, type SiteContact } from "@/lib/content";
 
@@ -41,26 +40,23 @@ export function Footer({
   brandNameEn = BRAND.nameEn,
   contact = DEFAULT_CONTACT,
   navLinks,
-  nextSession = null,
 }: {
   isLoggedIn?: boolean;
   isAdmin?: boolean;
   brandName?: string;
   brandNameEn?: string;
-  /** 頁尾聯絡四欄 + 品牌宣言四行（site_contact；layout 以 getSiteContact() 傳入） */
+  /** 頁尾聯絡三項（地點／Email／Instagram；site_contact；layout 以 getSiteContact() 傳入） */
   contact?: SiteContact;
   /** 導覽選單（site_nav；visible=false 不顯示） */
   navLinks?: NavLink[];
   /**
-   * 下一場定期訓練（layout 以 getNextSession() 傳入）。
-   * 徽章顯示真實的星期與時段；沒有場次就整顆不顯示——不在頁尾編造時間。
+   * @deprecated 頁尾已不再顯示「下一場訓練」徽章（2026-11 頁尾精簡），
+   * 元件不讀取此 prop；保留是為了讓 `src/app/layout.tsx` 的呼叫端不必改動。
+   * 後續若清理 layout，可連同 getNextSession() 一起移除。
    */
   nextSession?: NextSessionInfo | null;
 }) {
   const CONTACT = contactItems(contact);
-  const nextSessionTime = nextSession
-    ? formatTimeRange(nextSession.start_time, nextSession.end_time)
-    : "";
   // 選單顯隱與導覽列同步：隱藏的項目在頁尾導航行一併不顯示。
   // 2026 導覽收斂後「活動」底下多了子項，頁尾一律攤平列出（父子都列），
   // 否則 /hyrox、/training、/run 會從頁尾消失。
@@ -79,50 +75,22 @@ export function Footer({
       <div className="noise-overlay" />
 
       <div className="container-msw relative">
-        {/* ===== 品牌宣言：大字主導，不是三欄連結堆砌 ===== */}
-        <div className="grid gap-10 py-14 lg:grid-cols-[1.7fr_1fr] lg:gap-16 lg:py-20">
-          <div>
-            <h2 className="display-xl mt-6">
-              <span className="block text-white">用自身的重量</span>
-              <span className="mt-1 block text-outline">練出澳門</span>
-              <span className="mt-1 block text-vital-bright">最強街頭力量</span>
-            </h2>
+        {/*
+          ===== 聯絡資訊 + 連結分層（2026-11 頁尾精簡）=====
+          站主反映「每個頁面底部都有同一組多餘的東西」。原本左欄是：
+            三行大字標語（用自身的重量／練出澳門／最強街頭力量）
+            ＋兩顆徽章（下一場訓練時段、月跑量）
+            ＋四行品牌介紹（contact.intro[0..3]）
+            ＋直排字 Train · Run · Earn
+          這組文案與首頁 hero 完全同義，且每一頁都重複，因此整塊移除。
 
-            <div className="mt-7 flex flex-wrap items-center gap-3">
-              {/* 訓練時間徽章：讀真實班表（getNextSession），沒有場次就不顯示 */}
-              {nextSession && nextSessionTime && (
-                <span className="slab inline-flex -skew-x-6 items-center border border-white/15 bg-white/5 px-3 py-1.5 text-[10px] font-bold uppercase tracking-[0.22em] text-white/70">
-                  週{weekdayLabelOfDate(nextSession.session_date)} {nextSessionTime}
-                </span>
-              )}
-              <span className="slab inline-flex -skew-x-6 items-center border border-vital/40 bg-vital/10 px-3 py-1.5 text-[10px] font-bold uppercase tracking-[0.22em] text-vital-bright">
-                {RULES.MONTHLY_GOAL_KM} km / month
-              </span>
-            </div>
-
-            {/* 品牌介紹：宣言式排版，四行各自獨立成行，不做卡片堆疊 */}
-            <div className="mt-8 max-w-lg">
-              <p className="text-lg font-extrabold leading-snug text-white sm:text-xl">
-                {contact.intro[0]}
-              </p>
-              <p className="mt-3 text-xs font-semibold tracking-[0.12em] text-[var(--text-muted)]">
-                {contact.intro[1]}
-              </p>
-              <p className="mt-1.5 text-[11px] font-bold uppercase tracking-[0.2em] text-[var(--text-faint)]">
-                {contact.intro[2]}
-              </p>
-              {/* 收尾宣言：描邊字獨立一行，不與其他行共用行框（避免被斷行切割） */}
-              <p className="mt-6 block text-xl font-black leading-tight tracking-[-0.01em] text-outline sm:text-3xl">
-                {contact.intro[3]}
-              </p>
-            </div>
-          </div>
-
-          {/* 豎排標籤 + 聯絡方式 */}
-          <div className="flex gap-6 lg:justify-end">
-            <span className="vlabel hidden text-white/40 sm:block">
-              Train · Run · Earn
-            </span>
+          移除後頁尾只留「功能性內容」：聯絡資訊、三層連結、版權列。
+          ⚠️ config 的 tagline 與 content 的 intro **沒有刪**（首頁 hero 與
+             /about 仍在用），只是頁尾不再呈現。
+        */}
+        <div className="grid gap-8 py-10 md:grid-cols-[minmax(0,18rem)_minmax(0,1fr)] md:gap-10 md:py-12">
+          {/* 左欄：聯絡方式 —— 頁尾存在的理由，必須保留 */}
+          <div className="md:border-t md:border-[var(--line-fine)] md:pt-6">
             <ul className="space-y-2 text-sm text-white/75">
               {CONTACT.map((c) => (
                 <li key={c.text}>
@@ -160,102 +128,105 @@ export function Footer({
               ))}
             </ul>
           </div>
-        </div>
 
-        {/*
-          ===== 頁尾連結分層（2026-09-29 重構）=====
-          站主反映「下拉到底部時分類不清」。原本三種性質不同的連結
-          （導覽／會員動作／管理）全部平鋪在同一條水平線上、權重相同。
+          {/* 右欄：三層連結（分組、文案、間距、權重全部原樣保留） */}
+          <div className="md:border-l md:border-[var(--line-fine)] md:pl-10">
+            {/*
+              ===== 頁尾連結分層（2026-09-29 重構）=====
+              站主反映「下拉到底部時分類不清」。原本三種性質不同的連結
+              （導覽／會員動作／管理）全部平鋪在同一條水平線上、權重相同。
 
-          重構做法：拆成三個獨立區塊，各自有分隔線與不同的視覺權重：
-            ① 導覽類   — 正常權重
-            ② 會員類   — 左側紅色標記線，凸顯這是「動作」不是「瀏覽」
-            ③ 管理類   — 最低權重（僅管理員可見），且下沈到最底部
+              重構做法：拆成三個獨立區塊，各自有分隔線與不同的視覺權重：
+                ① 導覽類   — 正常權重
+                ② 會員類   — 左側紅色標記線，凸顯這是「動作」不是「瀏覽」
+                ③ 管理類   — 最低權重（僅管理員可見），且下沈到最底部
 
-          ⚠️ 文案凍結：本區塊**沒有新增任何一個字**，全部沿用既有文案，
-             只調整分組、間距與視覺權重。
-        */}
+              ⚠️ 文案凍結：本區塊**沒有新增任何一個字**，全部沿用既有文案，
+                 只調整分組、間距與視覺權重。
+            */}
 
-        {/* ① 導覽類 */}
-        <div className="border-t border-[var(--line-fine)] py-6">
-          <div className="flex flex-wrap items-center gap-x-7 gap-y-2">
-            {footerLinks.map((l) => (
-              <Link
-                key={l.href}
-                href={l.href}
-                className="inline-flex min-h-11 items-center text-sm font-semibold text-white/75 transition hover:text-vital-bright"
-              >
-                {l.label}
-              </Link>
-            ))}
-            {/* F-G3：站主要求額外加嘅獨立連結（內部連結，唔開新視窗） */}
-            <Link
-              href="/about"
-              className="inline-flex min-h-11 items-center text-sm font-semibold text-white/75 transition hover:text-vital-bright"
-            >
-              聯絡我們
-            </Link>
-            {/* 私隱政策：Google OAuth 同意畫面需要一個公開可達的政策頁 */}
-            <Link
-              href="/privacy"
-              className="inline-flex min-h-11 items-center text-sm font-semibold text-white/75 transition hover:text-vital-bright"
-            >
-              私隱政策
-            </Link>
-          </div>
-        </div>
-
-        {/* ② 會員類：左側紅色標記線，與導覽區做出區隔 */}
-        <div className="border-t border-[var(--line-fine)] py-6">
-          <div className="flex flex-wrap items-center gap-x-7 gap-y-2 md:border-l-2 md:border-vital/45 md:pl-6">
-            {!isLoggedIn && (
-              <>
+            {/* ① 導覽類 */}
+            <div className="border-t border-[var(--line-fine)] py-6">
+              <div className="flex flex-wrap items-center gap-x-7 gap-y-2">
+                {footerLinks.map((l) => (
+                  <Link
+                    key={l.href}
+                    href={l.href}
+                    className="inline-flex min-h-11 items-center text-sm font-semibold text-white/75 transition hover:text-vital-bright"
+                  >
+                    {l.label}
+                  </Link>
+                ))}
+                {/* F-G3：站主要求額外加嘅獨立連結（內部連結，唔開新視窗） */}
                 <Link
-                  href="/signup"
-                  className="inline-flex min-h-11 items-center gap-1 text-sm font-semibold text-white/75 transition hover:text-vital-bright"
-                >
-                  註冊會員 <ArrowUpRight size={14} />
-                </Link>
-                <Link
-                  href="/login"
+                  href="/about"
                   className="inline-flex min-h-11 items-center text-sm font-semibold text-white/75 transition hover:text-vital-bright"
                 >
-                  會員登入
+                  聯絡我們
                 </Link>
-              </>
-            )}
-            {isLoggedIn && (
-              <>
+                {/* 私隱政策：Google OAuth 同意畫面需要一個公開可達的政策頁 */}
                 <Link
-                  href="/dashboard"
+                  href="/privacy"
                   className="inline-flex min-h-11 items-center text-sm font-semibold text-white/75 transition hover:text-vital-bright"
                 >
-                  我的帳戶
+                  私隱政策
                 </Link>
-                <Link
-                  href="/dashboard/coupons"
-                  className="inline-flex min-h-11 items-center text-sm font-semibold text-white/75 transition hover:text-vital-bright"
-                >
-                  我的優惠券
-                </Link>
-              </>
-            )}
-          </div>
-        </div>
-
-        {/* ③ 管理類：僅管理員可見，刻意用最低視覺權重並下沈到最底 */}
-        {isAdmin && (
-          <div className="border-t border-[var(--line-fine)] py-5">
-            <div className="flex flex-wrap items-center gap-x-6 gap-y-2 md:border-l md:border-[var(--line-fine)] md:pl-6">
-              <Link
-                href="/admin"
-                className="inline-flex min-h-11 items-center text-xs font-semibold text-white/45 transition hover:text-white/75"
-              >
-                後台管理
-              </Link>
+              </div>
             </div>
+
+            {/* ② 會員類：左側紅色標記線，與導覽區做出區隔 */}
+            <div className="border-t border-[var(--line-fine)] py-6">
+              <div className="flex flex-wrap items-center gap-x-7 gap-y-2 md:border-l-2 md:border-vital/45 md:pl-6">
+                {!isLoggedIn && (
+                  <>
+                    <Link
+                      href="/signup"
+                      className="inline-flex min-h-11 items-center gap-1 text-sm font-semibold text-white/75 transition hover:text-vital-bright"
+                    >
+                      註冊會員 <ArrowUpRight size={14} />
+                    </Link>
+                    <Link
+                      href="/login"
+                      className="inline-flex min-h-11 items-center text-sm font-semibold text-white/75 transition hover:text-vital-bright"
+                    >
+                      會員登入
+                    </Link>
+                  </>
+                )}
+                {isLoggedIn && (
+                  <>
+                    <Link
+                      href="/dashboard"
+                      className="inline-flex min-h-11 items-center text-sm font-semibold text-white/75 transition hover:text-vital-bright"
+                    >
+                      我的帳戶
+                    </Link>
+                    <Link
+                      href="/dashboard/coupons"
+                      className="inline-flex min-h-11 items-center text-sm font-semibold text-white/75 transition hover:text-vital-bright"
+                    >
+                      我的優惠券
+                    </Link>
+                  </>
+                )}
+              </div>
+            </div>
+
+            {/* ③ 管理類：僅管理員可見，刻意用最低視覺權重並下沈到最底 */}
+            {isAdmin && (
+              <div className="border-t border-[var(--line-fine)] py-5">
+                <div className="flex flex-wrap items-center gap-x-6 gap-y-2 md:border-l md:border-[var(--line-fine)] md:pl-6">
+                  <Link
+                    href="/admin"
+                    className="inline-flex min-h-11 items-center text-xs font-semibold text-white/45 transition hover:text-white/75"
+                  >
+                    後台管理
+                  </Link>
+                </div>
+              </div>
+            )}
           </div>
-        )}
+        </div>
 
         {/* ===== 底欄 ===== */}
         <div className="flex flex-col items-start justify-between gap-3 border-t border-[var(--line-fine)] py-6 text-xs text-white/60 sm:flex-row sm:items-center">
