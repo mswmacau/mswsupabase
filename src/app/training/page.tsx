@@ -25,16 +25,6 @@ export async function generateMetadata(): Promise<Metadata> {
 
 export const dynamic = "force-dynamic";
 
-/** 跑馬燈：接續首頁語言，全大寫寬字距。不放具體時間——班表是多時段 */
-const MARQUEE_ITEMS = [
-  "Street Workout",
-  "Weekly Sessions",
-  `+${RULES.CHECKIN_POINTS} Points / Session`,
-  "澳門 Macau",
-  "All Levels Welcome",
-  "Calisthenics",
-];
-
 /** Hero 數字三聯：大數字主導，不用小圖標堆砌（「簽到一次入帳」讀 site_pages.training） */
 function heroFacts(t: SitePageTraining) {
   return [
@@ -102,11 +92,6 @@ export default async function TrainingPage() {
 
         <div className="container-msw relative z-10">
           <div className="relative pb-14 pt-28 md:pt-36 lg:pb-16">
-            {/* 豎排小標籤 */}
-            <div className="absolute left-0 top-40 hidden lg:block">
-              <span className="vlabel text-white/50">Monday Night Crew</span>
-            </div>
-
             <div className="lg:pl-14">
               <h1 className="mt-6 lg:-ml-[3vw] lg:w-[112%]">
                 <span className="display-xl block text-white">{t.page_title}</span>
@@ -179,27 +164,6 @@ export default async function TrainingPage() {
                   <div className="mt-4 text-[11px] font-semibold uppercase tracking-[0.22em] text-white/55">
                     {f.label}
                   </div>
-                </div>
-              ))}
-            </div>
-          </div>
-        </div>
-
-        {/* 跑馬燈：細邊框上下包夾 */}
-        <div className="relative z-10 border-y border-white/10 py-3">
-          <div className="marquee" aria-hidden>
-            <div className="marquee-track">
-              {[0, 1].map((copy) => (
-                <div key={copy} className="flex shrink-0 items-center">
-                  {MARQUEE_ITEMS.map((w) => (
-                    <span
-                      key={`${copy}-${w}`}
-                      className="flex items-center whitespace-nowrap px-6 text-[11px] font-semibold uppercase tracking-[0.28em] text-white/55"
-                    >
-                      {w}
-                      <span className="ml-6 inline-block h-1 w-1 rotate-45 bg-vital-bright" />
-                    </span>
-                  ))}
                 </div>
               ))}
             </div>

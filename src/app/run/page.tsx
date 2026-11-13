@@ -85,12 +85,8 @@ export default async function RunPage() {
         <div className="noise-overlay" />
 
         <div className="container-msw relative z-10">
-          <div className="flex gap-6 pb-12 pt-28 md:pt-36 lg:pb-14">
-            <span className="vlabel hidden shrink-0 text-white/40 lg:block">
-              {goal} km / month
-            </span>
-
-            <div className="min-w-0 flex-1">
+          <div className="pb-12 pt-28 md:pt-36 lg:pb-14">
+            <div className="min-w-0">
               <h1 className="display-xl mt-6">
                 <span className="block text-white">月度</span>
                 <span className="mt-1 block">

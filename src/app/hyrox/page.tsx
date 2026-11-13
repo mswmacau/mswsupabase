@@ -91,9 +91,7 @@ export default async function HyroxPage() {
         />
 
         <div className="container-msw relative z-10 pb-14 pt-10 md:pb-20 md:pt-14">
-          <p className="vlabel text-white/45">Monthly Outdoor Training</p>
-
-          <h1 className="display-xl mt-5 break-words">
+          <h1 className="display-xl break-words">
             <span className="block text-white">HYROX</span>
             <span className="mt-1 block text-[0.42em] leading-tight tracking-tight">
               <span className="text-outline">戶外綜合</span>

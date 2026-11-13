@@ -18,16 +18,6 @@ export async function generateMetadata(): Promise<Metadata> {
   return { title: pages.leaderboard.page_title };
 }
 
-/** 跑馬燈 */
-const MARQUEE_ITEMS = [
-  "Leaderboard",
-  "月度里程榜",
-  "累積總榜",
-  `${RULES.MONTHLY_GOAL_KM}km / Month`,
-  "澳門 Macau",
-  "Keep Showing Up",
-];
-
 export default async function LeaderboardPage({
   searchParams,
 }: {
@@ -77,10 +67,6 @@ export default async function LeaderboardPage({
 
         <div className="container-msw relative z-10">
           <div className="relative pb-14 pt-28 md:pt-36 lg:pb-16">
-            <div className="absolute left-0 top-40 hidden lg:block">
-              <span className="vlabel text-white/50">Rankings · Macau</span>
-            </div>
-
             <div className="lg:pl-14">
               <span className="eyebrow">Leaderboard</span>
 
@@ -177,27 +163,6 @@ export default async function LeaderboardPage({
                   <div className="mt-4 text-[11px] font-semibold uppercase tracking-[0.22em] text-white/55">
                     {f.label}
                   </div>
-                </div>
-              ))}
-            </div>
-          </div>
-        </div>
-
-        {/* 跑馬燈 */}
-        <div className="relative z-10 border-y border-white/10 py-3">
-          <div className="marquee" aria-hidden>
-            <div className="marquee-track">
-              {[0, 1].map((copy) => (
-                <div key={copy} className="flex shrink-0 items-center">
-                  {MARQUEE_ITEMS.map((w) => (
-                    <span
-                      key={`${copy}-${w}`}
-                      className="flex items-center whitespace-nowrap px-6 text-[11px] font-semibold uppercase tracking-[0.28em] text-white/55"
-                    >
-                      {w}
-                      <span className="ml-6 inline-block h-1 w-1 rotate-45 bg-vital-bright" />
-                    </span>
-                  ))}
                 </div>
               ))}
             </div>
