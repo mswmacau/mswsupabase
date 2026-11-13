@@ -3,11 +3,15 @@
  *
  * GET   → { ok:true, events:[{...場次, registrations_count, pending_count}] }
  * POST  → { action:'create' | 'update', ...欄位 } → 201 / 200
+ * DELETE ?id=<uuid> → 200 { ok:true, removed, title, photos_removed, storage_deleted }
  *
  * 契約要點：
  *   · event_date 可為 null（日期待定）；fee_cents 0–1000000；
  *     status 只接受 draft | published | archived；create 時強制 series='hyrox'。
  *   · 全部經過 authorizeAdmin()：未設定 400 / 未登入 401 / 非管理員 403。
+ *   · DELETE 的 id 走 query string（不是 body）；安全閘門依序為
+ *     404 NOT_FOUND（不存在或非 HYROX）→ 409 PUBLISHED（請先下架）→
+ *     409 HAS_REGISTRATIONS（已有 N 筆報名，改為下架保留）。
  *
  * 安全與資料紀律：
  *   · created_by 由伺服器帶入（actorId），body 內的值一律忽略。
@@ -16,6 +20,8 @@
  *   · 長度上限與 DB check constraint 對齊（schema-r6.sql ＋ migration-paid-events-1.sql），
  *     先用可讀的 400 擋掉，不讓使用者看到 500。
  *   · 寫入成功後 revalidatePath + revalidateTag(HYROX_EVENTS_TAG)，前台快取立即失效。
+ *   · DELETE 前先查出 event_photos 的 path 與 cover_path，DB 刪除成功後才
+ *     best-effort 清 Storage 物件（失敗只記 log，不影響已完成的刪除）。
  *
  * H6：全支包 try/catch，任何情況都回 JSON。
  * Owner：白客（backend-engineer）
@@ -24,10 +30,12 @@
 import { revalidatePath, revalidateTag } from "next/cache";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { authorizeAdmin } from "@/lib/admin-guard";
+import { writeAuditLog } from "@/lib/audit";
 import { HYROX_EVENTS_TAG } from "@/lib/queries";
 import {
   isUuid,
   jsonBadJson,
+  jsonConflict,
   jsonDbError,
   jsonInternal,
   jsonMethodNotAllowed,
@@ -36,7 +44,7 @@ import {
   jsonValidation,
   readJson,
 } from "@/lib/api";
-import { HYROX_SERIES } from "@/app/api/hyrox/_shared/contract";
+import { HYROX_SERIES, hyroxErr } from "@/app/api/hyrox/_shared/contract";
 import type { EventStatus, HyroxEvent, HyroxEventWithCounts } from "@/lib/types";
 
 /** 後台列表要抓的欄位（與 GET 契約一致） */
@@ -54,6 +62,9 @@ const ASSET_PATH_RE = /^[A-Za-z0-9][A-Za-z0-9/_.-]*\.(jpg|jpeg|png|webp)$/i;
 const EVENT_STATUSES: readonly EventStatus[] = ["draft", "published", "archived"];
 
 const NOT_FOUND_MSG = "找不到這筆 HYROX 場次。";
+
+/** 場次相片／封面所在的公開 bucket（與 src/lib/upload.ts 一致） */
+const SITE_ASSETS = "site-assets";
 
 /** 日期字串是否為真實存在的日期（擋掉 2026-02-31 這種） */
 function isRealDate(s: string): boolean {
@@ -473,9 +484,168 @@ export async function POST(request: Request) {
   }
 }
 
+/* =============================================================
+ * DELETE — 永久刪除 HYROX 場次（?id=<uuid>）
+ *
+ * 為什麼要有這支：後台原本只能新增／編輯／上下架，測試或誤建的場次
+ * 永遠清不掉（archived 也留著）。這裡補上真刪除，並用兩道閘門擋掉
+ * 會造成資料損失的情況：
+ *   1. status='published' → 409 PUBLISHED（正在報名中，先下架）
+ *   2. event_registrations 有任何一列（不論狀態）→ 409 HAS_REGISTRATIONS
+ *      （報名紀錄是有價值的歷史資料，刪場次會連帶 cascade 掉，所以改用下架）
+ *
+ * 相片（event_photos）由 DB 的 on delete cascade 自動清；
+ * Storage 物件（相片 + 封面）在 DB 刪除成功後才 best-effort 清理。
+ * ============================================================= */
+export async function DELETE(request: Request) {
+  try {
+    const auth = await authorizeAdmin();
+    if (!auth.ok) return auth.res;
+    const { supabase, actorId } = auth;
+
+    // 契約：id 走 query string；缺 id 或格式錯一律 400（不讓 22P02 變成 500）
+    const id = (new URL(request.url).searchParams.get("id") ?? "").trim();
+    if (!id) return jsonValidation({ id: "缺少場次編號。" });
+    if (!isUuid(id)) return jsonValidation({ id: "編號格式錯誤。" });
+
+    const { data: row, error: readErr } = await supabase
+      .from("events")
+      .select("id,title,status,series,cover_path")
+      .eq("id", id)
+      .maybeSingle();
+
+    if (readErr) return jsonInternal("DELETE /api/admin/hyrox/events read", readErr);
+
+    const target = row as
+      | {
+          id: string;
+          title: string;
+          status: EventStatus;
+          series: string | null;
+          cover_path: string | null;
+        }
+      | null;
+
+    // 非 series='hyrox' 一律當作不存在：這支端點不能用來刪一般活動
+    if (!target || target.series !== HYROX_SERIES) return jsonNotFound(NOT_FOUND_MSG);
+
+    /* ---- 閘門 1：上架中的場次不可刪 ---- */
+    if (target.status === "published") {
+      return hyroxErr("PUBLISHED", 409, "此場次正在報名中，請先下架再刪除。");
+    }
+
+    /* ---- 閘門 2：有任何報名紀錄就不可刪 ---- */
+    const { count, error: countErr } = await supabase
+      .from("event_registrations")
+      .select("id", { count: "exact", head: true })
+      .eq("event_id", id);
+
+    // 統計失敗不可視為 0 放行：寧可擋下，也不要誤刪有報名的場次
+    if (countErr) return jsonInternal("DELETE /api/admin/hyrox/events count", countErr);
+
+    const regCount = count ?? 0;
+    if (regCount > 0) {
+      return hyroxErr(
+        "HAS_REGISTRATIONS",
+        409,
+        `已有 ${regCount} 筆報名紀錄，不能刪除；請改為下架保留紀錄。`
+      );
+    }
+
+    /* ---- 刪除前先取出相片路徑（DB 列刪掉後就查不到了）---- */
+    const photoPaths: string[] = [];
+    const { data: photoRows, error: photoErr } = await supabase
+      .from("event_photos")
+      .select("path")
+      .eq("event_id", id);
+
+    if (photoErr) {
+      // 讀不到相片清單不擋刪除（DB 列仍會 cascade），只是無法清 Storage 物件
+      console.warn(
+        "[admin/hyrox/events] 讀取相片路徑失敗（不擋主流程）：",
+        photoErr.message
+      );
+    } else {
+      for (const p of (photoRows as { path: string }[] | null) ?? []) {
+        if (typeof p.path === "string" && p.path !== "") photoPaths.push(p.path);
+      }
+    }
+
+    // 封面也是這個場次自己的物件，跟著一起清
+    const storagePaths = target.cover_path ? [...photoPaths, target.cover_path] : photoPaths;
+    const photosRemoved = photoPaths.length;
+
+    /* ---- 刪 DB（event_photos 由 on delete cascade 自動清）---- */
+    const { data: deleted, error: delErr } = await supabase
+      .from("events")
+      .delete()
+      .eq("id", id)
+      .eq("series", HYROX_SERIES)
+      .select("id");
+
+    if (delErr) {
+      // 23503：仍有其他資料引用此場次（例如非 cascade 的外部鍵）→ 409，不吐 500
+      const code =
+        typeof delErr === "object" && delErr !== null && "code" in delErr
+          ? String((delErr as { code?: unknown }).code ?? "")
+          : "";
+      if (code === "23503") {
+        return jsonConflict("此場次仍被其他資料引用，無法刪除；請改為下架保留。");
+      }
+      return jsonInternal("DELETE /api/admin/hyrox/events delete", delErr);
+    }
+
+    // 併發：別的請求已經刪掉了
+    if (!deleted || (deleted as { id: string }[]).length === 0) {
+      return jsonNotFound(NOT_FOUND_MSG);
+    }
+
+    /* ---- Storage 物件：best-effort，失敗只記 log ---- */
+    let storageDeleted = storagePaths.length === 0;
+    if (storagePaths.length > 0) {
+      try {
+        const { error: storageErr } = await supabase.storage
+          .from(SITE_ASSETS)
+          .remove(storagePaths);
+        if (storageErr) {
+          console.warn(
+            "[admin/hyrox/events] Storage 刪除失敗（不擋主流程）：",
+            storageErr.message
+          );
+        } else {
+          storageDeleted = true;
+        }
+      } catch (err) {
+        console.warn("[admin/hyrox/events] Storage 刪除例外（不擋主流程）：", err);
+      }
+    }
+
+    revalidateHyrox();
+
+    await writeAuditLog(
+      supabase,
+      actorId,
+      "hyrox",
+      "event-delete",
+      `刪除 HYROX 場次「${target.title}」（相片 ${photosRemoved} 張${
+        storageDeleted ? "" : "，Storage 物件待清理"
+      }）`
+    );
+
+    return jsonOk({
+      removed: id,
+      title: target.title,
+      photos_removed: photosRemoved,
+      storage_deleted: storageDeleted,
+      message: `已刪除 HYROX 場次「${target.title}」。`,
+    });
+  } catch (err) {
+    return jsonDbError("DELETE /api/admin/hyrox/events", err);
+  }
+}
+
 /** H6：未實作的方法也要回 JSON */
 export async function PUT() {
   return jsonMethodNotAllowed();
 }
 export const PATCH = PUT;
-export const DELETE = PUT;

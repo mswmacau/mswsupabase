@@ -21,7 +21,9 @@
 import { NextResponse } from "next/server";
 import type { SupabaseClient } from "@supabase/supabase-js";
 
-/** HYROX 專屬錯誤碼（與 api.ts 的 ApiErrorCode 併用） */
+/** HYROX 專屬錯誤碼（與 api.ts 的 ApiErrorCode 併用）
+ *  PUBLISHED / HAS_REGISTRATIONS 為 DELETE /api/admin/hyrox/events 的刪除閘門
+ *  （已上架不可刪、已有報名紀錄不可刪），讓前端能分辨 409 的兩種原因。 */
 export type HyroxErrorCode =
   | "EVENT_CLOSED"
   | "DISCLAIMER_REQUIRED"
@@ -31,6 +33,8 @@ export type HyroxErrorCode =
   | "ALREADY_CONFIRMED"
   | "ALREADY_REVIEWED"
   | "INVALID_DECISION"
+  | "PUBLISHED"
+  | "HAS_REGISTRATIONS"
   | "UNAUTHENTICATED"
   | "VALIDATION"
   | "NOT_FOUND"
