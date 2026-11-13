@@ -11,6 +11,7 @@ import { getCurrentProfile } from "@/lib/supabase/server";
 import {
   getAvailableMonths,
   getHyroxEvents,
+  getScheduleLegend,
   getScheduleMonth,
   getSitePages,
 } from "@/lib/queries";
@@ -116,7 +117,8 @@ function sessionToView(row: TrainingSessionRow): ScheduleSessionView {
     endTime: row.end_time ? row.end_time.slice(0, 5) : null,
     colorKey: row.class_color_key,
     coachName: row.coach_name,
-    location: row.location,
+    // 管理員在這一場特別指定過場地就用它，否則沿用場次／課程的預設場地
+    location: row.location_override ?? row.location,
     capacity: row.capacity,
     status: row.status,
     paid: false,
@@ -180,12 +182,14 @@ export default async function EventsPage({
 }) {
   const params = await searchParams;
 
-  const [months, hyroxAll, profile] = await Promise.all([
+  const [months, hyroxAll, profile, legend] = await Promise.all([
     getAvailableMonths(),
     // 前台要看到「已結束（archived）」的付費場次，否則 11/11 那場在日曆上會消失。
     // includeArchived 會回 draft —— draft 一律在下面過濾掉，不能外洩。
     getHyroxEvents({ includeArchived: true }),
     getCurrentProfile(),
+    // 顏色圖例（後台可編輯）。表未建時回 [] → 圖例整段不顯示，日曆照常。
+    getScheduleLegend(),
   ]);
 
   const todayISO = macauTodayISO();
@@ -426,7 +430,7 @@ export default async function EventsPage({
               <h2 className="display-xl mt-5">班表日曆</h2>
             </div>
             <p className="max-w-md text-sm leading-relaxed text-white/65">
-              週一起算。手機看一週、桌面看整月，點任一場次看教練、場地與報名方式。
+              週一起算。手機與桌面都是整月月曆，點日期看當日場次、教練、場地與報名方式。
             </p>
           </div>
 
@@ -519,11 +523,12 @@ export default async function EventsPage({
           {display && schedule ? (
             <div className="mt-6">
               <ScheduleCalendar
-                // 換月時重掛載：手機週檢視與選中的場次不該跨月沿用
+                // 換月時重掛載：選中的場次與當日清單不該跨月沿用
                 key={displayKey ?? "schedule"}
                 year={display.year}
                 month={display.month}
                 days={days}
+                legend={legend}
               />
             </div>
           ) : (

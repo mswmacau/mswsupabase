@@ -45,6 +45,7 @@ import {
   type YearMonth,
 } from "./api";
 import { dateGroupLabel, macauMonthDay, pad2, shiftMonth, timeRange } from "./format";
+import { LegendEditor } from "./LegendEditor";
 import { MonthBar } from "./MonthBar";
 import { SessionFormDialog } from "./SessionFormDialog";
 import { SessionList } from "./SessionList";
@@ -376,6 +377,9 @@ export function ScheduleManager({
         onUnpublish={() => setUnpublishOpen(true)}
         onCopy={handleCopy}
       />
+
+      {/* 顏色圖例：前台手機月曆靠它解釋顏色，標籤在這裡改 */}
+      <LegendEditor />
 
       {!canPrev || !canNext ? (
         <p className="text-xs text-white/45">

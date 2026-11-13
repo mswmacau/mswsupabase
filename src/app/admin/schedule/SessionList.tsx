@@ -54,7 +54,9 @@ function SessionRow({
   const status = STATUS_META[session.status] ?? STATUS_META.open;
   const name = session.class_name ?? session.title ?? "未命名場次";
   const coach = session.coach_name?.trim() || "—";
-  const location = session.location?.trim() || "—";
+  // 管理員在這一場特別指定過場地就用它，否則沿用場次預設場地
+  const location =
+    ((session.location_override ?? session.location) ?? "").trim() || "—";
 
   return (
     <li className="px-3.5 py-3 sm:px-4">

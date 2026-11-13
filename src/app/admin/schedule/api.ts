@@ -260,3 +260,46 @@ export function deleteTrainingSession(id: string) {
     body: { action: "delete", id },
   });
 }
+
+/* =============================================================
+ * 顏色圖例（supabase/migration-schedule-legend.sql）
+ * ============================================================= */
+
+/**
+ * 一筆圖例。`color_key` 是色票鍵（blue / green / …），不是 hex ——
+ * 實際顏色由前台的 colorHex() 決定，換色只改前端一處。
+ */
+export interface LegendItem {
+  color_key: string;
+  label: string;
+  sort_order: number;
+  is_active: boolean;
+}
+
+/** 全部圖例（含停用），已依 sort_order 升冪 */
+export function fetchScheduleLegend(signal?: AbortSignal) {
+  return trainingRequest<{ legend: LegendItem[] }>("/api/admin/training/legend", {
+    signal,
+  });
+}
+
+/** 改單筆圖例；只送有變動的欄位 */
+export function updateScheduleLegendItem(body: {
+  color_key: string;
+  label?: string;
+  sort_order?: number;
+  is_active?: boolean;
+}) {
+  return trainingRequest<{ message: string }>("/api/admin/training/legend", {
+    method: "POST",
+    body: { action: "update", ...body },
+  });
+}
+
+/** 還原六筆預設圖例 */
+export function resetScheduleLegend() {
+  return trainingRequest<{ message: string }>("/api/admin/training/legend", {
+    method: "POST",
+    body: { action: "reset" },
+  });
+}

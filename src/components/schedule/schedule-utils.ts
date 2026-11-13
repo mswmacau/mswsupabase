@@ -154,15 +154,6 @@ export function buildMonthDays(args: {
   return days;
 }
 
-/** 切成每 7 天一週（手機週檢視用） */
-export function chunkWeeks(days: ScheduleDay[]): ScheduleDay[][] {
-  const weeks: ScheduleDay[][] = [];
-  for (let i = 0; i < days.length; i += 7) {
-    weeks.push(days.slice(i, i + 7));
-  }
-  return weeks;
-}
-
 /** '2026 年 11 月' */
 export function formatMonthTitle(year: number, month: number): string {
   return `${year} 年 ${month} 月`;
@@ -182,27 +173,25 @@ export function formatDayLong(iso: string): string {
   return `${formatDayShort(iso)}（星期${weekday}）`;
 }
 
-/** 一週的標題：'11 月 2 日 – 11 月 8 日'；跨月也讀得懂 */
-export function formatWeekRange(week: ScheduleDay[]): string {
-  if (week.length === 0) return "";
-  const head = week[0];
-  const tail = week[week.length - 1];
-  return `${formatDayShort(head.date)} – ${formatDayShort(tail.date)}`;
-}
-
 /**
  * 課程色票鍵 → hex。
  * 資料庫的 `training_classes.color_key` 是自由字串，所以認不得的一律回灰，
  * 不要 throw、也不要在 UI 上出現 undefined。
+ *
+ * ⚠️ 這組色值必須與後台「顏色圖例」的色塊完全一致（客戶指定色）：
+ *    blue #378ADD / green #639922 / amber #EF9F27 /
+ *    teal #1D9E75 / violet #534AB7 / orange #F9761F
+ * 前台手機格子只畫顏色短條、不寫字，色差一眼就看得出來，
+ * 所以圖例色塊與短條都走這一個函式，不要另開一套 hex。
  */
 const COLOR_HEX: Record<string, string> = {
-  blue: "#4f7cff",
-  green: "#34d399",
-  amber: "#fbbf24",
-  orange: "#fb923c",
-  teal: "#2dd4bf",
-  violet: "#a78bfa",
-  purple: "#a78bfa",
+  blue: "#378ADD",
+  green: "#639922",
+  amber: "#EF9F27",
+  teal: "#1D9E75",
+  violet: "#534AB7",
+  purple: "#534AB7",
+  orange: "#F9761F",
   red: "#fb7185",
   rose: "#fb7185",
   pink: "#fb7185",
@@ -217,8 +206,11 @@ export function colorHex(key: string | null): string {
   return COLOR_HEX[key.trim().toLowerCase()] ?? NEUTRAL_HEX;
 }
 
-/** 付費場次固定用橙，刻意不吃 class_color_key —— 讓「要付錢」這件事一眼看得出來 */
-export const PAID_HEX = "#fb923c";
+/**
+ * 付費場次固定用橙，刻意不吃 class_color_key —— 讓「要付錢」這件事一眼看得出來。
+ * 值與圖例的「戶外付費」同色：手機上看圖例解釋橙＝戶外付費，日曆上的橙條就是同一種。
+ */
+export const PAID_HEX = "#F9761F";
 
 /** 場次狀態 → 面板徽章文字 */
 export function statusText(status: ScheduleStatus): string {

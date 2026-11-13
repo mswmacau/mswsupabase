@@ -1,28 +1,44 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { ChevronLeft, ChevronRight } from "lucide-react";
 import { SessionDetailPanel } from "./SessionDetailPanel";
+import { ScheduleLegend } from "./ScheduleLegend";
 import {
   PAID_HEX,
   WEEKDAY_LABELS,
-  chunkWeeks,
   colorHex,
   formatDayShort,
   formatMonthTitle,
-  formatWeekRange,
-  isoWeekdayIndex,
   type ScheduleDay,
   type ScheduleSessionView,
 } from "./schedule-utils";
+import type { ScheduleLegendItem } from "@/lib/types";
 
 /** 桌面每格最多顯示幾個 pill，其餘收成 +N */
-const MAX_PILLS = 3;
+const MAX_PILLS_DESKTOP = 3;
+/** 平板 pill 更窄，只放 2 個 */
+const MAX_PILLS_TABLET = 2;
+/** 手機每格最多幾條顏色短條 */
+const MAX_BARS_MOBILE = 3;
+/** 已取消的顏色條／色塊統一用灰（與詳情面板一致） */
+const CANCELLED_HEX = "#6b7280";
 
 /**
- * 班表日曆。
- *  桌面（≥768px）：月曆，週一起始 7 欄，格內最多 3 個 pill + 「+N」
- *  手機（<768px）：一次一週、7 天直向堆疊，上/下週箭頭，**不做橫向捲動**
+ * 班表日曆 —— **所有斷點都是月曆**（7 欄 × 5–6 列），只調整密度。
+ *
+ * 客戶原話：「不要週檢視，要用月曆放進手機（現況），如果看不到，上方可以說明
+ * 顏色所代表的活動，並且後台同步」
+ *
+ *   桌面（≥1024）  格子顯示 pill：`19:00 街健基礎力量`，最多 3 個，超過 +N
+ *   平板（768–1023）pill 只顯示時間 + 課名、字縮小，最多 2 個，超過 +N
+ *   手機（<768）   格子至少 56px 高；每場只畫一條高 4px、滿格的顏色短條，
+ *                  不寫任何文字；超過 3 場顯示 +N。整格可點 → 當日清單。
+ *
+ * 手機不放課名的原因很實際：390 寬 ÷ 7 欄 ≈ 52px，任何課名都會被截成
+ * 「街健基…」這種看不懂的東西。顏色短條 + 上方圖例才是能讀的版本。
+ *
+ * 手機不橫向捲動：7 欄等寬、每個容器 min-w-0、日期數字 13px，
+ * 390 寬下 scrollWidth === clientWidth。
  *
  * 場次資料（含 HYROX 付費場次）由 Server Component 攤平成 ScheduleSessionView 後傳入，
  * 這裡只管畫與互動，不碰資料庫、不做日期計算以外的業務判斷。
@@ -31,34 +47,51 @@ export function ScheduleCalendar({
   year,
   month,
   days,
+  legend,
 }: {
   year: number;
   month: number;
   days: ScheduleDay[];
+  /** 顏色圖例（後台可編輯）；空陣列 = 整段不顯示 */
+  legend: ScheduleLegendItem[];
 }) {
+  /** 手機第一層：哪一天被打開 */
+  const [dayKey, setDayKey] = useState<string | null>(null);
+  /** 第二層：哪一場被打開（有值時蓋過 dayKey） */
   const [selected, setSelected] = useState<ScheduleSessionView | null>(null);
 
-  const weeks = useMemo(() => chunkWeeks(days), [days]);
-
-  // 預設週：含今天的那一週（只有當月才會有 isToday），否則第一週
-  const initialWeekIndex = useMemo(() => {
-    const index = weeks.findIndex((week) => week.some((day) => day.isToday));
-    return index >= 0 ? index : 0;
-  }, [weeks]);
-
-  const [weekIndex, setWeekIndex] = useState(initialWeekIndex);
-  const safeWeekIndex = Math.min(Math.max(weekIndex, 0), Math.max(weeks.length - 1, 0));
-  const currentWeek = weeks[safeWeekIndex] ?? [];
+  const activeDay = useMemo(
+    () => (dayKey ? days.find((day) => day.date === dayKey) ?? null : null),
+    [dayKey, days]
+  );
 
   const hasAnySession = days.some((day) => day.inMonth && day.sessions.length > 0);
 
+  function openDay(day: ScheduleDay) {
+    if (!day.inMonth || day.sessions.length === 0) return;
+    setDayKey(day.date);
+    setSelected(null);
+  }
+
+  function openSession(session: ScheduleSessionView) {
+    setDayKey(null);
+    setSelected(session);
+  }
+
+  function closePanel() {
+    setDayKey(null);
+    setSelected(null);
+  }
+
   return (
-    <div>
+    <div className="min-w-0">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <h3 className="text-lg font-black tracking-tight text-white md:text-xl">
           {formatMonthTitle(year, month)}班表
         </h3>
-        <div className="flex items-center gap-4 text-[11px] text-white/50">
+
+        {/* 舊的兩項說明：手機隱藏，把空間讓給上方顏色圖例 */}
+        <div className="hidden items-center gap-4 text-[11px] text-white/50 md:flex">
           <span className="inline-flex items-center gap-1.5">
             <span aria-hidden className="h-2 w-[3px] bg-white/50" />
             班表堂次
@@ -74,166 +107,178 @@ export function ScheduleCalendar({
         </div>
       </div>
 
+      {/* 顏色圖例：標題列下方、格子上方，手機與桌面都顯示。
+          legend 為空（migration 未執行）時整段不 render，不留空行。 */}
+      {legend.length > 0 && (
+        <div className="mt-4">
+          <ScheduleLegend items={legend} />
+        </div>
+      )}
+
       {!hasAnySession && (
         <p className="mt-4 border border-dashed border-white/15 bg-white/[0.02] px-4 py-3 text-sm text-white/60">
           本月暫無場次，班表更新後會出現在這裡。
         </p>
       )}
 
-      {/* ================= 桌面：月曆 ================= */}
-      <div className="mt-5 hidden md:block">
+      {/* ================= 月曆（全斷點共用，只調密度） ================= */}
+      <div className="mt-5 min-w-0">
         <div
-          className="grid grid-cols-7 border-l border-t border-white/10"
+          className="grid min-w-0 grid-cols-7 border-l border-t border-white/10"
+          role="group"
           aria-label={`${formatMonthTitle(year, month)}班表`}
         >
           {WEEKDAY_LABELS.map((label) => (
             <div
               key={label}
-              className="border-b border-r border-white/10 bg-white/[0.03] py-2 text-center text-[11px] font-semibold uppercase tracking-[0.18em] text-white/45"
+              className="min-w-0 border-b border-r border-white/10 bg-white/[0.03] py-1.5 text-center text-[10px] font-semibold uppercase tracking-[0.08em] text-white/45 md:py-2 md:text-[11px] md:tracking-[0.18em]"
             >
-              週{label}
+              <span aria-hidden className="md:hidden">
+                {label}
+              </span>
+              <span className="hidden md:inline">週{label}</span>
             </div>
           ))}
 
-          {days.map((day) => (
-            <div
-              key={day.date}
-              className={`relative min-h-[126px] border-b border-r border-white/10 p-2 ${
-                day.isToday
-                  ? "bg-cobalt/[0.14] ring-1 ring-inset ring-cobalt-bright/60"
-                  : day.inMonth
-                    ? "bg-ink-soft/40"
-                    : "bg-transparent"
-              }`}
-            >
-              <div className="flex items-baseline justify-between gap-1">
-                <span
-                  className={`text-[11px] font-bold tabular-nums ${
-                    day.isToday
-                      ? "text-vital-bright"
-                      : day.inMonth
-                        ? "text-white/70"
-                        : "text-white/25"
-                  }`}
-                >
-                  {Number(day.date.slice(8, 10))}
-                </span>
-                {day.isToday && (
-                  <span className="text-[9px] font-semibold uppercase tracking-[0.16em] text-vital-bright">
-                    今天
-                  </span>
-                )}
-              </div>
+          {days.map((day) => {
+            const interactive = day.inMonth && day.sessions.length > 0;
+            const extraBars = Math.max(day.sessions.length - MAX_BARS_MOBILE, 0);
 
-              <div className="mt-1.5 min-w-0 space-y-1">
-                {day.sessions.slice(0, MAX_PILLS).map((session) => (
-                  <SessionPill
-                    key={`${session.kind}-${session.id}`}
-                    session={session}
-                    onSelect={setSelected}
+            return (
+              <div
+                key={day.date}
+                className={`relative min-h-[56px] min-w-0 overflow-hidden border-b border-r border-white/10 p-1 md:min-h-[92px] md:p-1.5 lg:min-h-[126px] lg:p-2 ${
+                  day.isToday
+                    ? "bg-cobalt/[0.14] ring-1 ring-inset ring-cobalt-bright/60"
+                    : day.inMonth
+                      ? "bg-ink-soft/40"
+                      : "bg-transparent"
+                }`}
+              >
+                {/* 手機：整格是點擊區，蓋在內容上方（桌機隱藏，避免擋住 pill） */}
+                {interactive && (
+                  <button
+                    type="button"
+                    onClick={() => openDay(day)}
+                    aria-label={`${formatDayShort(day.date)}，${
+                      day.sessions.length
+                    } 個場次，點擊查看當日場次`}
+                    className="absolute inset-0 z-10 md:hidden"
                   />
-                ))}
-                {day.sessions.length > MAX_PILLS && (
-                  <div className="pl-1.5 text-[10px] font-semibold text-white/45">
-                    +{day.sessions.length - MAX_PILLS}
-                  </div>
                 )}
-              </div>
-            </div>
-          ))}
-        </div>
-      </div>
 
-      {/* ================= 手機：週檢視（無橫向捲動） ================= */}
-      <div className="mt-5 md:hidden">
-        <div className="flex items-center justify-between gap-2 border border-white/10 bg-white/[0.03] px-2 py-1.5">
-          <button
-            type="button"
-            onClick={() => setWeekIndex(safeWeekIndex - 1)}
-            disabled={safeWeekIndex <= 0}
-            aria-label="上一週"
-            className="inline-flex h-9 w-9 items-center justify-center border border-white/15 text-white/75 transition disabled:opacity-30"
-          >
-            <ChevronLeft size={16} />
-          </button>
-
-          <div className="min-w-0 flex-1 text-center">
-            <div className="truncate text-sm font-semibold text-white">
-              {formatWeekRange(currentWeek)}
-            </div>
-            <div className="text-[10px] uppercase tracking-[0.18em] text-white/40">
-              第 {safeWeekIndex + 1} / {weeks.length} 週
-            </div>
-          </div>
-
-          <button
-            type="button"
-            onClick={() => setWeekIndex(safeWeekIndex + 1)}
-            disabled={safeWeekIndex >= weeks.length - 1}
-            aria-label="下一週"
-            className="inline-flex h-9 w-9 items-center justify-center border border-white/15 text-white/75 transition disabled:opacity-30"
-          >
-            <ChevronRight size={16} />
-          </button>
-        </div>
-
-        <ul className="divide-y divide-white/10 border-x border-b border-white/10">
-          {currentWeek.map((day) => (
-            <li
-              key={day.date}
-              className={`flex items-start gap-3 px-3 py-2.5 ${
-                day.isToday ? "bg-cobalt/[0.14]" : day.inMonth ? "" : "opacity-45"
-              }`}
-            >
-              <div className="w-11 shrink-0 text-center">
-                <div className="text-[10px] font-semibold tracking-[0.16em] text-white/40">
-                  週{WEEKDAY_LABELS[isoWeekdayIndex(day.date)]}
+                <div className="flex items-baseline justify-between gap-1">
+                  <span
+                    className={`text-[13px] font-bold tabular-nums md:text-[11px] ${
+                      day.isToday
+                        ? "text-vital-bright"
+                        : day.inMonth
+                          ? "text-white/70"
+                          : "text-white/25"
+                    }`}
+                  >
+                    {Number(day.date.slice(8, 10))}
+                  </span>
+                  {day.isToday && (
+                    <span className="hidden text-[9px] font-semibold uppercase tracking-[0.16em] text-vital-bright md:inline">
+                      今天
+                    </span>
+                  )}
                 </div>
-                <div
-                  className={`text-base font-black tabular-nums ${
-                    day.isToday ? "text-vital-bright" : "text-white/85"
-                  }`}
-                >
-                  {Number(day.date.slice(8, 10))}
-                </div>
-              </div>
 
-              <div className="min-w-0 flex-1 space-y-1">
-                {day.sessions.length === 0 ? (
-                  <span className="text-[11px] text-white/30">—</span>
-                ) : (
-                  day.sessions.map((session) => (
+                {/* ---------- 手機：顏色短條，不顯示文字 ---------- */}
+                <div className="mt-1 space-y-[2px] md:hidden" aria-hidden>
+                  {day.sessions.slice(0, MAX_BARS_MOBILE).map((session) => (
+                    <span
+                      key={`${session.kind}-${session.id}`}
+                      className="block h-1 w-full rounded-[1px]"
+                      style={{ backgroundColor: sessionBarColor(session) }}
+                    />
+                  ))}
+                  {extraBars > 0 && (
+                    <span className="block text-[9px] font-semibold leading-none text-white/45">
+                      +{extraBars}
+                    </span>
+                  )}
+                </div>
+
+                {/* ---------- 平板：compact pill，最多 2 個 ---------- */}
+                <div className="mt-1.5 hidden min-w-0 space-y-1 md:block lg:hidden">
+                  {day.sessions.slice(0, MAX_PILLS_TABLET).map((session) => (
                     <SessionPill
                       key={`${session.kind}-${session.id}`}
                       session={session}
-                      onSelect={setSelected}
+                      compact
+                      onSelect={openSession}
                     />
-                  ))
-                )}
+                  ))}
+                  {day.sessions.length > MAX_PILLS_TABLET && (
+                    <div className="pl-1 text-[10px] font-semibold text-white/45">
+                      +{day.sessions.length - MAX_PILLS_TABLET}
+                    </div>
+                  )}
+                </div>
+
+                {/* ---------- 桌面：完整 pill，最多 3 個 ---------- */}
+                <div className="mt-1.5 hidden min-w-0 space-y-1 lg:block">
+                  {day.sessions.slice(0, MAX_PILLS_DESKTOP).map((session) => (
+                    <SessionPill
+                      key={`${session.kind}-${session.id}`}
+                      session={session}
+                      onSelect={openSession}
+                    />
+                  ))}
+                  {day.sessions.length > MAX_PILLS_DESKTOP && (
+                    <div className="pl-1.5 text-[10px] font-semibold text-white/45">
+                      +{day.sessions.length - MAX_PILLS_DESKTOP}
+                    </div>
+                  )}
+                </div>
               </div>
-            </li>
-          ))}
-        </ul>
+            );
+          })}
+        </div>
       </div>
 
-      <SessionDetailPanel session={selected} onClose={() => setSelected(null)} />
+      <SessionDetailPanel
+        day={activeDay}
+        session={selected}
+        onSelectSession={setSelected}
+        onBack={() => setSelected(null)}
+        onClose={closePanel}
+      />
     </div>
   );
+}
+
+/** 手機顏色短條的顏色：已取消 → 灰；付費 → 橙；其餘依課程色票 */
+function sessionBarColor(session: ScheduleSessionView): string {
+  if (session.status === "cancelled") return CANCELLED_HEX;
+  return session.paid ? PAID_HEX : colorHex(session.colorKey);
 }
 
 /**
  * 一個場次 pill：時間 + 課程名，左側顏色條依 class_color_key；
  * 付費場次整體轉橙並帶「付費」小標；已取消加刪除線並灰化（但仍可點開看原因）。
+ *
+ * `compact` 給平板用：字縮一級、去掉「付費／已取消」小標（那兩個字在這個
+ * 寬度會把課名擠掉），但仍保留左側色條與刪除線，狀態不會因此看不出來。
  */
 function SessionPill({
   session,
+  compact = false,
   onSelect,
 }: {
   session: ScheduleSessionView;
+  compact?: boolean;
   onSelect: (session: ScheduleSessionView) => void;
 }) {
   const cancelled = session.status === "cancelled";
-  const accent = session.paid ? PAID_HEX : colorHex(session.colorKey);
+  const accent = cancelled
+    ? CANCELLED_HEX
+    : session.paid
+      ? PAID_HEX
+      : colorHex(session.colorKey);
   const time = session.startTime ?? "待定";
 
   return (
@@ -243,22 +288,24 @@ function SessionPill({
       aria-label={`${formatDayShort(session.date)} ${time} ${session.title}${
         session.paid ? "，付費場次" : ""
       }${cancelled ? "，已取消" : ""}`}
-      className="flex w-full min-w-0 items-center gap-1.5 py-[3px] pl-1.5 pr-1 text-left transition hover:bg-white/[0.07]"
+      className={`flex w-full min-w-0 items-center gap-1.5 text-left transition hover:bg-white/[0.07] ${
+        compact ? "py-[2px] pl-1 pr-0.5" : "py-[3px] pl-1.5 pr-1"
+      }`}
       style={{
         backgroundColor: cancelled
           ? "color-mix(in srgb, #9ca3af 8%, transparent)"
           : `color-mix(in srgb, ${accent} 16%, transparent)`,
-        borderLeft: `3px solid ${cancelled ? "#6b7280" : accent}`,
+        borderLeft: `3px solid ${accent}`,
       }}
     >
       <span
-        className={`min-w-0 flex-1 truncate text-[11px] leading-[1.4] ${
-          cancelled ? "text-white/40 line-through" : "text-white/85"
-        }`}
+        className={`min-w-0 flex-1 truncate leading-[1.4] ${
+          compact ? "text-[10px]" : "text-[11px]"
+        } ${cancelled ? "text-white/40 line-through" : "text-white/85"}`}
       >
         <span className="tabular-nums">{time}</span> {session.title}
       </span>
-      {session.paid && !cancelled && (
+      {!compact && session.paid && !cancelled && (
         <span
           className="shrink-0 text-[9px] font-bold leading-none"
           style={{ color: accent }}
@@ -266,7 +313,7 @@ function SessionPill({
           付費
         </span>
       )}
-      {cancelled && (
+      {!compact && cancelled && (
         <span className="shrink-0 text-[9px] leading-none text-white/40">已取消</span>
       )}
     </button>
