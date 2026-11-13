@@ -695,6 +695,7 @@ async function copyMonth(
           message?: string;
           created?: number;
           skipped?: number;
+          conflicts?: number;
           from?: string;
           to?: string;
         })
@@ -711,6 +712,7 @@ async function copyMonth(
 
   const created = typeof result.created === "number" ? result.created : 0;
   const skipped = typeof result.skipped === "number" ? result.skipped : 0;
+  const conflicts = typeof result.conflicts === "number" ? result.conflicts : 0;
 
   revalidateTrainingSchedule();
   await writeAuditLog(
@@ -718,16 +720,20 @@ async function copyMonth(
     userId,
     "training",
     "copy",
-    `從 ${fromYear} 年 ${fromMonth} 月複製班表到 ${toYear} 年 ${toMonth} 月：新增 ${created} 場、略過 ${skipped} 場`
+    `從 ${fromYear} 年 ${fromMonth} 月複製班表到 ${toYear} 年 ${toMonth} 月：新增 ${created} 場、目標月沒有該日期 ${skipped} 場、已存在而略過 ${conflicts} 場`
   );
 
-  const skippedHint =
-    skipped > 0 ? `；有 ${skipped} 場因目標月沒有該日期（例如每月 31 日）而略過` : "";
+  /* 三種「沒新增」的原因要分開講，否則客戶重複按一次會看到「新增 0 場」而以為壞了 */
+  const reasons: string[] = [];
+  if (skipped > 0) reasons.push(`${skipped} 場因目標月沒有該日期（例如 31 日）而略過`);
+  if (conflicts > 0) reasons.push(`${conflicts} 場因目標月已有相同課程與時段而略過`);
+  const tail = reasons.length > 0 ? `；${reasons.join("、")}` : "";
 
   return jsonOk({
-    message: `已從 ${fromYear} 年 ${fromMonth} 月複製到 ${toYear} 年 ${toMonth} 月：新增 ${created} 場${skippedHint}。`,
+    message: `已從 ${fromYear} 年 ${fromMonth} 月複製到 ${toYear} 年 ${toMonth} 月：新增 ${created} 場${tail}。`,
     created,
     skipped,
+    conflicts,
     from: result.from ?? `${fromYear}-${String(fromMonth).padStart(2, "0")}`,
     to: result.to ?? `${toYear}-${String(toMonth).padStart(2, "0")}`,
   });

@@ -196,6 +196,8 @@ create index if not exists idx_sessions_date_status
 --       · starts_at / ends_at 依目標日期重算（帶 Asia/Macau 語義，
 --         不沿用來源的 timestamptz，否則日期會是錯的）
 --       · on conflict do nothing ⇒ 同一個目標月重複複製不會產生重複場次
+--       · 回傳 created（真的新增的）／skipped（目標月沒有該日號）／
+--         conflicts（目標月已有同課同日同時段）。三者相加＝來源月未取消的場次數。
 -- ------------------------------------------------------------
 create or replace function public.copy_month_sessions(
   p_from_year  integer,
@@ -223,6 +225,8 @@ declare
   v_end_at      timestamptz;
   v_created     integer := 0;
   v_skipped     integer := 0;
+  v_candidates  integer := 0;
+  v_conflict    integer := 0;
   v_rows        integer;
 begin
   -- 權限：管理員或 service_role；其他一律拒絕（含 anon / 普通會員）
@@ -285,6 +289,7 @@ begin
     end if;
 
     v_target_date := make_date(p_to_year, p_to_month, v_dom);
+    v_candidates  := v_candidates + 1;
 
     -- 時間沿用：優先 start_time（time 欄位），舊資料沒有 start_time 才用 starts_at 反推
     v_start_time := coalesce(v_src.start_time, (v_src.starts_at at time zone 'Asia/Macau')::time);
@@ -332,10 +337,17 @@ begin
     v_created := v_created + v_rows;
   end loop;
 
+  -- 目標月已有同課同日同時段的場次時，on conflict do nothing 不會新增也不會拋錯，
+  -- 這種「因重複而略過」與「因目標月沒有該日號而略過」是兩件事，
+  -- 後台要能分別顯示，否則客戶重複按一次「複製」會看到 created=0/skipped=0，
+  -- 誤以為功能壞了。
+  v_conflict := v_candidates - v_created;
+
   return jsonb_build_object(
     'ok', true,
     'created', v_created,
     'skipped', v_skipped,
+    'conflicts', v_conflict,
     'from', v_from_label,
     'to', v_to_label
   );
