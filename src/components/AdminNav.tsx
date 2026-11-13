@@ -10,6 +10,7 @@ import {
   Dumbbell,
   FileText,
   Gift,
+  Images,
   LayoutDashboard,
   Palette,
   ScrollText,
@@ -35,6 +36,7 @@ const LINKS = [
   { href: "/admin/merchants", label: "商戶管理", icon: Store },
   { href: "/admin/point-rules", label: "積分規則", icon: SlidersHorizontal },
   { href: "/admin/content", label: "網站內容", icon: FileText },
+  { href: "/admin/slides", label: "首頁輪播", icon: Images },
   { href: "/admin/audit-log", label: "操作紀錄", icon: ScrollText },
   { href: "/admin/site-settings", label: "網站設定", icon: Palette },
 ];

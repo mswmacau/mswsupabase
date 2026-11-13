@@ -12,6 +12,9 @@ import {
 } from "lucide-react";
 import { BrandIntro } from "@/components/BrandIntro";
 import { HeroVisual } from "@/components/HeroVisual";
+/* 首頁圖片輪播：資料由後台 /admin/slides 維護（表 public.home_slides） */
+import { SlideCarousel } from "@/components/home/SlideCarousel";
+import { getActiveSlides } from "@/lib/home-slides";
 import {
   getCachedMonthlyLeaderboard,
   getCachedSiteStats,
@@ -112,7 +115,7 @@ export default async function HomePage() {
   const month = currentMonth();
   // T-5 / T-20：首頁文案與區塊設定改讀 DB（site_content / site_blocks），
   // DB 無值時回落 DEFAULT_*（逐字等於原有硬編碼，沙箱渲染與基線一致）。
-  const [stats, sessions, leaders, profile, theme, content, blocks] =
+  const [stats, sessions, leaders, profile, theme, content, blocks, slides] =
     await Promise.all([
       getCachedSiteStats(),
       getCachedUpcomingSessions(3),
@@ -121,6 +124,7 @@ export default async function HomePage() {
       getSiteTheme(),
       getSiteContent(),
       getSiteBlocks(),
+      getActiveSlides(),
     ]);
 
   const nextSession = sessions[0] ?? null;
@@ -790,7 +794,13 @@ export default async function HomePage() {
 
       {/* T-20：依 site_blocks 的 visible / order 渲染（預設順序 = 現行版面） */}
       {orderedBlocks.map((b) => (
-        <Fragment key={b.id}>{sections[b.id]}</Fragment>
+        <Fragment key={b.id}>
+          {sections[b.id]}
+          {/* 首頁輪播：緊貼 hero 之後、數據帶之前。
+              用 b.id === "hero" 判斷，後台調區塊順序時輪播仍然跟在 hero 後。
+              slides 為空時 SlideCarousel 自己回 null，不會留空白區塊。 */}
+          {b.id === "hero" && <SlideCarousel slides={slides} />}
+        </Fragment>
       ))}
     </>
   );
