@@ -19,8 +19,10 @@ import { CategoryCards } from "./_components/CategoryCards";
 import { ScheduleCalendar } from "@/components/schedule/ScheduleCalendar";
 import {
   buildMonthDays,
+  formatDayLong,
   formatMonthTitle,
   macauTodayISO,
+  sessionPhase,
   sortSessionViews,
   type ScheduleCta,
   type ScheduleSessionView,
@@ -87,13 +89,30 @@ function monthHref(ym: YearMonth): string {
   return `/events?y=${ym.year}&m=${ym.month}`;
 }
 
-/** `?y=2026&m=11` → { year, month }；非法或超出範圍回 null（不 throw） */
-function parseYearMonth(
-  y: string | string[] | undefined,
-  m: string | string[] | undefined
-): YearMonth | null {
-  const rawY = Array.isArray(y) ? y[0] : y;
-  const rawM = Array.isArray(m) ? m[0] : m;
+/** 月份查詢參數：`?y=2026&m=11`（或等價的 `?month=2026-11`） */
+type MonthParams = {
+  y?: string | string[];
+  m?: string | string[];
+  month?: string | string[];
+};
+
+/**
+ * `?y=2026&m=11` 或 `?month=2026-11` → { year, month }；
+ * 非法或超出範圍回 null（不 throw）。
+ *
+ * 兩種寫法都吃：稽核時用 `?month=2026-12` 手動改網址完全沒反應，
+ * 因為舊版只讀 y/m。舊連結（y/m）仍優先，新寫法只當別名。
+ */
+function parseYearMonth(params: MonthParams): YearMonth | null {
+  const pick = (v: string | string[] | undefined) =>
+    Array.isArray(v) ? v[0] : v;
+
+  const rawMonth = pick(params.month);
+  const alias =
+    rawMonth && /^\d{4}-\d{1,2}$/.test(rawMonth) ? rawMonth : null;
+
+  const rawY = alias ? alias.slice(0, 4) : pick(params.y);
+  const rawM = alias ? alias.slice(5) : pick(params.m);
   if (!rawY || !rawM) return null;
 
   const year = Number(rawY);
@@ -105,8 +124,13 @@ function parseYearMonth(
 }
 
 /** 班表堂 → 日曆/面板要的形狀 */
-function sessionToView(row: TrainingSessionRow): ScheduleSessionView {
+function sessionToView(
+  row: TrainingSessionRow,
+  todayISO: string
+): ScheduleSessionView {
   const cancelled = row.status === "cancelled";
+  // 已過的場次不改寫成「可報名」：CTA 換成介紹頁，徽章由面板依 phase 顯示「已結束」
+  const past = sessionPhase(row.session_date, todayISO) === "past";
   return {
     id: row.id,
     kind: "class",
@@ -123,7 +147,11 @@ function sessionToView(row: TrainingSessionRow): ScheduleSessionView {
     status: row.status,
     paid: false,
     feeCents: null,
-    cta: cancelled ? null : { label: "查看定期訓練", href: "/training" },
+    cta: cancelled
+      ? null
+      : past
+        ? { label: "查看定期訓練介紹", href: "/training" }
+        : { label: "查看定期訓練", href: "/training" },
   };
 }
 
@@ -147,7 +175,8 @@ function hyroxToView(
 
   let cta: ScheduleCta | null;
   if (isPast) {
-    cta = { label: "查看活動詳情", href: `/hyrox/${event.id}` };
+    // 已結束的付費場：不給報名 CTA，改成回顧頁（該頁自己會寫「已結束」）
+    cta = { label: "查看活動回顧", href: `/hyrox/${event.id}` };
   } else if (isLoggedIn) {
     cta = { label: "立即報名", href: registerHref };
   } else {
@@ -178,7 +207,7 @@ function hyroxToView(
 export default async function EventsPage({
   searchParams,
 }: {
-  searchParams: Promise<{ y?: string | string[]; m?: string | string[] }>;
+  searchParams: Promise<MonthParams>;
 }) {
   const params = await searchParams;
 
@@ -201,7 +230,7 @@ export default async function EventsPage({
   // getAvailableMonths() 回升冪，最後一個就是最新已發布月份
   const latest = months.length > 0 ? months[months.length - 1] : null;
 
-  const requested = parseYearMonth(params.y, params.m);
+  const requested = parseYearMonth(params);
   const requestedAvailable =
     requested && months.some((m) => sameMonth(m, requested)) ? requested : null;
 
@@ -230,7 +259,7 @@ export default async function EventsPage({
   const isLoggedIn = Boolean(profile);
 
   const sessionViews: ScheduleSessionView[] = (schedule?.sessions ?? []).map(
-    sessionToView
+    (row) => sessionToView(row, todayISO)
   );
   const hyroxViews: ScheduleSessionView[] = hyroxInMonth.map((e) =>
     hyroxToView(e, todayISO, isLoggedIn)
@@ -270,6 +299,17 @@ export default async function EventsPage({
     .sort((a, b) => (a.year !== b.year ? b.year - a.year : b.month - a.month));
 
   const totalCount = schedule ? allViews.length : 0;
+
+  /**
+   * Hero 右欄的「下一場」：days 本身按日期有序（buildMonthDays 逐格產生），
+   * 取第一個不早於今天、且未取消的場次。用 days 而不是 allViews——
+   * allViews 只按「當天的時間」排序，跨日期沒有保證。
+   */
+  const nextUp =
+    days
+      .flatMap((day) => day.sessions)
+      .find((session) => session.date >= todayISO && session.status !== "cancelled") ??
+    null;
 
   return (
     <>
@@ -318,31 +358,38 @@ export default async function EventsPage({
                   —— 想練的、想報的、想累積的，都在這一頁排好時間。
                 </p>
 
-                <div className="lg:col-span-5 lg:col-start-8 lg:border-l lg:border-white/10 lg:pl-8">
+                {/* Hero 右欄：只講「下一場」。
+                    這裡以前也掛「班表日曆」標題 + 本月場次總數，跟下方日曆區
+                    的 h2 與月切換列的「共 N 場」講同一件事，已改成不同用途。 */}
+                <div className="min-w-0 lg:col-span-5 lg:col-start-8 lg:border-l lg:border-white/10 lg:pl-8">
                   <div className="text-[11px] font-semibold uppercase tracking-[0.22em] text-white/55">
-                    班表日曆
+                    Next Session
                   </div>
                   <div className="mt-4 flex flex-wrap items-end gap-x-3 gap-y-1">
                     <span className="stat-figure text-5xl leading-none text-white md:text-6xl">
-                      {display
-                        ? `${display.year}.${pad2(display.month)}`
+                      {nextUp
+                        ? `${Number(nextUp.date.slice(5, 7))}.${nextUp.date.slice(
+                            8,
+                            10
+                          )}`
                         : "—"}
                     </span>
                     <span className="text-accent-blue mb-2 text-[11px] font-semibold uppercase tracking-[0.22em]">
-                      {display && sameMonth(display, today)
-                        ? "Current Month"
-                        : "Latest Published"}
+                      {nextUp ? (nextUp.startTime ?? "時間待定") : "To Be Announced"}
                     </span>
                   </div>
+                  {nextUp && (
+                    <div className="mt-3 min-w-0 truncate text-sm font-semibold text-white/85">
+                      {nextUp.title}
+                    </div>
+                  )}
                   <div className="mt-5 h-px w-16 bg-white/20" />
                   <p className="mt-5 text-sm leading-relaxed text-white/65">
-                    {schedule
-                      ? `本月共 ${totalCount} 個場次已上架${
-                          hyroxViews.length > 0
-                            ? `，其中 ${hyroxViews.length} 場為付費 HYROX`
-                            : ""
-                        }。點日曆上的場次看詳情。`
-                      : "本月班表尚未公布。班表由館方逐月建立與上架，公布後會出現在下方日曆。"}
+                    {nextUp
+                      ? `下一場是 ${formatDayLong(nextUp.date)}。點下方日曆看整月場次與報名方式。`
+                      : schedule
+                        ? "本月場次已全部結束，往期班表可在下方查看。"
+                        : "本月班表尚未公布。班表由館方逐月建立與上架，公布後會出現在下方日曆。"}
                   </p>
                 </div>
               </div>
@@ -434,26 +481,35 @@ export default async function EventsPage({
             </p>
           </div>
 
-          {/* 月份切換：只能走「已發布且已生效」的月份 */}
-          <div className="mt-8 flex flex-wrap items-center gap-x-4 gap-y-3 border-y border-white/10 py-3">
+          {/* 月份切換：只能走「已發布且已生效」的月份（getAvailableMonths）。
+              不可切時渲染 disabled 的 <button>，不要用 <span>——span 看起來像按鈕
+              但不在 Tab 順序、點不動，會被正確地判定成壞掉的控制項。 */}
+          <div
+            role="group"
+            aria-label="切換班表月份"
+            className="mt-8 flex flex-wrap items-center gap-x-4 gap-y-3 border-y border-white/10 py-3"
+          >
             {prevMonth ? (
               <Link
                 href={monthHref(prevMonth)}
                 scroll={false}
-                className="inline-flex min-h-9 items-center gap-1 border border-white/15 px-3 text-xs font-semibold text-white/75 transition hover:border-white/40 hover:text-white"
+                className="inline-flex min-h-11 shrink-0 cursor-pointer items-center gap-1 border border-white/15 px-4 text-xs font-semibold text-white/75 transition hover:border-white/40 hover:bg-white/[0.06] hover:text-white focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-vital-bright"
               >
                 <ChevronLeft size={14} /> 上一月
               </Link>
             ) : (
-              <span
+              <button
+                type="button"
+                disabled
                 aria-disabled="true"
-                className="inline-flex min-h-9 items-center gap-1 border border-white/10 px-3 text-xs font-semibold text-white/25"
+                title="沒有更早的已發布月份"
+                className="inline-flex min-h-11 shrink-0 cursor-not-allowed items-center gap-1 border border-white/10 px-4 text-xs font-semibold text-white/25"
               >
                 <ChevronLeft size={14} /> 上一月
-              </span>
+              </button>
             )}
 
-            <div className="min-w-0 flex-1 text-center">
+            <div className="min-w-0 flex-1 text-center" aria-live="polite">
               <div className="truncate text-sm font-black tracking-tight text-white">
                 {display ? formatMonthTitle(display.year, display.month) : "尚未上架"}
               </div>
@@ -470,17 +526,20 @@ export default async function EventsPage({
               <Link
                 href={monthHref(nextMonth)}
                 scroll={false}
-                className="inline-flex min-h-9 items-center gap-1 border border-white/15 px-3 text-xs font-semibold text-white/75 transition hover:border-white/40 hover:text-white"
+                className="inline-flex min-h-11 shrink-0 cursor-pointer items-center gap-1 border border-white/15 px-4 text-xs font-semibold text-white/75 transition hover:border-white/40 hover:bg-white/[0.06] hover:text-white focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-vital-bright"
               >
                 下一月 <ChevronRight size={14} />
               </Link>
             ) : (
-              <span
+              <button
+                type="button"
+                disabled
                 aria-disabled="true"
-                className="inline-flex min-h-9 items-center gap-1 border border-white/10 px-3 text-xs font-semibold text-white/25"
+                title="下一個月班表尚未發布"
+                className="inline-flex min-h-11 shrink-0 cursor-not-allowed items-center gap-1 border border-white/10 px-4 text-xs font-semibold text-white/25"
               >
                 下一月 <ChevronRight size={14} />
-              </span>
+              </button>
             )}
           </div>
 
@@ -529,6 +588,7 @@ export default async function EventsPage({
                 month={display.month}
                 days={days}
                 legend={legend}
+                todayISO={todayISO}
               />
             </div>
           ) : (

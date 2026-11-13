@@ -48,15 +48,15 @@ export const RULES = {
   MONTHLY_GOAL_KM: 300,
   /** 單次提交上限（防誤填，與 DB check 約束一致） */
   MAX_KM_PER_SUBMISSION: 200,
-  /** 訓練時間（週期規則的預設值） */
-  TRAINING_WEEKDAY: 1, // 星期一
   /**
-   * ⚠️ 只能用於「介紹性文案」（首頁 Program 01 卡、/training 頁的每週固定敘述）。
-   * 「下一場是哪一場、幾點」一律讀 getNextSession()（src/lib/queries.ts）
-   * 與 training_sessions 的 start_time / end_time——用這個常數顯示事實性時間
-   * 會出現舊的 20:00 – 21:00 假時間（實際班表已非單一時段）。
+   * 週期規則的預設星期（後台「新增規則」表單的預設值，不是對外文案）。
+   *
+   * 這裡刻意**沒有**「預設訓練時間」常數：實際班表是多時段（週一 06:30／19:00／
+   * 19:30、週二 20:00、週四 19:00／20:00／21:10、週六 19:00），
+   * 任何硬編碼的單一時間都會跟班表打架。對外文案一律寫「時間見班表」；
+   * 要顯示事實性時間就讀 getNextSession() 與 training_sessions 的 start_time。
    */
-  TRAINING_TIME: "20:00 – 21:00",
+  TRAINING_WEEKDAY: 1, // 星期一
   /**
    * 使用者在瀏覽器選的「原檔」上限（僅前端提示用，檔案不會經過伺服器）。
    * 改名自 MAX_UPLOAD_MB（8）：改走瀏覽器直傳後不再受 Vercel 4.5MB 限制。

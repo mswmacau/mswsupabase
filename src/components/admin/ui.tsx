@@ -221,8 +221,11 @@ export function ConfirmDialog({
       dismissible={!pending}
       footer={
         <>
+          {/* data-autofocus：useOverlay 會優先聚焦這個鍵，讓危險操作預設焦點
+              落在「取消」而不是確認鍵 */}
           <button
             type="button"
+            data-autofocus
             onClick={onCancel}
             disabled={pending}
             className="btn-base btn-ghost"

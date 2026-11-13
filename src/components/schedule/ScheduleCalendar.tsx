@@ -32,7 +32,10 @@ const CANCELLED_HEX = "#6b7280";
  *   桌面（≥1024）  格子顯示 pill：`19:00 街健基礎力量`，最多 3 個，超過 +N
  *   平板（768–1023）pill 只顯示時間 + 課名、字縮小，最多 2 個，超過 +N
  *   手機（<768）   格子至少 56px 高；每場只畫一條高 4px、滿格的顏色短條，
- *                  不寫任何文字；超過 3 場顯示 +N。整格可點 → 當日清單。
+ *                  不寫任何文字；超過 3 場顯示 +N。
+ *
+ * 點擊行為三個斷點一致：整格都有一層 inset-0 的按鈕，點格子任何非 pill 的位置
+ * （含 `+N`）→ 開當日場次清單；pill 本身（z-20）→ 直接開單場詳情。
  *
  * 手機不放課名的原因很實際：390 寬 ÷ 7 欄 ≈ 52px，任何課名都會被截成
  * 「街健基…」這種看不懂的東西。顏色短條 + 上方圖例才是能讀的版本。
@@ -48,12 +51,15 @@ export function ScheduleCalendar({
   month,
   days,
   legend,
+  todayISO,
 }: {
   year: number;
   month: number;
   days: ScheduleDay[];
   /** 顏色圖例（後台可編輯）；空陣列 = 整段不顯示 */
   legend: ScheduleLegendItem[];
+  /** Asia/Macau 的今天（server 算好傳入），詳情面板據此判斷已結束／今天／可報名 */
+  todayISO: string;
 }) {
   /** 手機第一層：哪一天被打開 */
   const [dayKey, setDayKey] = useState<string | null>(null);
@@ -155,7 +161,10 @@ export function ScheduleCalendar({
                       : "bg-transparent"
                 }`}
               >
-                {/* 手機：整格是點擊區，蓋在內容上方（桌機隱藏，避免擋住 pill） */}
+                {/* 整格是點擊區，**所有斷點都掛**（原本只有 md:hidden，導致
+                    768–1023px 既吃不到手機點擊層、pill 又被 container 擋住，
+                    第 3 堂之後完全點不開）。手機靠它開當日清單；平板／桌面
+                    點 pill 以外的地方（含 +N、日期數字、空白）也走這裡。 */}
                 {interactive && (
                   <button
                     type="button"
@@ -163,7 +172,7 @@ export function ScheduleCalendar({
                     aria-label={`${formatDayShort(day.date)}，${
                       day.sessions.length
                     } 個場次，點擊查看當日場次`}
-                    className="absolute inset-0 z-10 md:hidden"
+                    className="absolute inset-0 z-10 cursor-pointer"
                   />
                 )}
 
@@ -202,8 +211,10 @@ export function ScheduleCalendar({
                   )}
                 </div>
 
-                {/* ---------- 平板：compact pill，最多 2 個 ---------- */}
-                <div className="mt-1.5 hidden min-w-0 space-y-1 md:block lg:hidden">
+                {/* ---------- 平板：compact pill，最多 2 個 ----------
+                    容器 pointer-events-none：只有 pill 本身吃點擊，
+                    其餘區域（含 +N）穿透到下面的整格按鈕 → 開當日清單 */}
+                <div className="pointer-events-none relative z-20 mt-1.5 hidden min-w-0 space-y-1 md:block lg:hidden">
                   {day.sessions.slice(0, MAX_PILLS_TABLET).map((session) => (
                     <SessionPill
                       key={`${session.kind}-${session.id}`}
@@ -213,14 +224,21 @@ export function ScheduleCalendar({
                     />
                   ))}
                   {day.sessions.length > MAX_PILLS_TABLET && (
-                    <div className="pl-1 text-[10px] font-semibold text-white/45">
+                    <button
+                      type="button"
+                      onClick={() => openDay(day)}
+                      aria-label={`還有 ${
+                        day.sessions.length - MAX_PILLS_TABLET
+                      } 個場次，點擊看當日全部場次`}
+                      className="pointer-events-auto block w-full cursor-pointer pl-1 text-left text-[10px] font-semibold text-white/45 transition hover:text-white"
+                    >
                       +{day.sessions.length - MAX_PILLS_TABLET}
-                    </div>
+                    </button>
                   )}
                 </div>
 
                 {/* ---------- 桌面：完整 pill，最多 3 個 ---------- */}
-                <div className="mt-1.5 hidden min-w-0 space-y-1 lg:block">
+                <div className="pointer-events-none relative z-20 mt-1.5 hidden min-w-0 space-y-1 lg:block">
                   {day.sessions.slice(0, MAX_PILLS_DESKTOP).map((session) => (
                     <SessionPill
                       key={`${session.kind}-${session.id}`}
@@ -229,9 +247,16 @@ export function ScheduleCalendar({
                     />
                   ))}
                   {day.sessions.length > MAX_PILLS_DESKTOP && (
-                    <div className="pl-1.5 text-[10px] font-semibold text-white/45">
+                    <button
+                      type="button"
+                      onClick={() => openDay(day)}
+                      aria-label={`還有 ${
+                        day.sessions.length - MAX_PILLS_DESKTOP
+                      } 個場次，點擊看當日全部場次`}
+                      className="pointer-events-auto block w-full cursor-pointer pl-1.5 text-left text-[10px] font-semibold text-white/45 transition hover:text-white"
+                    >
                       +{day.sessions.length - MAX_PILLS_DESKTOP}
-                    </div>
+                    </button>
                   )}
                 </div>
               </div>
@@ -243,6 +268,7 @@ export function ScheduleCalendar({
       <SessionDetailPanel
         day={activeDay}
         session={selected}
+        todayISO={todayISO}
         onSelectSession={setSelected}
         onBack={() => setSelected(null)}
         onClose={closePanel}
@@ -288,7 +314,7 @@ function SessionPill({
       aria-label={`${formatDayShort(session.date)} ${time} ${session.title}${
         session.paid ? "，付費場次" : ""
       }${cancelled ? "，已取消" : ""}`}
-      className={`flex w-full min-w-0 items-center gap-1.5 text-left transition hover:bg-white/[0.07] ${
+      className={`pointer-events-auto flex w-full min-w-0 cursor-pointer items-center gap-1.5 text-left transition hover:bg-white/[0.07] ${
         compact ? "py-[2px] pl-1 pr-0.5" : "py-[3px] pl-1.5 pr-1"
       }`}
       style={{

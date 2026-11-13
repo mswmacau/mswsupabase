@@ -89,6 +89,7 @@ export function ScheduleManager({
   const [deleting, setDeleting] = useState(false);
   const [deleteError, setDeleteError] = useState<string | null>(null);
   const [unpublishOpen, setUnpublishOpen] = useState(false);
+  const [copyOpen, setCopyOpen] = useState(false);
 
   const monthKey = useMemo(
     () => `${cursor.year}-${pad2(cursor.month)}`,
@@ -226,6 +227,32 @@ export function ScheduleManager({
     }
   }
 
+  /**
+   * 「複製上月」是**寫入**操作（一次新增整月場次），卻原本按下即發 POST，
+   * 而可逆的「取消發布」反而有確認框——守衛放反了。
+   * 這裡只負責開框與前置檢查；真正的請求仍走 handleCopy()。
+   */
+  function openCopyConfirm() {
+    if (pending) return;
+
+    const from = shiftMonth(cursor, -1);
+    const fromInfo = months?.find(
+      (m) => m.year === from.year && m.month === from.month
+    );
+
+    if (fromInfo && fromInfo.sessions_count === 0) {
+      setNotice(null);
+      setActionError(
+        `${from.year} 年 ${from.month} 月沒有場次可複製。可以先切到該月建立，或在本月逐場手動新增。`
+      );
+      return;
+    }
+
+    setActionError(null);
+    setNotice(null);
+    setCopyOpen(true);
+  }
+
   async function handleCopy() {
     if (pending) return;
 
@@ -342,6 +369,9 @@ export function ScheduleManager({
     (m) => m.year === cursor.year && m.month === cursor.month
   );
   const prevMonth = shiftMonth(cursor, -1);
+  const prevMonthInfo = months?.find(
+    (m) => m.year === prevMonth.year && m.month === prevMonth.month
+  );
   const canPrev = cursor.year > 2024 || cursor.month > 1;
   const canNext = cursor.year < 2100 || cursor.month < 12;
 
@@ -375,7 +405,7 @@ export function ScheduleManager({
         onNext={() => gotoMonth(1)}
         onPublish={() => handlePublish("publish")}
         onUnpublish={() => setUnpublishOpen(true)}
-        onCopy={handleCopy}
+        onCopy={openCopyConfirm}
       />
 
       {/* 顏色圖例：前台手機月曆靠它解釋顏色，標籤在這裡改 */}
@@ -520,6 +550,37 @@ export function ScheduleManager({
           onConfirm={() => {
             setUnpublishOpen(false);
             void handlePublish("unpublish");
+          }}
+        />
+      )}
+
+      {/* 複製上月：寫入前先確認，數字要講清楚（來源月、目標月、幾場） */}
+      {copyOpen && (
+        <ConfirmDialog
+          title={`複製 ${prevMonth.year} 年 ${prevMonth.month} 月班表到 ${cursor.year} 年 ${cursor.month} 月？`}
+          description={
+            <div className="space-y-2">
+              <p className="font-semibold text-white">
+                {prevMonthInfo
+                  ? `將從 ${prevMonth.year} 年 ${prevMonth.month} 月複製 ${prevMonthInfo.sessions_count} 場到 ${cursor.year} 年 ${cursor.month} 月，重複的會略過。確定？`
+                  : `將從 ${prevMonth.year} 年 ${prevMonth.month} 月複製場次到 ${cursor.year} 年 ${cursor.month} 月，重複的會略過。該月目前沒有場次紀錄，可能複製不到東西。確定？`}
+              </p>
+              <p className="text-white/70">
+                複製只會新增目標月還缺的場次，不會覆蓋或刪除本月現有場次；目標月沒有對應日期（例如 31 號）的場次會略過。
+              </p>
+            </div>
+          }
+          confirmLabel="確定複製"
+          tone="warn"
+          pending={pending === "copy"}
+          error={null}
+          onCancel={() => {
+            if (pending === "copy") return;
+            setCopyOpen(false);
+          }}
+          onConfirm={() => {
+            setCopyOpen(false);
+            void handleCopy();
           }}
         />
       )}

@@ -275,7 +275,7 @@ export default async function DashboardPage() {
             href="/training"
             icon={<CalendarDays size={18} />}
             title="定期訓練"
-            desc="報名週一場次"
+            desc="報名近期場次"
           />
           <QuickLink
             href="/dashboard/coupons"

@@ -212,9 +212,50 @@ export function colorHex(key: string | null): string {
  */
 export const PAID_HEX = "#F9761F";
 
-/** 場次狀態 → 面板徽章文字 */
-export function statusText(status: ScheduleStatus): string {
+/** 場次相對「今天」的位置 */
+export type SessionPhase = "past" | "today" | "future";
+
+/**
+ * 場次日期相對今天的位置。
+ *
+ * 只用 'YYYY-MM-DD' 字串比較（字典序 = 時間序），**不碰 Date**：
+ * `todayISO` 一律由 Server Component 用 `macauTodayISO()` 算好傳進來。
+ * 若在 client 讀 `new Date()`，瀏覽器時區（例如使用者在倫敦）會讓
+ * 11/12 的場次在澳門已經是「已結束」時仍顯示「可報名」。
+ */
+export function sessionPhase(dateISO: string, todayISO: string): SessionPhase {
+  if (!dateISO || !todayISO) return "future";
+  if (dateISO < todayISO) return "past";
+  if (dateISO === todayISO) return "today";
+  return "future";
+}
+
+/**
+ * 場次狀態 → 面板徽章文字。
+ *
+ * `phase` 是「相對今天的時間位置」，不是資料庫狀態：日期已過的場次即使
+ * status 仍是 open，也不能寫「可報名」——點進去只會看到活動已完結的頁面。
+ */
+export function statusText(
+  status: ScheduleStatus,
+  phase: SessionPhase = "future"
+): string {
   if (status === "cancelled") return "已取消";
   if (status === "closed") return "已滿";
+  if (phase === "past") return "已結束";
+  if (phase === "today") return "今天";
   return "可報名";
+}
+
+/** 徽章配色：已取消／已結束灰、今天 vital、已滿琥珀、可報名翠綠 */
+export function statusBadgeClass(
+  status: ScheduleStatus,
+  phase: SessionPhase = "future"
+): string {
+  if (status === "cancelled" || phase === "past") {
+    return "border-white/20 bg-white/5 text-white/60";
+  }
+  if (phase === "today") return "border-vital/50 bg-vital/15 text-vital-bright";
+  if (status === "closed") return "border-amber-500/40 bg-amber-500/10 text-amber-300";
+  return "border-emerald-500/40 bg-emerald-500/10 text-emerald-300";
 }

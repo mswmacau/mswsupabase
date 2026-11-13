@@ -55,13 +55,6 @@ import { Countdown } from "@/components/fx/home/Countdown";
 
 export const dynamic = "force-dynamic";
 
-/**
- * 訓練開始時間（"20:00 – 21:00" → "20:00"），只給 Program 01 介紹卡的
- * 大字排版用（那是「每週固定訓練」的介紹性文案，不是「下一場幾點」）。
- * 「下一場是哪一場、幾點」一律讀 getNextSession()，不要用這裡的值。
- */
-const TRAINING_START = (RULES.TRAINING_TIME.split("–")[0] ?? "").trim();
-
 const TRAINING_ROWS = [
   { icon: <Timer size={15} />, text: "每週固定，可隨時報名當週場次" },
   { icon: <Medal size={15} />, text: `簽到一次 +${RULES.CHECKIN_POINTS} 分` },
@@ -471,27 +464,22 @@ export default async function HomePage() {
 
             <div className="mt-8 flex flex-wrap items-end gap-x-6 gap-y-2">
               <span className="stat-figure text-6xl leading-none text-white md:text-7xl">
-                MON
+                WEEKLY
               </span>
               <span className="stat-figure text-outline text-5xl leading-none md:text-6xl">
-                {TRAINING_START}
+                多時段
               </span>
-              <span className="mb-2 text-sm text-white/55">
-                – {RULES.TRAINING_TIME.split("–")[1]?.trim()} · 澳門街健館
-              </span>
+              <span className="mb-2 text-sm text-white/55">· 澳門街健館</span>
             </div>
 
             <h3 className="mt-8 text-2xl font-black tracking-tight md:text-3xl">
               定期訓練活動
             </h3>
             <p className="mt-3 max-w-lg text-sm leading-relaxed text-white/70">
-              逢
-              <span className="font-semibold text-white">星期一</span>{" "}
-              <span className="font-semibold text-vital-bright">
-                {RULES.TRAINING_TIME}
-              </span>
+              每週多堂，時間與教練
+              <span className="font-semibold text-white">見班表</span>
               ，於澳門街健館進行團體街頭健身訓練。現場簽到，後台確認後即可獲得{" "}
-              <span className="font-semibold text-white">
+              <span className="font-semibold text-vital-bright">
                 {RULES.CHECKIN_POINTS} 積分
               </span>
               。

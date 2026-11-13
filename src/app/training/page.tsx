@@ -25,14 +25,10 @@ export async function generateMetadata(): Promise<Metadata> {
 
 export const dynamic = "force-dynamic";
 
-/** 訓練開始 / 結束時間（"20:00 – 21:00" → "20:00" / "21:00"） */
-const TRAINING_START = RULES.TRAINING_TIME.split("–")[0].trim();
-const TRAINING_END = RULES.TRAINING_TIME.split("–")[1]?.trim() ?? "";
-
-/** 跑馬燈：接續首頁語言，全大寫寬字距 */
+/** 跑馬燈：接續首頁語言，全大寫寬字距。不放具體時間——班表是多時段 */
 const MARQUEE_ITEMS = [
   "Street Workout",
-  `Mon ${TRAINING_START}`,
+  "Weekly Sessions",
   `+${RULES.CHECKIN_POINTS} Points / Session`,
   "澳門 Macau",
   "All Levels Welcome",
@@ -42,8 +38,13 @@ const MARQUEE_ITEMS = [
 /** Hero 數字三聯：大數字主導，不用小圖標堆砌（「簽到一次入帳」讀 site_pages.training） */
 function heroFacts(t: SitePageTraining) {
   return [
-    { value: "01", unit: "Day / Week", label: "每週固定訓練日", accent: false },
-    { value: TRAINING_START, unit: `To ${TRAINING_END}`, label: "訓練時段", accent: false },
+    { value: "01", unit: "Program", label: "每週定期訓練", accent: false },
+    {
+      value: "多時段",
+      unit: "Per Week",
+      label: "每週場次，時間見班表",
+      accent: false,
+    },
     {
       value: `+${RULES.CHECKIN_POINTS}`,
       unit: "Points",
@@ -125,10 +126,8 @@ export default async function TrainingPage() {
 
               <div className="mt-10 grid gap-10 lg:grid-cols-12 lg:gap-8">
                 <p className="text-base leading-relaxed text-white/70 lg:col-span-6">
-                  逢<span className="font-semibold text-white">星期一</span>{" "}
-                  <span className="font-semibold text-vital-bright">
-                    {RULES.TRAINING_TIME}
-                  </span>
+                  每週多堂，時間與教練
+                  <span className="font-semibold text-white">見班表</span>
                   ，於 {BRAND.location}
                   {brandName} 進行團體街頭健身訓練。現場簽到並經後台確認後，每次可獲得{" "}
                   <span className="font-semibold text-white">
@@ -143,15 +142,15 @@ export default async function TrainingPage() {
                   </div>
                   <div className="mt-4 flex flex-wrap items-end gap-x-4 gap-y-1">
                     <span className="stat-figure text-5xl leading-none text-white md:text-6xl">
-                      MON
+                      每週
                     </span>
                     <span className="stat-figure text-outline text-4xl leading-none md:text-5xl">
-                      {TRAINING_START}
+                      多時段
                     </span>
                   </div>
                   <div className="mt-5 h-px w-16 bg-white/20" />
                   <p className="mt-5 text-sm leading-relaxed text-white/65">
-                    固定時間，不用每次重新喬。教練現場依程度分組調整動作難度。
+                    每週固定多個時段，實際上課時間與教練見班表。教練現場依程度分組調整動作難度。
                   </p>
                 </div>
               </div>

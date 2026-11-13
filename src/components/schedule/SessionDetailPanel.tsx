@@ -19,6 +19,8 @@ import {
   PAID_HEX,
   colorHex,
   formatDayLong,
+  sessionPhase,
+  statusBadgeClass,
   statusText,
   type ScheduleDay,
   type ScheduleSessionView,
@@ -47,6 +49,7 @@ function sessionAccent(session: ScheduleSessionView): string {
 export function SessionDetailPanel({
   day,
   session,
+  todayISO,
   onSelectSession,
   onBack,
   onClose,
@@ -55,6 +58,8 @@ export function SessionDetailPanel({
   day: ScheduleDay | null;
   /** 單場詳情（有值時優先於 day） */
   session: ScheduleSessionView | null;
+  /** Asia/Macau 的今天（server 傳入），用來判斷「已結束／今天／可報名」 */
+  todayISO: string;
   onSelectSession: (session: ScheduleSessionView) => void;
   /** 從單場詳情回到當日清單 */
   onBack: () => void;
@@ -184,9 +189,13 @@ export function SessionDetailPanel({
         </div>
 
         {layer.kind === "detail" ? (
-          <SessionDetailBody session={layer.session} />
+          <SessionDetailBody session={layer.session} todayISO={todayISO} />
         ) : (
-          <DaySessionList day={layer.day} onSelectSession={onSelectSession} />
+          <DaySessionList
+            day={layer.day}
+            todayISO={todayISO}
+            onSelectSession={onSelectSession}
+          />
         )}
       </div>
     </div>
@@ -199,9 +208,11 @@ export function SessionDetailPanel({
 
 function DaySessionList({
   day,
+  todayISO,
   onSelectSession,
 }: {
   day: ScheduleDay;
+  todayISO: string;
   onSelectSession: (session: ScheduleSessionView) => void;
 }) {
   if (day.sessions.length === 0) {
@@ -217,6 +228,7 @@ function DaySessionList({
       {day.sessions.map((session) => {
         const cancelled = session.status === "cancelled";
         const accent = sessionAccent(session);
+        const phase = sessionPhase(session.date, todayISO);
         const time = session.startTime
           ? session.endTime
             ? `${session.startTime}–${session.endTime}`
@@ -258,15 +270,12 @@ function DaySessionList({
                     {session.title}
                   </span>
                   <span
-                    className={`shrink-0 border px-1.5 py-0.5 text-[10px] font-semibold ${
-                      cancelled
-                        ? "border-white/20 bg-white/5 text-white/60"
-                        : session.status === "closed"
-                          ? "border-amber-500/40 bg-amber-500/10 text-amber-300"
-                          : "border-emerald-500/40 bg-emerald-500/10 text-emerald-300"
-                    }`}
+                    className={`shrink-0 border px-1.5 py-0.5 text-[10px] font-semibold ${statusBadgeClass(
+                      session.status,
+                      phase
+                    )}`}
                   >
-                    {statusText(session.status)}
+                    {statusText(session.status, phase)}
                   </span>
                 </span>
 
@@ -298,9 +307,16 @@ function DaySessionList({
  * 第二層：單場詳情
  * ============================================================= */
 
-function SessionDetailBody({ session }: { session: ScheduleSessionView }) {
+function SessionDetailBody({
+  session,
+  todayISO,
+}: {
+  session: ScheduleSessionView;
+  todayISO: string;
+}) {
   const accent = sessionAccent(session);
   const cancelled = session.status === "cancelled";
+  const phase = sessionPhase(session.date, todayISO);
 
   const timeText = session.startTime
     ? session.endTime
@@ -308,11 +324,7 @@ function SessionDetailBody({ session }: { session: ScheduleSessionView }) {
       : session.startTime
     : "時間待定";
 
-  const statusClass = cancelled
-    ? "border-white/20 bg-white/5 text-white/60"
-    : session.status === "closed"
-      ? "border-amber-500/40 bg-amber-500/10 text-amber-300"
-      : "border-emerald-500/40 bg-emerald-500/10 text-emerald-300";
+  const statusClass = statusBadgeClass(session.status, phase);
 
   return (
     <>
@@ -325,7 +337,7 @@ function SessionDetailBody({ session }: { session: ScheduleSessionView }) {
             className="h-2 w-2 shrink-0 rounded-[2px]"
             style={{ backgroundColor: accent }}
           />
-          {statusText(session.status)}
+          {statusText(session.status, phase)}
         </span>
         {session.paid && (
           <span

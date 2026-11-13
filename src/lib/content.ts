@@ -286,7 +286,7 @@ export const DEFAULT_CONTENT: SiteContent = {
   hero: {
     title_line1: "MSW",
     title_line2: "街健館",
-    desc: "用自身的重量，練出澳門最強的街頭力量。每週一晚固定訓練、每月 300 公里跑步挑戰，每一次汗水都換算成積分與專屬優惠券。",
+    desc: "用自身的重量，練出澳門最強的街頭力量。每週多堂定期訓練、每月 300 公里跑步挑戰，每一次汗水都換算成積分與專屬優惠券。",
     cta_primary_member: "我的帳戶",
     cta_secondary_member: "上傳跑步紀錄",
     cta_primary_guest: "立即加入會員",
@@ -344,7 +344,7 @@ export const DEFAULT_CONTENT: SiteContent = {
       icon: "📈",
     },
   ],
-  marquee: ["Street Workout", "街頭健身", "Calisthenics", "澳門 Macau", "Mon 20:00", "300km / Month"],
+  marquee: ["Street Workout", "街頭健身", "Calisthenics", "澳門 Macau", "Weekly Sessions", "300km / Month"],
   cta: {
     title_member: "繼續把汗水換成積分",
     desc_member: "本月里程與積分持續累積中，記得定期上傳跑步紀錄與報名訓練。",
@@ -411,7 +411,7 @@ export const DEFAULT_PAGES: SitePages = {
   },
   signup: {
     page_title: "註冊會員",
-    intro: "免費加入 MSW 街健館。每週一定期訓練、每月 300 公里跑步挑戰， 里程與簽到都由後台確認後入帳，讓訓練變成看得見的累積。",
+    intro: "免費加入 MSW 街健館。每週定期訓練、每月 300 公里跑步挑戰， 里程與簽到都由後台確認後入帳，讓訓練變成看得見的累積。",
     form_intro: "填寫電郵與密碼即可建立帳號，無需審核。",
     display_name_label: "顯示名稱（排行榜上顯示）",
     display_name_placeholder: "例如：阿健",
