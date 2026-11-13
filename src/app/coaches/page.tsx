@@ -1,6 +1,11 @@
 import type { Metadata } from "next";
-import { getVisibleCoaches, getSitePages } from "@/lib/queries";
+import {
+  getSiteContent,
+  getSitePages,
+  getVisibleCoaches,
+} from "@/lib/queries";
 import { publicAssetUrl } from "@/lib/assets";
+import { BrandIntro } from "@/components/BrandIntro";
 
 export const dynamic = "force-dynamic";
 
@@ -18,11 +23,17 @@ export async function generateMetadata(): Promise<Metadata> {
  *
  * 尚未執行 migration-coaches.sql 時，getVisibleCoaches() 會回傳空陣列，
  * 頁面正常顯示空狀態，不會壞掉。
+ *
+ * 2026-10：站主要求「將關於我們移到教練團隊頁面的下方」，因此頁面順序為
+ * 「教練團隊內容 → 關於我們」。關於我們重用首頁同一個 `BrandIntro` 元件
+ * （四段文案讀 site_content.about，與首頁同源，版式不改寫），該元件本身
+ * 帶 `id="about"`，`/coaches#about` 可直接定位。
  */
 export default async function CoachesPage() {
-  const [coaches, pages] = await Promise.all([
+  const [coaches, pages, content] = await Promise.all([
     getVisibleCoaches(50),
     getSitePages(),
+    getSiteContent(),
   ]);
   const t = pages.coaches;
 
@@ -87,6 +98,22 @@ export default async function CoachesPage() {
             })}
           </ul>
         )}
+      </section>
+
+      {/* ===== 關於我們（原 /about 主要內容，搬到你正在看的這一頁底部）=====
+          BrandIntro 自帶 <section id="about">，/coaches#about 由它定位，
+          因此外層不再重複掛 id。BrandIntro 內建 section-pad
+          （padding-block: var(--space-section, 80px)），用負上邊距把區塊標題
+          與主敘述的間距收斂到與站內其他區塊一致的節奏，避免標題與內文之間
+          留一大片空白。 */}
+      <section className="relative border-t border-ink-line">
+        <div className="container-msw pt-16 md:pt-20">
+          <span className="eyebrow">About / 關於我們</span>
+          <h2 className="display-xl mt-5">關於我們</h2>
+        </div>
+        <div className="-mt-14 md:-mt-16">
+          <BrandIntro about={content.about} />
+        </div>
       </section>
     </>
   );
