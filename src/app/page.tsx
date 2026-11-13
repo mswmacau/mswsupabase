@@ -43,7 +43,6 @@ import { ScrollProgress } from "@/components/fx/home/ScrollProgress";
 import { BackToTop } from "@/components/fx/home/BackToTop";
 import { RevealHome } from "@/components/fx/home/RevealHome";
 import { MarqueeBoost } from "@/components/fx/home/MarqueeBoost";
-import { HeroSpotlight } from "@/components/fx/home/HeroSpotlight";
 import { HoverFx } from "@/components/fx/home/HoverFx";
 import { ScrubText } from "@/components/fx/home/ScrubText";
 import { DriftWord } from "@/components/fx/home/DriftWord";
@@ -218,17 +217,13 @@ export default async function HomePage() {
       {/* 左下用幾何色塊代替第二顆光暈，避免左右對稱 */}
       <div className="clip-notch pointer-events-none absolute -bottom-10 -left-20 h-72 w-72 bg-vital/10" />
 
-      {/* H-17 hero 滑鼠聚光燈：--fx-mx / --fx-my 由 HeroSpotlight 寫入，
-          冇 JS 時用 CSS 預設嘅 72% / 22% 靜態光暈 */}
-      <div className="fx-spot" aria-hidden />
-
       {/* 手工質感：細網格 + 噪點 */}
       <div className="grid-lines absolute inset-0" />
       <div className="noise-overlay" />
 
       {/* 首頁圖片輪播：主標題之前、導覽列之下。
-          包一層 relative z-10 蓋過上面嘅 absolute 裝飾層（.noise-overlay z-1、
-          .fx-spot z-0），否則輪播會被網格／噪點／聚光燈壓住。
+          包一層 relative z-10 蓋過上面嘅 absolute 裝飾層（.noise-overlay z-1），
+          否則輪播會被網格／噪點壓住。
           pt-20 / md:pt-24 讓開 fixed Nav（h-16 / md:h-20，量得 65px / 81px）；
           其餘內距由 SlideCarousel 自己嘅 pt-8 / md:pt-12 提供。輪播根節點自帶
           container-msw，所以唔可以再放進下面嗰個 container-msw 內
@@ -247,7 +242,7 @@ export default async function HomePage() {
         <div
           className={`relative pb-16 lg:pb-20 ${
             hasSlides
-              ? "pt-12 md:pt-16 lg:pt-20"
+              ? "pt-6 md:pt-8 lg:pt-10"
               : "pt-24 md:pt-32 lg:pt-36"
           }`}
         >
@@ -830,7 +825,6 @@ export default async function HomePage() {
       <RevealHome />
       <MarqueeBoost />
       <HoverFx />
-      <HeroSpotlight />
       <BackToTop />
 
       {/* T-20：依 site_blocks 的 visible / order 渲染（預設順序 = 現行版面）

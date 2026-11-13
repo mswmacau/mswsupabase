@@ -8,12 +8,12 @@ import { NavProgress } from "@/components/NavProgress";
 import { PageViewBeacon } from "@/components/tracking/PageViewBeacon";
 import { getCurrentProfile } from "@/lib/supabase/server";
 import {
-  getNextSession,
   getSiteContact,
   getSiteNav,
   getSiteSeo,
   getSiteTheme,
-} from "@/lib/queries";import { getRewardsEnabled } from "@/lib/rewards";
+} from "@/lib/queries";
+import { getRewardsEnabled } from "@/lib/rewards";
 import { DEFAULT_THEME, themeCssVars } from "@/lib/theme";
 import { publicAssetUrl } from "@/lib/assets";
 
@@ -83,15 +83,13 @@ export default async function RootLayout({
 }: {
   children: React.ReactNode;
 }) {
-  const [profile, theme, nav, contact, rewardsEnabled, nextSession] =
+  const [profile, theme, nav, contact, rewardsEnabled] =
     await Promise.all([
       getCurrentProfile(),
       getSiteTheme(),
       getSiteNav(),
       getSiteContact(),
       getRewardsEnabled(),
-      // 頁尾訓練時間徽章：讀真實班表（無場次則不顯示，不編造時間）
-      getNextSession(),
     ]);
   const cssVars = themeCssVars(theme);
 
@@ -130,7 +128,6 @@ export default async function RootLayout({
           brandNameEn={theme.brand_name_en}
           contact={contact}
           navLinks={nav.links}
-          nextSession={nextSession}
         />
         {/* 頁面停留追蹤（T-22）：零 UI、零 CLS，只送出匿名 beacon，不出現在 DOM */}
         <PageViewBeacon isMember={Boolean(profile)} />

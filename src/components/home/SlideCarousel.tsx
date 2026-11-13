@@ -165,7 +165,7 @@ export function SlideCarousel({ slides }: { slides: HomeSlide[] }) {
     >
       <div className="relative min-w-0 overflow-hidden rounded-2xl border border-ink-line bg-ink-soft">
         <div
-          className="relative h-[240px] w-full sm:h-[260px] md:h-[400px] lg:h-[460px]"
+          className="relative h-[240px] w-full sm:h-[260px] md:h-[360px] lg:h-[360px]"
           onTouchStart={(e) => {
             setPaused(true);
             touchStartX.current = e.touches[0]?.clientX ?? null;
