@@ -203,6 +203,83 @@ export interface TrainingSession {
   created_at: string;
 }
 
+/* ── 定期訓練班表（migration-training-schedule.sql）───────────────────
+ * 命名注意：既有的 `TrainingSession` 代表「一場訓練場次」且被 checkins、
+ * 後台場次頁多處引用（grep 結果：types.ts:193、types.ts:214、queries.ts 多處），
+ * 因此這裡新增的場次列型別刻意命名為 `TrainingSessionRow`，不改舊型別，
+ * 避免一次改動牽連前台頁面（本次範圍只到後端）。
+ * ─────────────────────────────────────────────────────────────────── */
+
+/** 日曆上的 8 類課程分類（與 training_classes.category 的 check 一致） */
+export type TrainingCategory =
+  | "strength"
+  | "hyrox"
+  | "running"
+  | "skill"
+  | "internal"
+  | "outdoor";
+
+/** 課程定義 */
+export interface TrainingClass {
+  id: string;
+  slug: string;
+  name: string;
+  category: TrainingCategory;
+  /** 色票鍵（blue / green / amber / teal / violet / orange…），前端自行對色 */
+  color_key: string | null;
+  duration_min: number | null;
+  capacity: number | null;
+  coach_name: string | null;
+  location: string | null;
+  description: string | null;
+  is_active: boolean;
+  sort_order: number;
+  created_at: string;
+}
+
+/** 週期規則（每週固定） */
+export interface TrainingRule {
+  id: string;
+  class_id: string;
+  /** 1=星期一 … 7=星期日（ISO-8601，與 Postgres isodow 一致） */
+  weekday: number;
+  /** 'HH:MM:SS'（time 型別，PostgREST 回傳帶秒） */
+  start_time: string;
+  end_time: string;
+  location: string | null;
+  coach_name: string | null;
+  capacity: number | null;
+  valid_from: string;
+  valid_to: string | null;
+  is_active: boolean;
+  created_at: string;
+  /** 後台列表用（join training_classes.name） */
+  class_name?: string | null;
+}
+
+/**
+ * 月曆用的場次列（training_sessions + 課程 join 後攤平）。
+ * 刻意與既有 `TrainingSession` 分開：舊型別沒有 class_id / start_time / coach_name。
+ */
+export interface TrainingSessionRow {
+  id: string;
+  session_date: string;
+  /** 'HH:MM:SS'，舊資料（class_id 為 null）可能為 null */
+  start_time: string | null;
+  end_time: string | null;
+  class_id: string | null;
+  title: string;
+  location: string;
+  coach_name: string | null;
+  capacity: number;
+  status: "open" | "closed" | "cancelled";
+  note: string | null;
+  /** 課程 join 後攤平（舊資料可能為 null） */
+  class_name: string | null;
+  class_color_key: string | null;
+  class_category: TrainingCategory | null;
+}
+
 export interface TrainingCheckin {
   id: string;
   session_id: string;

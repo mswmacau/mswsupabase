@@ -41,8 +41,11 @@ import type {
   Profile,
   RunSubmission,
   SiteStats,
+  TrainingCategory,
   TrainingCheckin,
+  TrainingClass,
   TrainingSession,
+  TrainingSessionRow,
 } from "./types";
 
 const EMPTY_STATS: SiteStats = {
@@ -97,6 +100,139 @@ export async function getAllSessions(limit = 60): Promise<TrainingSession[]> {
 
   return (data as TrainingSession[]) ?? [];
 }
+
+/* ── 定期訓練班表（月曆）────────────────────────────────────────────────
+ * 資料來源：supabase/migration-training-schedule.sql
+ *   training_classes（課程）｜training_rules（週期規則）｜training_sessions（場次）
+ *
+ * 時區一律 Asia/Macau：DB 內 session_date 是 date、start_time 是 time，
+ * 兩者都是「澳門本地牆上時間」的語意（生成器用 at time zone 'Asia/Macau' 產生
+ * starts_at/ends_at），因此前台只要直接組合字串即可，不必再做時區換算，
+ * 也不會因為伺服器在 UTC 而位移一天。
+ *
+ * 快取：anonClient（不含 cookie，避免整頁被迫轉動態）+ unstable_cache
+ *       （tag `training-schedule`、60 秒）。寫入端（api/admin/training/*）以
+ *       revalidateTag(TRAINING_SCHEDULE_TAG) 立即失效。
+ *       註：unstable_cache 的 cache key 由 keyParts + 序列化後的參數組成
+ *       （next/dist/server/web/spec-extension/unstable-cache.js 的 invocationKey），
+ *       所以不同 year/month 不會共用同一筆快取。
+ * ──────────────────────────────────────────────────────────────────── */
+
+/** 班表快取 tag；revalidateTag 必須用同一個字串 */
+export const TRAINING_SCHEDULE_TAG = "training-schedule";
+
+/**
+ * 該月第一天與最後一天（YYYY-MM-DD）。
+ * 參數非法回 null（呼叫端自行決定 fallback），不拋錯——
+ * 避免後台亂傳 year=0 / month=13 時讓整個頁面 500。
+ */
+export function trainingMonthRange(
+  year: number,
+  month: number
+): { from: string; to: string } | null {
+  if (!Number.isInteger(year) || year < 2024 || year > 2100) return null;
+  if (!Number.isInteger(month) || month < 1 || month > 12) return null;
+
+  const mm = String(month).padStart(2, "0");
+  // Date.UTC(year, month, 0) = 該月最後一天（month 為 1-based，故傳 month 剛好是下月 0 日）
+  const lastDay = new Date(Date.UTC(year, month, 0)).getUTCDate();
+  return {
+    from: `${year}-${mm}-01`,
+    to: `${year}-${mm}-${String(lastDay).padStart(2, "0")}`,
+  };
+}
+
+/** 月曆查詢的欄位（課程以別名 class 內嵌，回傳後攤平） */
+const MONTH_SELECT =
+  "id, session_date, start_time, end_time, class_id, title, location, coach_name, capacity, status, note, class:training_classes(name, color_key, category)";
+
+type MonthRow = {
+  id: string;
+  session_date: string;
+  start_time: string | null;
+  end_time: string | null;
+  class_id: string | null;
+  title: string;
+  location: string;
+  coach_name: string | null;
+  capacity: number;
+  status: "open" | "closed" | "cancelled";
+  note: string | null;
+  class: {
+    name: string | null;
+    color_key: string | null;
+    category: TrainingCategory | null;
+  } | null;
+};
+
+/**
+ * 某年某月的所有訓練場次（含課程名稱、顏色、教練、場地、狀態），
+ * 依 session_date、start_time 升冪排序。
+ *
+ * 同日同時段可以有多堂（不同課程／場地／教練），所以排序第二鍵是 start_time，
+ * 第三鍵用 id 保證順序穩定（同一時間多堂時不會每次呼叫都換位置）。
+ */
+export const getMonthSchedule = unstable_cache(
+  cache(async (year: number, month: number): Promise<TrainingSessionRow[]> => {
+    const range = trainingMonthRange(year, month);
+    if (!range) return [];
+
+    const supabase = anonClient();
+    if (!supabase) return [];
+
+    const { data, error } = await supabase
+      .from("training_sessions")
+      .select(MONTH_SELECT)
+      .gte("session_date", range.from)
+      .lte("session_date", range.to)
+      .order("session_date", { ascending: true })
+      .order("start_time", { ascending: true, nullsFirst: true })
+      .order("id", { ascending: true });
+
+    if (error || !data) return [];
+
+    return (data as unknown as MonthRow[]).map((row) => ({
+      id: row.id,
+      session_date: row.session_date,
+      start_time: row.start_time,
+      end_time: row.end_time,
+      class_id: row.class_id,
+      title: row.title,
+      location: row.location,
+      coach_name: row.coach_name,
+      capacity: row.capacity,
+      status: row.status,
+      note: row.note,
+      class_name: row.class?.name ?? null,
+      class_color_key: row.class?.color_key ?? null,
+      class_category: row.class?.category ?? null,
+    }));
+  }),
+  ["training-schedule-month"],
+  { tags: [TRAINING_SCHEDULE_TAG], revalidate: 60 }
+);
+
+/** 啟用中的課程（前台日曆的圖例／篩選用） */
+export const getTrainingClasses = unstable_cache(
+  cache(async (): Promise<TrainingClass[]> => {
+    const supabase = anonClient();
+    if (!supabase) return [];
+
+    const { data, error } = await supabase
+      .from("training_classes")
+      .select(
+        "id, slug, name, category, color_key, duration_min, capacity, coach_name, location, description, is_active, sort_order, created_at"
+      )
+      .eq("is_active", true)
+      .order("sort_order", { ascending: true })
+      .order("name", { ascending: true });
+
+    if (error || !data) return [];
+    return data as TrainingClass[];
+  }),
+  ["training-classes-active"],
+  { tags: [TRAINING_SCHEDULE_TAG], revalidate: 60 }
+);
 
 /** getSiteTheme() 的 cache tag；revalidateTag 必須用同一個字串（see api/admin/site-settings） */
 export const SITE_THEME_TAG = "site-theme";
