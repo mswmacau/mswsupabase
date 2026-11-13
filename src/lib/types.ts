@@ -84,6 +84,41 @@ export type HyroxEventWithCounts = HyroxEvent & {
   pending_count: number;
 };
 
+/**
+ * 往期場次回顧相片（supabase/migration-hyrox-photos.sql 的 event_photos）。
+ *
+ * 一個場次可掛多張相片。path 是 site-assets bucket 內的相對路徑
+ * （events/ 前綴），前端要顯示時請用 publicAssetUrl(path)（src/lib/assets.ts:22）
+ * 組公開網址，不要自己拼字串。
+ */
+export interface EventPhoto {
+  id: string;
+  event_id: string;
+  /** site-assets 內的相對路徑，如 events/202611/1730-ab12cd.jpg */
+  path: string;
+  /** 相片說明（選填） */
+  caption: string | null;
+  /** 顯示順序（升冪） */
+  sort_order: number;
+}
+
+/**
+ * 後台 API（/api/admin/hyrox/photos）回傳給管理頁的相片列：
+ * EventPhoto 加上可直接放進 <img src> 的公開網址（publicAssetUrl 的結果，
+ * 未設定 Supabase 時為 null）。
+ */
+export type EventPhotoWithUrl = EventPhoto & { url: string | null };
+
+/**
+ * 往期場次（getHyroxPastEvents）：已結束、要在 /hyrox「往期場次」區塊
+ * 連到詳情頁的場次，附上相片數。
+ *
+ * photo_count 一定會是數字（沒有相片時為 0，不是 undefined、也不是省略該 key），
+ * 前端可以直接判斷 `photo_count > 0`。
+ * HyroxPastEvent 是 HyroxEvent 的超集，所以既有吃 HyroxEvent[] 的地方也能用。
+ */
+export type HyroxPastEvent = HyroxEvent & { photo_count: number };
+
 /** 報名狀態（event_registrations.status） */
 export type RegistrationStatus = "registered" | "cancelled";
 

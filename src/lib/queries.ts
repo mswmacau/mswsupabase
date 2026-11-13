@@ -31,7 +31,9 @@ import { isUuid } from "./api";
 import type {
   Coupon,
   Event,
+  EventPhoto,
   HyroxEvent,
+  HyroxPastEvent,
   HyroxRegistration,
   LeaderRow,
   MonthlyStat,
@@ -500,7 +502,15 @@ export async function getHyroxEvents(
   });
 }
 
-/** 單場 HYROX 場次（只回 published；快取 60 秒，依 id 分鍵） */
+/**
+ * 單場 HYROX 場次（published 或 archived；快取 60 秒，依 id 分鍵）。
+ *
+ * 【為什麼放行 archived】往期場次要能在詳情頁 /hyrox/[id] 展示回顧相片，
+ * 所以已結束（archived）的場次也必須讀得到。draft 仍然回 null
+ * （草稿不對外，也避免前台用猜的 id 撈到未上架內容）。
+ * 匿名讀 archived 需搭配 supabase/migration-hyrox-photos.sql §3 的
+ * events_select_archived_public 政策，否則 anon 一樣看不到。
+ */
 export async function getHyroxEventById(id: string): Promise<HyroxEvent | null> {
   // 非 uuid 直接回 null：不讓 Postgres 22P02 變成 500（同 api.ts 的 isUuid 口徑）
   if (!isUuid(id)) return null;
@@ -514,13 +524,96 @@ export async function getHyroxEventById(id: string): Promise<HyroxEvent | null> 
         .select(HYROX_EVENT_COLUMNS)
         .eq("id", id)
         .eq("series", "hyrox")
-        .eq("status", "published")
+        .in("status", ["published", "archived"])
         .maybeSingle();
       logQueryError("getHyroxEventById", error);
       return (data as unknown as HyroxEvent) ?? null;
     }),
     ["hyrox-event", id],
     { tags: [HYROX_EVENTS_TAG], revalidate: 60 }
+  )();
+}
+
+/* =============================================================
+ * HYROX 往期場次回顧相片 — supabase/migration-hyrox-photos.sql
+ *
+ * 前台資料（往期區塊與單場詳情頁）人人看到的一樣，照 getCachedHyroxEvents
+ * 的做法走 anonClient + unstable_cache（60 秒 + tag）。
+ * 寫入端（api/admin/hyrox/photos）以 revalidateTag 同時失效
+ * HYROX_EVENTS_TAG 與 HYROX_PHOTOS_TAG——兩支快取都標了這兩個 tag，
+ * 所以新增／刪除一張相片，往期列表的 photo_count 也會跟著更新。
+ * ============================================================= */
+
+/** HYROX 相片列表的快取 tag（寫入端必須用同一個字串） */
+export const HYROX_PHOTOS_TAG = "hyrox-photos";
+
+/** 單場相片（依 sort_order 升冪、再依建立時間）；查詢失敗回空陣列，頁面照常渲染 */
+export async function getEventPhotos(eventId: string): Promise<EventPhoto[]> {
+  // 非 uuid 直接回 []：不讓 Postgres 22P02 變成 500（同 getHyroxEventById 口徑）
+  if (!isUuid(eventId)) return [];
+
+  return unstable_cache(
+    cache(async (): Promise<EventPhoto[]> => {
+      const supabase = anonClient();
+      if (!supabase) return [];
+      const { data, error } = await supabase
+        .from("event_photos")
+        .select("id,event_id,path,caption,sort_order")
+        .eq("event_id", eventId)
+        .order("sort_order", { ascending: true })
+        .order("created_at", { ascending: true })
+        .limit(200);
+      logQueryError("getEventPhotos", error);
+      if (error) return [];
+      return ((data as EventPhoto[]) ?? []).map((p) => ({
+        id: p.id,
+        event_id: p.event_id,
+        path: p.path,
+        caption: p.caption ?? null,
+        sort_order: Number(p.sort_order ?? 0),
+      }));
+    }),
+    ["event-photos", eventId],
+    { tags: [HYROX_PHOTOS_TAG, HYROX_EVENTS_TAG], revalidate: 60 }
+  )();
+}
+
+/**
+ * 往期場次（series='hyrox' 且 status='archived'），event_date 降冪
+ * （最近結束的排最前；日期待定的排最後），並帶每場的相片數 photo_count。
+ *
+ * photo_count 用 PostgREST 的內嵌聚合 event_photos(count) 一次取回，
+ * 不需要 N+1 查詢；攤平時對任何異常形狀（缺欄位、null、非陣列）都回 0，
+ * 保證回傳結構穩定（key 一定存在，只是值是 0）。
+ */
+export async function getHyroxPastEvents(): Promise<HyroxPastEvent[]> {
+  return unstable_cache(
+    cache(async (): Promise<HyroxPastEvent[]> => {
+      const supabase = anonClient();
+      if (!supabase) return [];
+      const { data, error } = await supabase
+        .from("events")
+        .select(`${HYROX_EVENT_COLUMNS},photos:event_photos(count)`)
+        .eq("series", "hyrox")
+        .eq("status", "archived")
+        .order("event_date", { ascending: false, nullsFirst: false })
+        .order("sort_order", { ascending: false })
+        .limit(50);
+      logQueryError("getHyroxPastEvents", error);
+      if (error) return [];
+
+      type PastRow = HyroxEvent & { photos?: { count: number }[] | null };
+      return ((data as unknown as PastRow[]) ?? []).map((row) => {
+        const { photos, ...event } = row;
+        const count = Array.isArray(photos) ? Number(photos[0]?.count ?? 0) : 0;
+        return {
+          ...(event as HyroxEvent),
+          photo_count: Number.isFinite(count) && count > 0 ? count : 0,
+        };
+      });
+    }),
+    ["hyrox-past-events"],
+    { tags: [HYROX_EVENTS_TAG, HYROX_PHOTOS_TAG], revalidate: 60 }
   )();
 }
 
