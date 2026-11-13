@@ -50,10 +50,17 @@ export function Footer({
   navLinks?: NavLink[];
 }) {
   const CONTACT = contactItems(contact);
-  // 選單顯隱與導覽列同步：隱藏的項目在頁尾導航行一併不顯示
+  // 選單顯隱與導覽列同步：隱藏的項目在頁尾導航行一併不顯示。
+  // 2026 導覽收斂後「活動」底下多了子項，頁尾一律攤平列出（父子都列），
+  // 否則 /hyrox、/training、/run 會從頁尾消失。
   const footerLinks = (navLinks ?? DEFAULT_NAV.links)
     .filter((l) => l.visible)
-    .map((l) => ({ href: l.href, label: l.label }));
+    .flatMap((l) => [
+      { href: l.href, label: l.label },
+      ...(l.children ?? [])
+        .filter((c) => c.visible)
+        .map((c) => ({ href: c.href, label: c.label })),
+    ]);
   return (
     <footer className="relative overflow-hidden border-t border-ink-line bg-ink">
       {/* 手工質感：細網格 + 噪點 */}

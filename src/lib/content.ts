@@ -94,9 +94,19 @@ export interface NavLink {
   href: string;
   label: string;
   visible: boolean;
+  /**
+   * 選填子項（一層為限，子項不可再帶 children）。
+   * 目前只有「活動」（/events）允許帶子項，見 NAV_PARENT_WITH_CHILDREN。
+   */
+  children?: NavLink[];
 }
 
-/** site_nav：導覽選單（3–8 項，必含「主頁」，href 走白名單） */
+/**
+ * site_nav：導覽選單
+ *  - 頂層 4–6 項（NAV_MIN–NAV_MAX），必含「主頁」（/）
+ *  - 只有「活動」（/events）可以有子項，子項最多 4 項、只支援一層
+ *  - 所有 href（含子項）走 NAV_HREFS 白名單，且全站（含子項）不可重複
+ */
 export interface SiteNav {
   links: NavLink[];
 }
@@ -347,12 +357,23 @@ export const DEFAULT_CONTENT: SiteContent = {
   },
 };
 
+/**
+ * 導覽預設結構：5 項 + 「活動」底下的 3 個子項。
+ * 原 8 項平級結構（含 /training、/run 在頂層）已收斂為此結構，URL 一律不變。
+ */
 export const DEFAULT_NAV: SiteNav = {
   links: [
     { href: "/", label: "主頁", visible: true },
-    { href: "/events", label: "活動", visible: true },
-    { href: "/training", label: "定期訓練", visible: true },
-    { href: "/run", label: "月度跑步挑戰", visible: true },
+    {
+      href: "/events",
+      label: "活動",
+      visible: true,
+      children: [
+        { href: "/hyrox", label: "戶外 HYROX 訓練", visible: true },
+        { href: "/training", label: "定期訓練", visible: true },
+        { href: "/run", label: "月度跑步累積", visible: true },
+      ],
+    },
     { href: "/leaderboard", label: "排行榜", visible: true },
     { href: "/about", label: "關於我們", visible: true },
     { href: "/coaches", label: "教練團隊", visible: true },
@@ -488,10 +509,11 @@ export const DEFAULT_BLOCKS: SiteBlocks = {
  * 白名單
  * ============================================================= */
 
-/** 導覽選單允許的連結（= 現行 NAV_LINKS 的 7 個路由；要加新頁面屬技術工作） */
+/** 導覽選單允許的連結（= 現行 8 個路由，含 /hyrox；要加新頁面屬技術工作） */
 export const NAV_HREFS: readonly string[] = [
   "/",
   "/events",
+  "/hyrox",
   "/training",
   "/run",
   "/leaderboard",
@@ -740,14 +762,155 @@ export function coerceContent(
  * ============================================================= */
 
 const NAV_LABEL_MAXLEN = 20;
+/** 頂層項目數範圍（原 3–8；2026 導覽收斂為 5 項後改為 4–6） */
+const NAV_MIN = 4;
+const NAV_MAX = 6;
+/** 單一父項的子項上限 */
+const NAV_CHILDREN_MAX = 4;
+/** 唯一允許帶子項的父項（「活動」）；其他項目一律直接連到頁面 */
+const NAV_PARENT_WITH_CHILDREN = "/events";
+/** 舊版扁平選單的頂層項目數下限（7–8 項、完全無 children）→ 視為待遷移舊資料 */
+const NAV_LEGACY_FLAT_MIN = 7;
 
+/** 深拷貝（子項也另建物件，避免呼叫端改到 DEFAULT_NAV 常數） */
 function cloneNav(nav: SiteNav): SiteNav {
-  return { links: nav.links.map((l) => ({ ...l })) };
+  return {
+    links: nav.links.map((l) => ({
+      ...l,
+      ...(l.children
+        ? { children: l.children.map((c) => ({ ...c })) }
+        : {}),
+    })),
+  };
+}
+
+/**
+ * 是否為「舊版扁平選單」：頂層 7–8 項、且完全沒有任何 children。
+ *
+ * 背景：導覽收斂前線上 app_settings.site_nav 存的是 8 項平級結構
+ * （頂層就有 /training、/run、沒有 /hyrox）。新規則只接受 4–6 項，
+ * 若照原樣驗證會直接被判結構錯誤。讀取端據此判定「這是舊資料」，
+ * 換成新的 5 項預設結構，客戶不用手動改設定。
+ */
+export function isLegacyFlatNav(raw: unknown): boolean {
+  if (!Array.isArray(raw) || raw.length < NAV_LEGACY_FLAT_MIN) return false;
+  return raw.every((it) => !isRecord(it) || !Array.isArray(it.children));
+}
+
+/**
+ * 單一導覽項目驗證（父項與子項共用）。
+ * href 走白名單、全站（含子項）不可重複；label 1–20 字；visible 缺鍵落預設。
+ * 只有父項會再往下來處理 children（見呼叫端）。
+ */
+function normalizeNavLink(
+  item: unknown,
+  key: string,
+  baseItem: NavLink | undefined,
+  seen: Set<string>,
+  fields: FieldErrors
+): { link: NavLink; structural: boolean } {
+  let structural = false;
+  if (!isRecord(item)) {
+    fields[key] = "選單項目格式錯誤。";
+    structural = true;
+  }
+  const rec: Record<string, unknown> = isRecord(item) ? item : {};
+
+  // href：白名單 + 全站不可重複（含子項）
+  let href: string;
+  const rawHref = rec.href;
+  if (typeof rawHref !== "string" || !NAV_HREFS.includes(rawHref)) {
+    fields[`${key}.href`] = "此連結不在允許的清單，請選擇現有頁面。";
+    structural = true;
+    href = baseItem?.href ?? "/";
+  } else {
+    href = rawHref;
+  }
+  if (seen.has(href)) {
+    fields[`${key}.href`] = "選單連結與其他項目重複（子選單也計算在內）。";
+    structural = true;
+  }
+  seen.add(href);
+
+  // label：必填 1–20 字
+  let label: string;
+  const rawLabel = rec.label;
+  if (typeof rawLabel !== "string") {
+    fields[`${key}.label`] = `選單名稱請填 1–${NAV_LABEL_MAXLEN} 字。`;
+    label = baseItem?.label ?? "";
+  } else {
+    label = rawLabel.trim();
+    if (label.length < 1 || label.length > NAV_LABEL_MAXLEN) {
+      fields[`${key}.label`] = `選單名稱請填 1–${NAV_LABEL_MAXLEN} 字。`;
+      label = baseItem?.label ?? "";
+    }
+  }
+
+  // visible：缺鍵落預設（預設 true）
+  let visible: boolean;
+  const rawVisible = rec.visible;
+  if (rawVisible === undefined || rawVisible === null) {
+    visible = baseItem?.visible ?? true;
+  } else if (typeof rawVisible !== "boolean") {
+    fields[`${key}.visible`] = "請選擇是否顯示。";
+    visible = baseItem?.visible ?? true;
+  } else {
+    visible = rawVisible;
+  }
+
+  const link: NavLink = { href, label, visible };
+
+  // children：只有「活動」可以有、最多 4 項、只支援一層
+  const rawChildren = rec.children;
+  if (rawChildren !== undefined && rawChildren !== null) {
+    if (!Array.isArray(rawChildren)) {
+      fields[`${key}.children`] = "子選單資料格式錯誤。";
+      structural = true;
+    } else if (rawChildren.length > 0) {
+      if (href !== NAV_PARENT_WITH_CHILDREN) {
+        fields[`${key}.children`] =
+          "只有「活動」可以有子選單；其他項目請直接連到頁面。";
+        structural = true;
+      } else if (rawChildren.length > NAV_CHILDREN_MAX) {
+        fields[`${key}.children`] =
+          `子選單最多 ${NAV_CHILDREN_MAX} 項（目前 ${rawChildren.length} 項）。`;
+        structural = true;
+      } else {
+        link.children = rawChildren.map((child, j) => {
+          const childKey = `${key}.children.${j}`;
+          const r = normalizeNavLink(
+            child,
+            childKey,
+            baseItem?.children?.[j],
+            seen,
+            fields
+          );
+          if (r.structural) structural = true;
+          // 一層為限：子項若再帶非空 children 一律視為違規
+          if (isRecord(child)) {
+            const grand = child.children;
+            if (grand !== undefined && grand !== null) {
+              if (!Array.isArray(grand) || grand.length > 0) {
+                fields[`${childKey}.children`] =
+                  "子選單只支援一層，子項不可再分子項。";
+                structural = true;
+              }
+            }
+          }
+          return r.link;
+        });
+      }
+    }
+  }
+
+  return { link, structural };
 }
 
 function normalizeNavInternal(
   input: unknown,
-  base: SiteNav
+  base: SiteNav,
+  /** 讀取端（coerceNav）傳 true：舊 7–8 項扁平結構視為已遷移，換成新預設 */
+  migrateLegacy = false
 ): { nav: SiteNav; fields: FieldErrors; structural: boolean } {
   const fields: FieldErrors = {};
   const src: Record<string, unknown> = isRecord(input) ? input : {};
@@ -760,67 +923,26 @@ function normalizeNavInternal(
     fields.links = "選單資料格式錯誤。";
     return { nav: cloneNav(base), fields, structural: true };
   }
-  if (raw.length < 3 || raw.length > 8) {
-    fields.links = "選單項目請維持 3–8 項。";
+  // 舊資料遷移：8 項扁平結構 → 直接採用新的 5 項預設結構（不算錯誤，
+  // 因為這是預期中的歷史資料，不是使用者輸入錯誤）。
+  if (migrateLegacy && isLegacyFlatNav(raw)) {
+    return { nav: cloneNav(base), fields, structural: false };
+  }
+  if (raw.length < NAV_MIN || raw.length > NAV_MAX) {
+    fields.links = `選單項目請維持 ${NAV_MIN}–${NAV_MAX} 項（目前 ${raw.length} 項）。`;
     return { nav: cloneNav(base), fields, structural: true };
   }
 
   let structural = false;
+  // 父項與子項共用同一份 seen：全站（含子選單）href 不可重複
   const seen = new Set<string>();
   let hasHome = false;
 
   const links: NavLink[] = raw.map((item, i) => {
-    const key = `links.${i}`;
-    if (!isRecord(item)) {
-      fields[key] = "選單項目格式錯誤。";
-      structural = true;
-    }
-    const rec: Record<string, unknown> = isRecord(item) ? item : {};
-
-    // href：白名單 + 不可重複
-    let href: string;
-    const rawHref = rec.href;
-    if (typeof rawHref !== "string" || !NAV_HREFS.includes(rawHref)) {
-      fields[`${key}.href`] = "此連結不在允許的清單，請選擇現有頁面。";
-      structural = true;
-      href = base.links[i]?.href ?? "/";
-    } else {
-      href = rawHref;
-    }
-    if (seen.has(href)) {
-      fields[`${key}.href`] = "選單連結重複。";
-      structural = true;
-    }
-    seen.add(href);
-    if (href === "/") hasHome = true;
-
-    // label：必填 1–20 字
-    let label: string;
-    const rawLabel = rec.label;
-    if (typeof rawLabel !== "string") {
-      fields[`${key}.label`] = "選單名稱請填 1–20 字。";
-      label = base.links[i]?.label ?? "";
-    } else {
-      label = rawLabel.trim();
-      if (label.length < 1 || label.length > NAV_LABEL_MAXLEN) {
-        fields[`${key}.label`] = "選單名稱請填 1–20 字。";
-        label = base.links[i]?.label ?? "";
-      }
-    }
-
-    // visible：缺鍵落預設（預設 true）
-    let visible: boolean;
-    const rawVisible = rec.visible;
-    if (rawVisible === undefined || rawVisible === null) {
-      visible = base.links[i]?.visible ?? true;
-    } else if (typeof rawVisible !== "boolean") {
-      fields[`${key}.visible`] = "請選擇是否顯示。";
-      visible = base.links[i]?.visible ?? true;
-    } else {
-      visible = rawVisible;
-    }
-
-    return { href, label, visible };
+    const r = normalizeNavLink(item, `links.${i}`, base.links[i], seen, fields);
+    if (r.structural) structural = true;
+    if (r.link.href === "/") hasHome = true;
+    return r.link;
   });
 
   if (!hasHome) {
@@ -835,15 +957,19 @@ export type NavNormalizeResult =
   | { ok: true; nav: SiteNav }
   | { ok: false; fields: FieldErrors };
 
+/** 寫入端（後台儲存）：嚴格驗證，任何欄位錯誤都回 fields，不做遷移 */
 export function normalizeNav(input: unknown, base: SiteNav = DEFAULT_NAV): NavNormalizeResult {
-  const { nav, fields } = normalizeNavInternal(input, base);
+  const { nav, fields } = normalizeNavInternal(input, base, false);
   if (Object.keys(fields).length > 0) return { ok: false, fields };
   return { ok: true, nav };
 }
 
-/** 讀取端：結構性錯誤（數量／白名單／重複／缺主頁）→ 整套回落預設 */
+/**
+ * 讀取端：結構性錯誤（數量／白名單／重複／缺主頁／子項規則）→ 整套回落預設；
+ * 舊版扁平結構（7–8 項、無 children）→ 回傳新的 5 項預設（自動遷移）。
+ */
 export function coerceNav(input: unknown, base: SiteNav = DEFAULT_NAV): SiteNav {
-  const { nav, structural } = normalizeNavInternal(input, base);
+  const { nav, structural } = normalizeNavInternal(input, base, true);
   return structural ? cloneNav(base) : nav;
 }
 

@@ -238,6 +238,7 @@ const PAGE_TABS: { key: keyof SitePages; label: string }[] = [
 const NAV_HREF_LABELS: Record<string, string> = {
   "/": "主頁",
   "/events": "活動",
+  "/hyrox": "戶外 HYROX 訓練",
   "/training": "定期訓練",
   "/run": "月度跑步挑戰",
   "/leaderboard": "排行榜",
@@ -246,6 +247,12 @@ const NAV_HREF_LABELS: Record<string, string> = {
 };
 
 const NAV_LABEL_MAXLEN = 20;
+/** 導覽規則（與 src/lib/content.ts 的 NAV_MIN／NAV_MAX／NAV_CHILDREN_MAX 對齊） */
+const NAV_MIN = 4;
+const NAV_MAX = 6;
+const NAV_CHILDREN_MAX = 4;
+/** 唯一允許帶子選單的父項（與 content.ts 的 NAV_PARENT_WITH_CHILDREN 對齊） */
+const NAV_PARENT_WITH_CHILDREN = "/events";
 const BLOCK_LABEL_MAXLEN = 20;
 const BLOCK_MIN_VISIBLE = 3;
 
@@ -832,51 +839,243 @@ function ContentSection({ api }: { api: SectionApi<SiteContent> }) {
 function NavSection({ api }: { api: SectionApi<SiteNav> }) {
   const links = api.form.links;
 
-  function patchLink(i: number, patch: Partial<NavLink>) {
-    api.setForm((prev) => ({
-      ...prev,
-      links: prev.links.map((l, idx) => (idx === i ? { ...l, ...patch } : l)),
+  /** 深拷貝 links（父子兩層）：所有編輯都改副本，不直接動 form 內的物件 */
+  function cloneLinks(rows: NavLink[]): NavLink[] {
+    return rows.map((l) => ({
+      ...l,
+      ...(l.children ? { children: l.children.map((c) => ({ ...c })) } : {}),
     }));
   }
 
-  function moveLink(i: number, dir: -1 | 1) {
-    const j = i + dir;
-    if (j < 0 || j >= links.length) return;
+  /** 依路徑 [i] 或 [i, j] 取得目標項目 */
+  function targetOf(rows: NavLink[], path: number[]): NavLink | undefined {
+    const parent = rows[path[0]];
+    if (!parent) return undefined;
+    return path.length === 1 ? parent : parent.children?.[path[1]];
+  }
+
+  function patchLink(path: number[], patch: Partial<NavLink>) {
     api.setForm((prev) => {
-      const next = prev.links.map((l) => ({ ...l }));
-      const tmp = next[i];
-      next[i] = next[j];
-      next[j] = tmp;
+      const next = cloneLinks(prev.links);
+      const target = targetOf(next, path);
+      if (!target) return prev;
+      Object.assign(target, patch);
+      // 父項改連到「活動」以外的頁面時，子選單不再合法，直接清掉
+      if (
+        path.length === 1 &&
+        typeof patch.href === "string" &&
+        patch.href !== NAV_PARENT_WITH_CHILDREN
+      ) {
+        delete target.children;
+      }
       return { ...prev, links: next };
     });
   }
 
+  function moveLink(path: number[], dir: -1 | 1) {
+    api.setForm((prev) => {
+      const next = cloneLinks(prev.links);
+      const list = path.length === 1 ? next : next[path[0]].children;
+      if (!list) return prev;
+      const i = path[path.length - 1];
+      const j = i + dir;
+      if (j < 0 || j >= list.length) return prev;
+      const tmp = list[i];
+      list[i] = list[j];
+      list[j] = tmp;
+      return { ...prev, links: next };
+    });
+  }
+
+  function removeLink(path: number[]) {
+    api.setForm((prev) => {
+      const next = cloneLinks(prev.links);
+      if (path.length === 1) {
+        next.splice(path[0], 1);
+      } else {
+        next[path[0]].children?.splice(path[1], 1);
+      }
+      return { ...prev, links: next };
+    });
+  }
+
+  /** 下一個沒被用到的白名單連結（父項與子項一起算） */
+  function nextFreeHref(): string {
+    const used = new Set<string>();
+    for (const l of links) {
+      used.add(l.href);
+      for (const c of l.children ?? []) used.add(c.href);
+    }
+    return NAV_HREFS.find((h) => !used.has(h)) ?? NAV_HREFS[0];
+  }
+
   function addLink() {
-    const used = new Set(links.map((l) => l.href));
-    const href = NAV_HREFS.find((h) => !used.has(h)) ?? NAV_HREFS[0];
+    const href = nextFreeHref();
     api.setForm((prev) => ({
       ...prev,
       links: [...prev.links, { href, label: "", visible: true }],
     }));
   }
 
-  function removeLink(i: number) {
+  function addChild(parentIdx: number) {
+    const href = nextFreeHref();
     api.setForm((prev) => ({
       ...prev,
-      links: prev.links.filter((_, idx) => idx !== i),
+      links: prev.links.map((l, idx) =>
+        idx === parentIdx
+          ? {
+              ...l,
+              children: [
+                ...(l.children ?? []),
+                { href, label: "", visible: true },
+              ],
+            }
+          : l
+      ),
     }));
   }
 
-  // 輕量客戶端檢查（規則以後台 normalizeNav 為準）
+  /**
+   * 畫一列（父項 depth=0、子項 depth=1）。
+   * 刻意寫成回傳 JSX 的函式而不是 <NavRow/> 元件：元件每次 render 都是新身份，
+   * 輸入框會 remount、打字時游標會掉；函式呼叫則沿用同一個 key 的元素樹。
+   */
+  function renderRow(link: NavLink, path: number[], depth: 0 | 1) {
+    const pi = path[0];
+    const ci = path[1] ?? 0;
+    const keyBase =
+      depth === 0 ? `links.${pi}` : `links.${pi}.children.${ci}`;
+    const siblings =
+      depth === 0 ? links.length : links[pi].children?.length ?? 0;
+    const idx = path[path.length - 1];
+    const idBase = depth === 0 ? `nav-${pi}` : `nav-${pi}-${ci}`;
+    const what =
+      depth === 0 ? `第 ${pi + 1} 項` : `第 ${pi + 1} 項的第 ${ci + 1} 個子項`;
+    const btn =
+      "clip-slab inline-flex min-h-11 min-w-11 items-center justify-center border border-white/15 bg-white/5 text-white/80 transition hover:bg-white/10 disabled:opacity-30";
+
+    return (
+      <div
+        className={`flex flex-wrap items-end gap-3 rounded-lg p-2 ${
+          depth === 0 ? "" : "border border-white/10 bg-white/[0.02]"
+        }`}
+      >
+        <div className="w-40 shrink-0">
+          <label className="label" htmlFor={`${idBase}-href`}>
+            連結到
+          </label>
+          <select
+            id={`${idBase}-href`}
+            className="field"
+            value={link.href}
+            onChange={(e) => patchLink(path, { href: e.target.value })}
+          >
+            {NAV_HREFS.map((h) => (
+              <option key={h} value={h}>
+                {NAV_HREF_LABELS[h] ?? h}
+              </option>
+            ))}
+          </select>
+          {api.fields[`${keyBase}.href`] && (
+            <p className="mt-1 text-xs text-red-300">
+              {api.fields[`${keyBase}.href`]}
+            </p>
+          )}
+        </div>
+        <div className="min-w-0 flex-1">
+          <label className="label" htmlFor={`${idBase}-label`}>
+            顯示名稱
+          </label>
+          <input
+            id={`${idBase}-label`}
+            className="field"
+            value={link.label}
+            maxLength={NAV_LABEL_MAXLEN}
+            onChange={(e) => patchLink(path, { label: e.target.value })}
+          />
+          {api.fields[`${keyBase}.label`] && (
+            <p className="mt-1 text-xs text-red-300">
+              {api.fields[`${keyBase}.label`]}
+            </p>
+          )}
+        </div>
+        <label className="flex min-h-11 items-center gap-2 text-sm text-white/75">
+          <input
+            type="checkbox"
+            checked={link.visible}
+            onChange={(e) => patchLink(path, { visible: e.target.checked })}
+            className="accent-[var(--color-vital)]"
+          />
+          顯示
+        </label>
+        <div className="flex items-center gap-1">
+          <button
+            type="button"
+            aria-label={`上移${what}`}
+            disabled={idx === 0}
+            onClick={() => moveLink(path, -1)}
+            className={btn}
+          >
+            <ArrowUp size={15} />
+          </button>
+          <button
+            type="button"
+            aria-label={`下移${what}`}
+            disabled={idx === siblings - 1}
+            onClick={() => moveLink(path, 1)}
+            className={btn}
+          >
+            <ArrowDown size={15} />
+          </button>
+          <button
+            type="button"
+            aria-label={`刪除${what}`}
+            disabled={depth === 0 && links.length <= NAV_MIN}
+            onClick={() => removeLink(path)}
+            className={btn}
+          >
+            <Trash2 size={15} />
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  // 輕量客戶端檢查（規則以後台 normalizeNav 為準，這裡只是提早擋）
+  const allLinks = [
+    ...links.map((l) => ({ href: l.href, label: l.label })),
+    ...links.flatMap((l) =>
+      (l.children ?? []).map((c) => ({ href: c.href, label: c.label }))
+    ),
+  ];
+  const seenHrefs = new Set<string>();
+  let hasDupHref = false;
+  for (const it of allLinks) {
+    if (seenHrefs.has(it.href)) hasDupHref = true;
+    seenHrefs.add(it.href);
+  }
+
   let problem: string | null = null;
-  if (links.length < 3 || links.length > 8) {
-    problem = `選單項目請維持 3–8 項（目前 ${links.length} 項）。`;
+  if (links.length < NAV_MIN || links.length > NAV_MAX) {
+    problem = `選單請維持 ${NAV_MIN}–${NAV_MAX} 項（目前 ${links.length} 項）。`;
   } else if (!links.some((l) => l.href === "/")) {
     problem = "選單必須包含「主頁」。";
-  } else if (new Set(links.map((l) => l.href)).size !== links.length) {
-    problem = "選單連結不可重複。";
+  } else if (hasDupHref) {
+    problem = "選單連結不可重複（子選單也計算在內）。";
   } else if (
-    links.some((l) => l.label.trim().length < 1 || l.label.trim().length > NAV_LABEL_MAXLEN)
+    links.some(
+      (l) => l.href !== NAV_PARENT_WITH_CHILDREN && (l.children?.length ?? 0) > 0
+    )
+  ) {
+    problem = "只有「活動」可以有子選單。";
+  } else if (links.some((l) => (l.children?.length ?? 0) > NAV_CHILDREN_MAX)) {
+    problem = `子選單最多 ${NAV_CHILDREN_MAX} 項。`;
+  } else if (
+    allLinks.some(
+      (it) =>
+        it.label.trim().length < 1 ||
+        it.label.trim().length > NAV_LABEL_MAXLEN
+    )
   ) {
     problem = `選單名稱請填 1–${NAV_LABEL_MAXLEN} 字。`;
   }
@@ -884,7 +1083,7 @@ function NavSection({ api }: { api: SectionApi<SiteNav> }) {
   return (
     <SectionShell
       title="導覽選單"
-      desc="網站頂部與頁尾的選單。陣列順序即顯示順序；取消勾選「顯示」的項目會暫時下架但保留設定。必須包含「主頁」，共 3–8 項。"
+      desc={`網站頂部與頁尾的選單。陣列順序即顯示順序；取消勾選「顯示」的項目會暫時下架但保留設定。必須包含「主頁」，共 ${NAV_MIN}–${NAV_MAX} 項；只有「活動」可以有子選單（最多 ${NAV_CHILDREN_MAX} 項，一層為限）。`}
       resetLabel="回復原廠選單"
       previewHref="/"
       api={api}
@@ -892,95 +1091,53 @@ function NavSection({ api }: { api: SectionApi<SiteNav> }) {
       disabledReason={problem}
     >
       <div className="space-y-3">
-        {links.map((l, i) => (
-          <div
-            key={`nav-${i}`}
-            className="flex flex-wrap items-end gap-3 rounded-xl border border-white/10 bg-white/[0.02] p-3"
-          >
-            <div className="w-40 shrink-0">
-              <label className="label" htmlFor={`nav-${i}-href`}>
-                連結到
-              </label>
-              <select
-                id={`nav-${i}-href`}
-                className="field"
-                value={l.href}
-                onChange={(e) => patchLink(i, { href: e.target.value })}
-              >
-                {NAV_HREFS.map((h) => (
-                  <option key={h} value={h}>
-                    {NAV_HREF_LABELS[h] ?? h}
-                  </option>
-                ))}
-              </select>
-              {api.fields[`links.${i}.href`] && (
-                <p className="mt-1 text-xs text-red-300">
-                  {api.fields[`links.${i}.href`]}
-                </p>
+        {links.map((l, i) => {
+          const childErr = api.fields[`links.${i}.children`];
+          return (
+            <div
+              key={`nav-${i}`}
+              className="space-y-2 rounded-xl border border-white/10 bg-white/[0.02] p-3"
+            >
+              {renderRow(l, [i], 0)}
+
+              {childErr && <p className="text-xs text-red-300">{childErr}</p>}
+
+              {l.href === NAV_PARENT_WITH_CHILDREN && (
+                <div className="ml-4 border-l border-white/10 pl-4">
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <span className="text-xs font-semibold text-white/60">
+                      子選單（最多 {NAV_CHILDREN_MAX} 項，只支援一層）
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => addChild(i)}
+                      disabled={(l.children?.length ?? 0) >= NAV_CHILDREN_MAX}
+                      className="btn-base btn-ghost min-h-11"
+                    >
+                      <Plus size={15} /> 新增子項
+                    </button>
+                  </div>
+                  {(l.children?.length ?? 0) === 0 ? (
+                    <p className="mt-2 text-xs text-white/45">目前沒有子項。</p>
+                  ) : (
+                    <div className="mt-2 space-y-2">
+                      {(l.children ?? []).map((c, j) => (
+                        <div key={`nav-${i}-${j}`}>
+                          {renderRow(c, [i, j], 1)}
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
               )}
             </div>
-            <div className="min-w-0 flex-1">
-              <label className="label" htmlFor={`nav-${i}-label`}>
-                顯示名稱
-              </label>
-              <input
-                id={`nav-${i}-label`}
-                className="field"
-                value={l.label}
-                maxLength={NAV_LABEL_MAXLEN}
-                onChange={(e) => patchLink(i, { label: e.target.value })}
-              />
-              {api.fields[`links.${i}.label`] && (
-                <p className="mt-1 text-xs text-red-300">
-                  {api.fields[`links.${i}.label`]}
-                </p>
-              )}
-            </div>
-            <label className="flex min-h-11 items-center gap-2 text-sm text-white/75">
-              <input
-                type="checkbox"
-                checked={l.visible}
-                onChange={(e) => patchLink(i, { visible: e.target.checked })}
-                className="accent-[var(--color-vital)]"
-              />
-              顯示
-            </label>
-            <div className="flex items-center gap-1">
-              <button
-                type="button"
-                aria-label={`上移第 ${i + 1} 項`}
-                disabled={i === 0}
-                onClick={() => moveLink(i, -1)}
-                className="clip-slab inline-flex min-h-11 min-w-11 items-center justify-center border border-white/15 bg-white/5 text-white/80 transition hover:bg-white/10 disabled:opacity-30"
-              >
-                <ArrowUp size={15} />
-              </button>
-              <button
-                type="button"
-                aria-label={`下移第 ${i + 1} 項`}
-                disabled={i === links.length - 1}
-                onClick={() => moveLink(i, 1)}
-                className="clip-slab inline-flex min-h-11 min-w-11 items-center justify-center border border-white/15 bg-white/5 text-white/80 transition hover:bg-white/10 disabled:opacity-30"
-              >
-                <ArrowDown size={15} />
-              </button>
-              <button
-                type="button"
-                aria-label={`刪除第 ${i + 1} 項`}
-                disabled={links.length <= 3}
-                onClick={() => removeLink(i)}
-                className="clip-slab inline-flex min-h-11 min-w-11 items-center justify-center border border-white/15 bg-white/5 text-white/80 transition hover:bg-white/10 disabled:opacity-30"
-              >
-                <Trash2 size={15} />
-              </button>
-            </div>
-          </div>
-        ))}
+          );
+        })}
 
         <button
           type="button"
           onClick={addLink}
-          disabled={links.length >= 8}
+          disabled={links.length >= NAV_MAX}
           className="btn-base btn-ghost"
         >
           <Plus size={16} /> 新增選單項目

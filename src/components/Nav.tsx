@@ -3,11 +3,10 @@
 import type { CSSProperties } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { useEffect, useState } from "react";
+import { useEffect, useId, useRef, useState } from "react";
 import { ChevronDown, Gift, Shield, Ticket, User } from "lucide-react";
-import { BRAND, NAV_LINKS } from "@/lib/config";
-import type { NavLink } from "@/lib/content";
-import { withHyroxNav } from "./hyrox/shared";
+import { BRAND } from "@/lib/config";
+import { DEFAULT_NAV, type NavLink } from "@/lib/content";
 import { useSmartNav } from "./fx/useSmartNav";
 import { MobileNav } from "./MobileNav";
 import { LogoutButton } from "./LogoutButton";
@@ -29,6 +28,169 @@ interface Props {
 /** 斜切角尺寸：小元件用較小的切角，避免切掉過多面積 */
 const CUT_SM = { "--cut": "8px" } as CSSProperties;
 const CUT_MD = { "--cut": "14px" } as CSSProperties;
+
+/** 選單項目是否處於「當前頁」：本身或其子項命中即算（子項在子選單內仍要標示父項） */
+function isNavActive(link: NavLink, pathname: string): boolean {
+  const hit = (href: string) =>
+    pathname === href || pathname.startsWith(`${href}/`);
+  if (hit(link.href)) return true;
+  return (link.children ?? []).some((c) => hit(c.href));
+}
+
+/**
+ * 桌面導覽的單一項目。
+ *
+ * 有子項時＝「父項連結 + 展開鈕 + 下拉」：
+ *  - 父項 Link 照舊導航到父頁（「活動」→ /events），不因為有子選單而失去入口
+ *  - 展開鈕獨立存在，aria-haspopup / aria-expanded / aria-controls 掛在它身上
+ *  - 滑鼠 hover 展開、鍵盤 focus 到父項或展開鈕時展開、Esc 收起並把焦點還給展開鈕
+ *  - 下拉與觸發鈕之間用外層容器的 pt-2 內距相接（不是下拉的 mt-2），
+ *    這樣滑鼠橫越中間空白時 hover 不會中斷（紅色要求：hover 留白不能消失）
+ */
+function DesktopNavItem({
+  link,
+  pathname,
+}: {
+  link: NavLink;
+  pathname: string;
+}) {
+  const rawId = useId();
+  const panelId = `navsub-${rawId.replace(/[^a-zA-Z0-9-]/g, "")}`;
+  const [open, setOpen] = useState(false);
+  const triggerRef = useRef<HTMLButtonElement>(null);
+  /**
+   * Esc 收起後會把焦點送回展開鈕，但展開鈕的 onFocus 又會把它打開——
+   * 用一個一次性旗標吃掉那次 focus，才不會「按 Esc 反而彈更開」。
+   */
+  const skipFocusOpenRef = useRef(false);
+  const children = link.children ?? [];
+  const hasChildren = children.length > 0;
+  const active = isNavActive(link, pathname);
+
+  const itemClass = `group relative isolate inline-flex min-h-11 items-center px-4 text-sm font-semibold transition-colors duration-300 ${
+    active ? "text-white" : "text-white/70 hover:text-white"
+  }`;
+
+  if (!hasChildren) {
+    return (
+      <Link
+        href={link.href}
+        aria-current={active ? "page" : undefined}
+        className={itemClass}
+      >
+        <NavItemDecor active={active} />
+        {link.label}
+      </Link>
+    );
+  }
+
+  return (
+    <div
+      className="relative flex items-center"
+      onMouseEnter={() => setOpen(true)}
+      onMouseLeave={() => setOpen(false)}
+      onKeyDown={(e) => {
+        if (e.key === "Escape" && open) {
+          e.stopPropagation();
+          skipFocusOpenRef.current = true;
+          setOpen(false);
+          triggerRef.current?.focus();
+        }
+      }}
+      onBlur={(e) => {
+        // 焦點離開整個項目（含下拉）才收起
+        if (!e.currentTarget.contains(e.relatedTarget as Node | null)) {
+          setOpen(false);
+        }
+      }}
+    >
+      <Link
+        href={link.href}
+        aria-current={active ? "page" : undefined}
+        onFocus={() => setOpen(true)}
+        className={`${itemClass} pr-1`}
+      >
+        <NavItemDecor active={active} />
+        {link.label}
+      </Link>
+
+      <button
+        ref={triggerRef}
+        type="button"
+        aria-haspopup="true"
+        aria-expanded={open}
+        aria-controls={panelId}
+        aria-label={`展開「${link.label}」子選單`}
+        onFocus={() => {
+          if (skipFocusOpenRef.current) {
+            skipFocusOpenRef.current = false;
+            return;
+          }
+          setOpen(true);
+        }}
+        onClick={() => setOpen((v) => !v)}
+        className="mr-1 inline-flex h-11 w-7 flex-none items-center justify-center text-white/60 transition-colors hover:text-white"
+      >
+        <ChevronDown
+          size={14}
+          aria-hidden
+          className={`transition-transform duration-300 ${open ? "rotate-180" : ""}`}
+        />
+      </button>
+
+      {open && (
+        <div id={panelId} className="absolute left-0 top-full z-50 pt-2">
+          <ul
+            style={CUT_MD}
+            className="clip-notch-br min-w-52 border border-ink-line bg-ink-soft py-1.5 shadow-2xl backdrop-blur-xl"
+          >
+            {children.map((c) => {
+              const childActive =
+                pathname === c.href || pathname.startsWith(`${c.href}/`);
+              return (
+                <li key={c.href}>
+                  <Link
+                    href={c.href}
+                    aria-current={childActive ? "page" : undefined}
+                    className={`flex min-h-11 items-center px-4 text-sm transition-colors ${
+                      childActive
+                        ? "bg-white/[0.06] text-vital-bright"
+                        : "text-white/85 hover:bg-white/10 hover:text-white"
+                    }`}
+                  >
+                    {c.label}
+                  </Link>
+                </li>
+              );
+            })}
+          </ul>
+        </div>
+      )}
+    </div>
+  );
+}
+
+/** 當前項的斜切 slab 底 + 底部實線（父項與單層項目共用，避免樣式漂移） */
+function NavItemDecor({ active }: { active: boolean }) {
+  return (
+    <>
+      <span
+        aria-hidden
+        className={`clip-slab absolute inset-0 -z-10 transition-opacity duration-300 ${
+          active
+            ? "bg-white/10 opacity-100"
+            : "bg-white/[0.06] opacity-0 group-hover:opacity-100"
+        }`}
+      />
+      <span
+        aria-hidden
+        className={`absolute inset-x-0 bottom-0 h-[2px] transition-opacity duration-300 ${
+          active ? "bg-vital-bright opacity-100" : "opacity-0"
+        }`}
+      />
+    </>
+  );
+}
 
 export function Nav({
   isLoggedIn,
@@ -56,15 +218,22 @@ export function Nav({
     return () => window.removeEventListener("scroll", onScroll);
   }, []);
 
-  // T-6：選單改讀 site_nav（layout 傳入）；未傳入時回落 config 的 NAV_LINKS。
-  // visible=false 的項目保留在資料中但不顯示（桌面與手機選單同步）。
-  // HYROX 系列入口固定插在「活動」之後（DB 的 site_nav 未必有這一項，
-  // 只改 config 的話線上不會出現，理由見 components/hyrox/shared.ts）。
-  const links = withHyroxNav(
-    (navLinks ?? NAV_LINKS.map((l) => ({ ...l, visible: true })))
-      .filter((l) => l.visible)
-      .map((l) => ({ href: l.href, label: l.label }))
-  );
+  // T-6：選單改讀 site_nav（layout 傳入）；未傳入時回落 DEFAULT_NAV
+  // （不再回落 config 的 NAV_LINKS——那是收斂前的 7 項平級結構）。
+  // visible=false 的項目保留在資料中但不顯示（桌面與手機選單同步），
+  // 子項也做同樣的過濾；過濾後沒有子項的父項不再帶 children（避免空下拉）。
+  // 2026 導覽收斂：/hyrox 已是 site_nav 的正式子項，元件層不再注入。
+  const source: NavLink[] = navLinks ?? DEFAULT_NAV.links;
+  const links: NavLink[] = source
+    .filter((l) => l.visible)
+    .map((l) => {
+      const children = (l.children ?? [])
+        .filter((c) => c.visible)
+        .map((c) => ({ href: c.href, label: c.label, visible: true }));
+      return children.length > 0
+        ? { href: l.href, label: l.label, visible: true, children }
+        : { href: l.href, label: l.label, visible: true };
+    });
 
   return (
     <header
@@ -111,35 +280,9 @@ export function Nav({
 
         {/* 去膠囊化：當前項用斜切 slab + 底部實線標示，不再是圓角填充 */}
         <nav className="hidden items-center gap-1 md:flex">
-          {links.map((l) => {
-            const active = pathname === l.href || pathname.startsWith(l.href + "/");
-            return (
-              <Link
-                key={l.href}
-                href={l.href}
-                aria-current={active ? "page" : undefined}
-                className={`group relative isolate inline-flex min-h-11 items-center px-4 text-sm font-semibold transition-colors duration-300 ${
-                  active ? "text-white" : "text-white/70 hover:text-white"
-                }`}
-              >
-                <span
-                  aria-hidden
-                  className={`clip-slab absolute inset-0 -z-10 transition-opacity duration-300 ${
-                    active
-                      ? "bg-white/10 opacity-100"
-                      : "bg-white/[0.06] opacity-0 group-hover:opacity-100"
-                  }`}
-                />
-                <span
-                  aria-hidden
-                  className={`absolute inset-x-0 bottom-0 h-[2px] transition-opacity duration-300 ${
-                    active ? "bg-vital-bright opacity-100" : "opacity-0"
-                  }`}
-                />
-                {l.label}
-              </Link>
-            );
-          })}
+          {links.map((l) => (
+            <DesktopNavItem key={l.href} link={l} pathname={pathname} />
+          ))}
         </nav>
 
         <div className="flex items-center gap-2 md:gap-3">

@@ -2,6 +2,8 @@
  * /api/admin/site-nav — 全站選單（管理員限定）
  *
  * GET    讀取 site_nav（DB 無值 → 回落預設）→ { ok: true, data }
+ *        讀取端走 coerceNav：舊版 7–8 項扁平結構會自動換成新的 5 項結構
+ *        （「活動」帶 3 個子項），客戶不必手動改設定。
  * POST   儲存整包 SiteNav → 200；結構不合法 → 400（fields），DB 不寫
  * DELETE 回復原廠選單（只重置 site_nav 一列，不動其他資料）→ 200
  *
@@ -98,7 +100,8 @@ export async function POST(request: Request) {
     const body = await readJson(request);
     if (!body) return jsonBadJson();
 
-    // 1) 結構驗證（links 3–8 項、href 白名單、label 長度；不合法整套退回）
+    // 1) 結構驗證（頂層 4–6 項、必含「主頁」、只有「活動」可有 ≤4 個子項、
+    //    href 白名單且全站含子項不重複、label 1–20 字；不合法整套退回 400）
     const normalized = normalizeNav(body, DEFAULT_NAV);
     if (!normalized.ok) return jsonValidation(normalized.fields);
     const next: SiteNav = normalized.nav;

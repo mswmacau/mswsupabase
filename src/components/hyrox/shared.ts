@@ -145,26 +145,10 @@ export const WEATHER_NOTICE =
 /** HYROX 場次的固定系列標籤 */
 export const HYROX_SERIES = "hyrox";
 
-/** 導覽列要加的項目（放「活動」之後） */
-const HYROX_NAV_ITEM = { href: "/hyrox", label: "HYROX" };
-
-/**
- * 在導覽清單裡插入 HYROX 一項，位置固定緊接「活動」（/events）。
- *
- * 為什麼要在元件裡插，而不是只改 config 的 NAV_LINKS：
- *   導覽實際內容來自 DB 的 site_nav（getSiteNav），config 只是 fallback。
- *   只改 config 的話，線上（DB 有資料）永遠看不到這一項。
- *   已經有 /hyrox 就不重複插入（站主之後自己在後台加了也不會變兩項）。
+/*
+ * 註：原本這裡有一個 withHyroxNav()，在元件層把 HYROX 硬插進導覽列
+ * （因為導覽內容來自 DB 的 site_nav，只改 config 不會在線上出現）。
+ * 2026 導覽收斂後 /hyrox 已是 site_nav 的正式子項（「活動」→「戶外 HYROX 訓練」），
+ * 不再需要在元件層注入，已移除。本檔其餘常數與純函式（HYROX_STATIONS、
+ * photoCountLabel 等）仍供 /hyrox 各頁使用。
  */
-export function withHyroxNav<T extends { href: string; label: string }>(
-  links: readonly T[]
-): (T | { href: string; label: string })[] {
-  if (links.some((l) => l.href === HYROX_NAV_ITEM.href)) return [...links];
-  const at = links.findIndex((l) => l.href === "/events");
-  const idx = at === -1 ? links.length : at + 1;
-  return [
-    ...links.slice(0, idx),
-    { ...HYROX_NAV_ITEM },
-    ...links.slice(idx),
-  ];
-}
