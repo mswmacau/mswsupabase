@@ -270,6 +270,11 @@ export interface TrainingSessionRow {
   class_id: string | null;
   title: string;
   location: string;
+  /**
+   * 管理員在「這一場」特別改過的場地；null = 沿用課程／場次預設的 location。
+   * 顯示時一律 `location_override ?? location`，不要只顯示 location。
+   */
+  location_override: string | null;
   coach_name: string | null;
   capacity: number;
   status: "open" | "closed" | "cancelled";
@@ -278,6 +283,21 @@ export interface TrainingSessionRow {
   class_name: string | null;
   class_color_key: string | null;
   class_category: TrainingCategory | null;
+}
+
+/* ── 日曆色彩圖例（migration-schedule-legend.sql）──────────────────────
+ * 客戶原話：「如果看不到，上方可以說明顏色所代表的活動，並且後台同步」
+ * 前台日曆格子太窄放不下課名，改用顏色短條表示，圖例負責解釋顏色。
+ * 標籤（label）由後台編輯，前台只讀。
+ * ─────────────────────────────────────────────────────────────────── */
+
+/** 前台日曆的色彩圖例（只含啟用中的，已依 sort_order 排序） */
+export interface ScheduleLegendItem {
+  /** 對應 training_classes.color_key 的色票鍵（blue / green / …），不是 hex */
+  color_key: string;
+  /** 後台可編輯的顯示名稱，1–20 字 */
+  label: string;
+  sort_order: number;
 }
 
 /* ── 月份發布（migration-training-months.sql）─────────────────────────

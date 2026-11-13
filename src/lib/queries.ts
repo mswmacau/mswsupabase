@@ -40,6 +40,7 @@ import type {
   PointTransaction,
   Profile,
   RunSubmission,
+  ScheduleLegendItem,
   SiteStats,
   TrainingCategory,
   TrainingCheckin,
@@ -145,7 +146,7 @@ export function trainingMonthRange(
 
 /** 月曆查詢的欄位（課程以別名 class 內嵌，回傳後攤平） */
 const MONTH_SELECT =
-  "id, session_date, start_time, end_time, class_id, title, location, coach_name, capacity, status, note, class:training_classes(name, color_key, category)";
+  "id, session_date, start_time, end_time, class_id, title, location, location_override, coach_name, capacity, status, note, class:training_classes(name, color_key, category)";
 
 type MonthRow = {
   id: string;
@@ -155,6 +156,7 @@ type MonthRow = {
   class_id: string | null;
   title: string;
   location: string;
+  location_override: string | null;
   coach_name: string | null;
   capacity: number;
   status: "open" | "closed" | "cancelled";
@@ -200,6 +202,7 @@ export const getMonthSchedule = unstable_cache(
       class_id: row.class_id,
       title: row.title,
       location: row.location,
+      location_override: row.location_override,
       coach_name: row.coach_name,
       capacity: row.capacity,
       status: row.status,
@@ -358,6 +361,7 @@ export const getScheduleMonth = unstable_cache(
         class_id: row.class_id,
         title: row.title,
         location: row.location,
+        location_override: row.location_override,
         coach_name: row.coach_name,
         capacity: row.capacity,
         status: row.status,
@@ -380,6 +384,40 @@ export const getScheduleMonth = unstable_cache(
     }
   ),
   ["training-schedule-published-month"],
+  { tags: [TRAINING_SCHEDULE_TAG], revalidate: 60 }
+);
+
+/**
+ * 前台日曆的色彩圖例（只回啟用中的，已依 sort_order 排序）。
+ *
+ * 客戶原話：「如果看不到，上方可以說明顏色所代表的活動，並且後台同步」
+ * 手機日曆格子放不下課名，改用顏色短條，這份資料就是「顏色 → 活動」的解釋。
+ *
+ * 讀不到（migration 未執行 / Supabase 未設定 / 網路錯誤）一律回空陣列，
+ * **不 throw** —— 前台的反應是「整段圖例不顯示」，日曆照常可用，
+ * 不能因為少一張圖例表就讓 /events 掛掉。
+ */
+export const getScheduleLegend = unstable_cache(
+  cache(async (): Promise<ScheduleLegendItem[]> => {
+    const supabase = anonClient();
+    if (!supabase) return [];
+
+    const { data, error } = await supabase
+      .from("schedule_legend")
+      .select("color_key, label, sort_order")
+      .eq("is_active", true)
+      .order("sort_order", { ascending: true })
+      .order("color_key", { ascending: true });
+
+    if (error || !data) return [];
+
+    return (data as ScheduleLegendItem[]).map((row) => ({
+      color_key: row.color_key,
+      label: row.label,
+      sort_order: row.sort_order,
+    }));
+  }),
+  ["schedule-legend"],
   { tags: [TRAINING_SCHEDULE_TAG], revalidate: 60 }
 );
 
