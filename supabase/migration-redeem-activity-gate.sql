@@ -334,8 +334,11 @@ do $$ begin raise notice 'A 段 OK — redeem_reward 已加入運動紀錄門檻
 --      and not exists (select 1 from public.training_checkins c
 --                       where c.user_id = p.id and c.status = 'approved')
 --    order by p.points desc;
---   預期看到：lou kei chan、街健新手、nokiababy（各 200 分）、fly chan（30 分）
---   —— fly chan 目前分數不足 300，實際上還換不到東西，只是同樣沒有運動紀錄。
+--   預期看到：lou kei chan、街健新手、nokiababy（各 200 分，報告 §3.3 實測確定無運動紀錄）。
+--   其他同樣「零已核可紀錄」的帳號也會一併列出——這是查詢的真實結果，不是誤判；
+--   報告 §3.5 提到 4 筆已核可跑步分屬 nokia、test、fly chan 等帳號，故 fly chan 應不在名單內，
+--   但名單一律以本查詢輸出為準（報告只列了「等」，第四位身份未逐一列出）。
+--   注意：名單裡若出現管理員帳號屬正常（管理員本來就少上傳跑步），不影響其後台職能。
 
 -- 【驗證 3】不受影響的帳號（預期：4 位有已核可跑步紀錄者照樣可兌換）
 --   select p.id, p.display_name, p.points,
