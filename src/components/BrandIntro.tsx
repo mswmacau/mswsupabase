@@ -67,7 +67,7 @@ export function BrandIntro({ about = ABOUT }: { about?: SiteContentAbout }) {
   return (
     <section
       id="about"
-      className="relative overflow-hidden border-b border-ink-line"
+      className="pub-shell pub-band-0 relative overflow-hidden border-b border-ink-line"
       data-fx-seq
     >
       {/* 手工質感：細網格 + 噪點（沿用其他區塊） */}
@@ -84,15 +84,15 @@ export function BrandIntro({ about = ABOUT }: { about?: SiteContentAbout }) {
         className="clip-notch pointer-events-none absolute -bottom-10 -right-16 hidden h-40 w-40 bg-vital/[0.07] sm:block"
       />
 
-      <div className="container-msw section-pad relative">
+      <div className="container-msw pub-pad relative">
         {/* 宣言式主敘述 */}
-        <h2 className="mt-6 max-w-4xl text-[clamp(1.35rem,2.6vw,2rem)] font-black leading-[1.35] tracking-[-0.01em] text-white">
+        <h2 className="max-w-4xl text-[clamp(1.35rem,2.6vw,2rem)] font-black leading-[1.35] tracking-[-0.01em] text-white">
           <Emphasize text={about.lead} terms={["Street Workout", "HYROX"]} />
         </h2>
 
         {/* ===== 02：不對稱雙欄（理念 / 號召） ===== */}
-        <div className="mt-12 grid gap-10 border-t border-[var(--line-fine-strong)] pt-12 lg:mt-16 lg:grid-cols-[1.6fr_1fr] lg:gap-16 lg:pt-14">
-          <p className="text-base leading-[1.9] text-[var(--text-muted)] lg:text-lg">
+        <div className="mt-6 grid gap-6 border-t border-[var(--line-fine-strong)] pt-6 lg:mt-12 lg:grid-cols-[1.6fr_1fr] lg:gap-16 lg:pt-12">
+          <p className="text-[15px] leading-[1.75] text-[var(--text-muted)] md:text-base md:leading-[1.85] lg:text-lg">
             <Emphasize
               text={about.philosophy}
               terms={["生活態度"]}
@@ -104,9 +104,9 @@ export function BrandIntro({ about = ABOUT }: { about?: SiteContentAbout }) {
           <div className="lg:border-l lg:border-[var(--line-fine-strong)] lg:pl-8">
             <span
               aria-hidden
-              className="mb-4 block h-1.5 w-1.5 rotate-45 bg-vital-bright"
+              className="mb-3 block h-1.5 w-1.5 rotate-45 bg-vital-bright"
             />
-            <p className="text-base leading-[1.9] text-white/80">
+            <p className="text-[15px] leading-[1.75] text-white/80 md:text-base md:leading-[1.85]">
               {about.cta}
             </p>
           </div>

@@ -39,6 +39,10 @@ import { getCurrentProfile } from "@/lib/supabase/server";
 
 /* ===== 首頁動效（只喺首頁掛載，唔影響其他頁） ===== */
 import "./home-fx.css";
+/* ===== 公開頁視覺層級語彙（色帶 / 抬頭節奏 / 卡片三級 / 數字主次 / 觸控 44px） =====
+ * 刻意唔放進 globals.css：/training、/events、/leaderboard 已各自優化過，
+ * 呢份檔只會喺有 import 佢嘅路由載入。 */
+import "./public-ui.css";
 import { ScrollProgress } from "@/components/fx/home/ScrollProgress";
 import { BackToTop } from "@/components/fx/home/BackToTop";
 import { RevealHome } from "@/components/fx/home/RevealHome";
@@ -186,7 +190,7 @@ export default async function HomePage() {
 
   const heroSection = (
     <section
-      className="relative overflow-hidden border-b border-ink-line"
+      className="pub-shell pub-band-0 relative overflow-hidden border-b border-ink-line"
       data-fx-hero
     >
       {heroBgUrl && (
@@ -230,7 +234,7 @@ export default async function HomePage() {
           （會變雙層內距、與 h1 不對齊）。
           冇圖時整塊唔渲染，避免留一段空白內距。 */}
       {hasSlides && (
-        <div className="relative z-10 pt-20 md:pt-24">
+        <div className="relative z-10 pt-20">
           <SlideCarousel slides={slides} />
         </div>
       )}
@@ -240,9 +244,9 @@ export default async function HomePage() {
             嗰層讓開）。冇輪播時：回落原本嘅 pt-24/md:pt-32/lg:pt-36，靠佢讓開
             fixed Nav，與改動前完全一致。 */}
         <div
-          className={`relative pb-16 lg:pb-20 ${
+          className={`relative pb-10 lg:pb-16 ${
             hasSlides
-              ? "pt-6 md:pt-8 lg:pt-10"
+              ? "pt-4 md:pt-5 lg:pt-6"
               : "pt-24 md:pt-32 lg:pt-36"
           }`}
         >
@@ -251,13 +255,16 @@ export default async function HomePage() {
             <span className="vlabel text-white/50">Macau · Est. 2026</span>
           </div>
 
-          <div className="lg:pl-14">
+          {/* relative z-10：Hero 視覺（裝飾 SVG）在 DOM 中排在文字之後，
+              沒有 z-index 的話會疊在 CTA 按鈕之上（實測桌面會蓋住
+              「立即加入會員」與「查看活動」）。抬高文字層，裝飾只留在背景。 */}
+          <div className="relative z-10 lg:pl-14">
             {/* h1 本身就是視覺主標：display-hero 掛在 h1 上，
                 內層 span 只負責換行與顏色（字級／字重由 h1 繼承）。
                 描邊副本改用 data-dup + ::before 產生，避免同一串字
                 在文字節點裡出現兩次（h1.textContent 只會有一份）。 */}
             <h1
-              className="display-hero mt-6 lg:-ml-[3vw] lg:w-[112%]"
+              className="pub-display-hero mt-4 md:mt-5 lg:-ml-[3vw] lg:w-[112%]"
               data-fx-reveal
               style={fxDelay(0.18)}
             >
@@ -277,7 +284,7 @@ export default async function HomePage() {
               </span>
             </h1>
 
-            <div className="mt-12 grid gap-10 lg:grid-cols-12 lg:gap-8">
+            <div className="mt-6 grid gap-6 md:mt-8 md:gap-8 lg:grid-cols-12">
               <p
                 className="text-base leading-relaxed text-white/70 sm:text-lg lg:col-span-5"
                 data-fx-reveal
@@ -291,12 +298,13 @@ export default async function HomePage() {
                 data-fx-reveal
                 style={fxDelay(0.48)}
               >
-                <div className="flex flex-wrap items-center gap-4">
+                <div className="flex flex-wrap items-center gap-3">
                   {isLoggedIn ? (
                     <>
+                      {/* 首屏唯一實心主色 CTA：加大尺寸與字級拉開與次要動作的差距 */}
                       <Link
                         href="/dashboard"
-                        className="btn-base btn-vital btn-slab"
+                        className="btn-base btn-vital btn-slab pub-press !px-6 !py-3.5 text-[15px]"
                         data-fx-sheen
                         data-fx-magnet
                       >
@@ -315,7 +323,7 @@ export default async function HomePage() {
                     <>
                       <Link
                         href="/signup"
-                        className="btn-base btn-vital btn-slab"
+                        className="btn-base btn-vital btn-slab pub-press !px-6 !py-3.5 text-[15px]"
                         data-fx-sheen
                         data-fx-magnet
                       >
@@ -337,7 +345,7 @@ export default async function HomePage() {
                     training_sessions（getNextSession），不再用 config 的固定字串。
                     沒有場次時不編造時間，改成「班表整理中」空狀態。 */}
                 {nextSession ? (
-                  <div className="mt-8 border-l-2 border-vital bg-white/[0.03] px-5 py-4">
+                  <div className="mt-6 border-l-2 border-vital bg-white/[0.03] px-4 py-3">
                     <div className="flex items-center gap-2 text-[11px] font-semibold uppercase tracking-[0.22em] text-white/55">
                       <CalendarDays size={14} className="flex-none text-vital-bright" />
                       下一場定期訓練
@@ -365,13 +373,13 @@ export default async function HomePage() {
                     )}
                     <Link
                       href="/training"
-                      className="mt-3 inline-flex items-center gap-1 text-sm font-semibold text-accent-blue hover:text-white"
+                      className="mt-1 inline-flex min-h-11 items-center gap-1 text-sm font-semibold text-accent-blue hover:text-white"
                     >
                       報名 <ChevronRight size={15} />
                     </Link>
                   </div>
                 ) : (
-                  <div className="mt-8 border-l-2 border-vital bg-white/[0.03] px-5 py-4">
+                  <div className="mt-6 border-l-2 border-vital bg-white/[0.03] px-4 py-3">
                     <div className="flex items-center gap-2 text-[11px] font-semibold uppercase tracking-[0.22em] text-white/55">
                       <CalendarDays size={14} className="flex-none text-vital-bright" />
                       下一場定期訓練
@@ -385,9 +393,11 @@ export default async function HomePage() {
             </div>
           </div>
 
-          {/* Hero 視覺：放大並出血出邊界 */}
-          <div className="pointer-events-none relative mt-14 w-full lg:absolute lg:-right-[12%] lg:top-[2%] lg:mt-0 lg:w-[62%]">
-            <div className="clip-slant opacity-90">
+          {/* Hero 視覺：放大並出血出邊界。
+              手機限高 h-40（160px）：原本 350 寬時 SVG 會長到 245px，白白吃掉
+              接近三分之一屏的垂直空間，而它純屬裝飾（aria-hidden）。 */}
+          <div className="pointer-events-none relative mt-6 h-36 w-full lg:absolute lg:-right-[12%] lg:top-[2%] lg:mt-0 lg:h-auto lg:w-[62%]">
+            <div className="clip-slant h-full opacity-90">
               <HeroVisual />
             </div>
           </div>
@@ -420,41 +430,51 @@ export default async function HomePage() {
 
   const statsSection = (
     <section
-      className="relative overflow-hidden border-b border-ink-line bg-ink-soft"
+      className="pub-shell pub-band-1 relative overflow-hidden border-b border-ink-line"
       data-fx-drift-scope
     >
       <div className="grid-lines absolute inset-0" />
       {/* H-15 背景漂移大字（純裝飾，aria-hidden） */}
       <DriftWord text={driftText} />
       <div className="container-msw relative">
-        {/* D 組：統計列成組入場（一次編排嘅第二拍），唔再逐項交错 */}
+        {/* 數字主次（站主要求：一組數字不要同樣字級排成一列然後都很大）
+            ─ 只有「累積跑步里程」用 .pub-figure-primary 當第一眼的主角，
+              其餘三項一律 .pub-figure-aux 退成佐證。
+            ─ 390：主數字獨佔一行（col-span-3），三項輔助排成一列。
+            ─ 1440：12 欄，主數字 6 欄、其餘各 2 欄，並用左側細線分欄。 */}
         <div
-          className="grid grid-cols-2 gap-y-12 py-14 md:py-20 lg:grid-cols-4"
+          className="grid grid-cols-3 items-end gap-x-3 gap-y-5 py-7 md:grid-cols-12 md:gap-x-6 md:py-14"
           data-fx-seq
         >
           {statItems.map((s, i) => (
             <div
               key={s.label}
-              className={`px-5 ${i > 0 ? "md:border-l md:border-white/10" : ""} ${
-                i % 2 === 1 ? "lg:mt-12" : ""
-              } ${i === 2 ? "lg:mt-6" : ""}`}
+              className={`min-w-0 ${
+                i === 0
+                  ? "col-span-3 md:col-span-6"
+                  : "col-span-1 md:col-span-2 md:border-l md:border-white/10 md:pl-5"
+              }`}
             >
-              <div className="flex items-start gap-2">
+              <div className="flex items-start gap-1.5">
                 {/* H-08 CountUp：終值同原本字串完全一致 */}
                 <StatCountUp
                   text={s.value}
-                  className={`stat-figure text-5xl leading-none md:text-6xl lg:text-7xl ${
+                  className={`${i === 0 ? "pub-figure-primary" : "pub-figure-aux"} ${
                     s.accent ? "text-vital-bright" : "text-white"
                   }`}
                 />
-                <span className="text-accent-blue mt-2 text-[11px] font-semibold uppercase tracking-[0.22em]">
+                <span className="text-accent-blue mt-1.5 shrink-0 text-[10px] font-semibold uppercase tracking-[0.18em] md:text-[11px]">
                   {s.unit}
                 </span>
               </div>
-              <div className="mt-4 text-[11px] font-semibold uppercase tracking-[0.22em] text-white/55">
+              <div className="mt-2 text-[11px] font-semibold uppercase tracking-[0.18em] text-white/55">
                 {s.label}
               </div>
-              <div className="mt-4 h-px w-10 bg-white/20" />
+              <div
+                className={`mt-2 h-px w-8 bg-white/20 ${
+                  i === 0 ? "" : "hidden md:block"
+                }`}
+              />
             </div>
           ))}
         </div>
@@ -464,167 +484,168 @@ export default async function HomePage() {
 
   const aboutSection = <BrandIntro about={content.about} />;
 
+  /* 兩大核心活動：整頁視覺重量最高的區塊（最亮的色帶 + 最多的空氣） */
   const programsSection = (
-    <section className="container-msw section-pad" data-fx-seq>
-      <div className="flex flex-wrap items-end justify-between gap-6 border-b border-white/10 pb-8">
-        <div>
-          <h2 className="display-xl mt-5">兩大核心活動</h2>
+    <section className="pub-shell pub-band-2 pub-pad-l" data-fx-seq>
+      <div className="container-msw">
+        <div className="pub-head">
+          <h2 className="pub-head-title">兩大核心活動</h2>
+          <p className="pub-lede">
+            固定時間的團體訓練，加上可累積的月度跑步任務。前者建立紀律，後者累積成果。
+          </p>
         </div>
-        <p className="max-w-md text-sm leading-relaxed text-white/65">
-          固定時間的團體訓練，加上可累積的月度跑步任務。前者建立紀律，後者累積成果。
-        </p>
-      </div>
 
-      <div className="mt-14 grid gap-8 lg:grid-cols-12">
-        {/* 01 定期訓練：7/12，斜切角 */}
-        <article
-          className="clip-notch group relative overflow-hidden border border-white/10 bg-ink-soft p-8 lg:col-span-7"
-          data-fx-tilt
-        >
-          <div className="pointer-events-none absolute -right-20 -top-20 h-56 w-56 rounded-full bg-cobalt/25 blur-2xl transition-transform duration-500 group-hover:-translate-x-4 group-hover:translate-y-4" />
-          <div className="relative">
+        <div className="pub-head-body grid gap-4 md:gap-8 lg:grid-cols-12">
+          {/* 01 定期訓練：主卡（實心面板 + 頂部品牌漸變線），視覺等級最高 */}
+          <article
+            className="clip-notch pub-card-primary pub-card-pad-lg pub-accent-top pub-lift group relative overflow-hidden lg:col-span-7"
+            data-fx-tilt
+          >
+            <div className="pointer-events-none absolute -right-20 -top-20 h-56 w-56 rounded-full bg-cobalt/25 blur-2xl transition-transform duration-500 group-hover:-translate-x-4 group-hover:translate-y-4" />
+            <div className="relative">
+              <div className="flex items-center justify-between gap-4">
+                <span className="text-[11px] font-semibold uppercase tracking-[0.22em] text-white/50">
+                  Program 01
+                </span>
+              </div>
+
+              <div className="mt-5 flex flex-wrap items-end gap-x-4 gap-y-2">
+                <span className="stat-figure text-4xl leading-none text-white md:text-6xl">
+                  WEEKLY
+                </span>
+                <span className="stat-figure text-outline text-3xl leading-none md:text-5xl">
+                  多時段
+                </span>
+                <span className="mb-1 text-sm text-white/55">· 澳門街健館</span>
+              </div>
+
+              <h3 className="mt-5 text-xl font-black tracking-tight md:text-3xl">
+                定期訓練活動
+              </h3>
+              <p className="mt-3 max-w-lg text-sm leading-relaxed text-white/70">
+                每週多堂，時間與教練
+                <span className="font-semibold text-white">見班表</span>
+                ，於澳門街健館進行團體街頭健身訓練。現場簽到，後台確認後即可獲得{" "}
+                <span className="font-semibold text-vital-bright">
+                  {RULES.CHECKIN_POINTS} 積分
+                </span>
+                。
+              </p>
+
+              <ul className="mt-5 border-t border-white/10">
+                {TRAINING_ROWS.map((row) => (
+                  <li
+                    key={row.text}
+                    className="flex items-center gap-3 border-b border-white/10 py-2 text-sm text-white/70 md:py-3"
+                  >
+                    <span className="text-vital-bright">{row.icon}</span>
+                    {row.text}
+                  </li>
+                ))}
+              </ul>
+
+              {/* 同一區塊只留一個實心主色（02 的上傳按鈕）。這顆是「瀏覽」性質的
+                  次要動作，降級為外框，避免兩顆實心按鈕在同一視線互搶。 */}
+              <Link
+                href="/training"
+                className="btn-base btn-ghost btn-slab mt-5"
+                data-fx-sheen
+                data-fx-magnet
+              >
+                查看訓練場次 <ArrowRight size={17} />
+              </Link>
+            </div>
+          </article>
+
+          {/* 02 月度跑步：次卡（透明底 + 上粗線 + 下沉錯位），刻意比 01 輕 */}
+          <article
+            className="group relative border-t-2 border-vital bg-transparent p-4 md:p-8 lg:col-span-5 lg:mt-24"
+            data-fx-tilt
+          >
             <div className="flex items-center justify-between gap-4">
               <span className="text-[11px] font-semibold uppercase tracking-[0.22em] text-white/50">
-                Program 01
+                Program 02
               </span>
             </div>
 
-            <div className="mt-8 flex flex-wrap items-end gap-x-6 gap-y-2">
-              <span className="stat-figure text-6xl leading-none text-white md:text-7xl">
-                WEEKLY
+            <div className="mt-5 flex items-end gap-3">
+              <span className="stat-figure text-4xl leading-none text-vital-bright md:text-6xl">
+                {RULES.MONTHLY_GOAL_KM}
               </span>
-              <span className="stat-figure text-outline text-5xl leading-none md:text-6xl">
-                多時段
+              <span className="text-accent-blue mb-1.5 text-[11px] font-semibold uppercase tracking-[0.22em]">
+                km / month
               </span>
-              <span className="mb-2 text-sm text-white/55">· 澳門街健館</span>
             </div>
 
-            <h3 className="mt-8 text-2xl font-black tracking-tight md:text-3xl">
-              定期訓練活動
+            <h3 className="mt-5 text-xl font-black tracking-tight md:text-3xl">
+              月度跑步挑戰
             </h3>
-            <p className="mt-3 max-w-lg text-sm leading-relaxed text-white/70">
-              每週多堂，時間與教練
-              <span className="font-semibold text-white">見班表</span>
-              ，於澳門街健館進行團體街頭健身訓練。現場簽到，後台確認後即可獲得{" "}
+            <p className="mt-3 text-sm leading-relaxed text-white/70">
+              上傳跑步 app 截圖並填寫公里數，後台人工確認後計入累積。當月滿{" "}
               <span className="font-semibold text-vital-bright">
-                {RULES.CHECKIN_POINTS} 積分
+                {RULES.MONTHLY_GOAL_KM} 公里
               </span>
-              。
+              ，即完成任務並獲得專屬優惠券。
             </p>
 
-            <ul className="mt-8 border-t border-white/10">
-              {TRAINING_ROWS.map((row) => (
+            <ul className="mt-5 border-t border-white/10">
+              {RUN_ROWS.map((row) => (
                 <li
                   key={row.text}
-                  className="flex items-center gap-3 border-b border-white/10 py-3 text-sm text-white/70"
+                  className="flex items-center gap-3 border-b border-white/10 py-2 text-sm text-white/70 md:py-3"
                 >
-                  <span className="text-vital-bright">{row.icon}</span>
+                  <span className="text-accent-blue">{row.icon}</span>
                   {row.text}
                 </li>
               ))}
             </ul>
 
             <Link
-              href="/training"
-              className="btn-base btn-cobalt btn-slab mt-8"
+              href="/run"
+              className="btn-base btn-vital btn-slab pub-press mt-5"
               data-fx-sheen
               data-fx-magnet
             >
-              查看訓練場次 <ArrowRight size={17} />
+              上傳跑步紀錄 <ArrowRight size={17} />
             </Link>
-          </div>
-        </article>
-
-        {/* 02 月度跑步：5/12，下沉錯位，透明底 + 上粗線 */}
-        <article
-          className="group relative border-t-2 border-vital bg-transparent p-8 lg:col-span-5 lg:mt-24"
-          data-fx-tilt
-        >
-          <div className="flex items-center justify-between gap-4">
-            <span className="text-[11px] font-semibold uppercase tracking-[0.22em] text-white/50">
-              Program 02
-            </span>
-          </div>
-
-          <div className="mt-8 flex items-end gap-3">
-            <span className="stat-figure text-6xl leading-none text-vital-bright md:text-7xl">
-              {RULES.MONTHLY_GOAL_KM}
-            </span>
-            <span className="text-accent-blue mb-2 text-[11px] font-semibold uppercase tracking-[0.22em]">
-              km / month
-            </span>
-          </div>
-
-          <h3 className="mt-8 text-2xl font-black tracking-tight md:text-3xl">
-            月度跑步挑戰
-          </h3>
-          <p className="mt-3 text-sm leading-relaxed text-white/70">
-            上傳跑步 app 截圖並填寫公里數，後台人工確認後計入累積。當月滿{" "}
-            <span className="font-semibold text-vital-bright">
-              {RULES.MONTHLY_GOAL_KM} 公里
-            </span>
-            ，即完成任務並獲得專屬優惠券。
-          </p>
-
-          <ul className="mt-8 border-t border-white/10">
-            {RUN_ROWS.map((row) => (
-              <li
-                key={row.text}
-                className="flex items-center gap-3 border-b border-white/10 py-3 text-sm text-white/70"
-              >
-                <span className="text-accent-blue">{row.icon}</span>
-                {row.text}
-              </li>
-            ))}
-          </ul>
-
-          <Link
-            href="/run"
-            className="btn-base btn-vital btn-slab mt-8"
-            data-fx-sheen
-            data-fx-magnet
-          >
-            上傳跑步紀錄 <ArrowRight size={17} />
-          </Link>
-        </article>
+          </article>
+        </div>
       </div>
     </section>
   );
 
   const reasonsSection = (
     <section
-      className="relative border-y border-ink-line bg-ink-soft"
+      className="pub-shell pub-band-0 relative border-y border-ink-line"
       data-fx-seq
     >
       <div className="noise-overlay" />
-      <div className="container-msw section-pad relative">
-        <div className="flex flex-wrap items-end justify-between gap-6">
-          <div>
-            {/* H-13 逐字點亮 scrub（文字內容完全不變，只係拆成逐字 span）。
-                可讀的那份由 aria-label 提供，逐字副本是 aria-hidden，
-                所以 DOM 文字裡這句話只出現一次。 */}
-            <h2
-              className="display-xl mt-5 max-w-2xl"
-              aria-label="超越界限，讓訓練增加驅動力"
-            >
-              <ScrubText text="超越界限，讓訓練增加驅動力" />
-            </h2>
-          </div>
+      <div className="container-msw pub-pad relative">
+        <div className="pub-head">
+          {/* H-13 逐字點亮 scrub（文字內容完全不變，只係拆成逐字 span）。
+              可讀的那份由 aria-label 提供，逐字副本是 aria-hidden，
+              所以 DOM 文字裡這句話只出現一次。 */}
+          <h2
+            className="pub-head-title max-w-2xl"
+            aria-label="超越界限，讓訓練增加驅動力"
+          >
+            <ScrubText text="超越界限，讓訓練增加驅動力" />
+          </h2>
         </div>
 
-        <div className="mt-12 border-t border-white/10">
+        <div className="pub-head-body border-t border-white/10">
           {features.map((f) => (
             <div
               key={f.no}
-              className="group -mx-4 border-b border-white/10 px-4 py-8 transition-colors hover:bg-white/[0.03] lg:grid lg:grid-cols-[7rem_1fr_1.1fr] lg:items-center lg:gap-10 lg:py-12"
+              className="group -mx-4 border-b border-white/10 px-4 py-4 transition-colors hover:bg-white/[0.03] lg:grid lg:grid-cols-[7rem_1fr_1.1fr] lg:items-center lg:gap-10 lg:py-8"
             >
-              <div className="stat-figure text-5xl text-white/25 transition-colors group-hover:text-vital-bright lg:text-6xl">
+              <div className="pub-ghost-figure text-white/25 transition-colors group-hover:text-vital-bright">
                 {f.no}
               </div>
-              <h3 className="mt-4 text-2xl font-black tracking-tight md:text-3xl lg:mt-0">
+              <h3 className="mt-2 text-xl font-black tracking-tight md:text-2xl lg:mt-0 lg:text-3xl">
                 {f.title}
               </h3>
-              <p className="mt-3 text-sm leading-relaxed text-white/70 lg:mt-0 lg:max-w-md">
+              <p className="mt-2 text-sm leading-snug text-white/70 md:leading-relaxed lg:mt-0 lg:max-w-md">
                 {f.desc}
               </p>
             </div>
@@ -635,58 +656,64 @@ export default async function HomePage() {
   );
 
   const disciplinesSection = (
-    <section className="container-msw section-pad" data-fx-seq>
-      <div className="flex flex-wrap items-end justify-between gap-6 border-b border-white/10 pb-8">
-        <div>
-          <h2 className="display-xl mt-5">各類訓練項目</h2>
+    <section className="pub-shell pub-band-1 pub-pad" data-fx-seq>
+      <div className="container-msw">
+        <div className="pub-head">
+          <h2 className="pub-head-title">各類訓練項目</h2>
         </div>
-      </div>
 
-      <div className="mt-12 grid gap-5 sm:grid-cols-2 lg:grid-cols-12">
-        {content.disciplines.map((d, i) => (
-          <article
-            key={d.title}
-            className={`group relative overflow-hidden border border-white/10 bg-ink-soft/70 p-6 transition-colors hover:border-cobalt/60 hover:bg-ink-soft ${
-              DISCIPLINE_SPANS[i] ?? ""
-            } ${i === 0 ? "lg:min-h-[260px]" : ""}`}
-            data-fx-tilt
-          >
-            <span className="stat-figure pointer-events-none absolute -top-2 right-4 text-6xl text-white/[0.07] transition-colors group-hover:text-vital/25 md:text-7xl">
-              {String(i + 1).padStart(2, "0")}
-            </span>
-            <div className="relative">
-              <div className="text-accent-blue text-[11px] font-semibold uppercase tracking-[0.22em]">
-                {d.sub}
+        {/* 六張卡在 390 用兩欄（原本單欄六張要 1,378px），卡片降為「輔助」等級
+            （.pub-card-tile：淺色帶底、無描邊），與 programs 的主卡區分開。
+            桌面維持原本的不規則 Bento（DISCIPLINE_SPANS 只作用於 lg）。 */}
+        <div className="pub-head-body grid grid-cols-2 gap-3 sm:gap-4 lg:grid-cols-12 lg:gap-5">
+          {content.disciplines.map((d, i) => (
+            <article
+              key={d.title}
+              className={`pub-card-tile pub-card-pad pub-lift group relative overflow-hidden ${
+                DISCIPLINE_SPANS[i] ?? ""
+              } ${i === 0 ? "lg:min-h-[260px]" : ""}`}
+              data-fx-tilt
+            >
+              <span className="stat-figure pointer-events-none absolute -top-2 right-3 text-4xl text-white/[0.07] transition-colors group-hover:text-vital/25 md:text-6xl">
+                {String(i + 1).padStart(2, "0")}
+              </span>
+              <div className="relative min-w-0">
+                <div className="text-accent-blue text-[11px] font-semibold uppercase tracking-[0.22em]">
+                  {d.sub}
+                </div>
+                <h3 className="mt-2 text-base font-black tracking-tight md:text-xl lg:text-2xl">
+                  {d.title}
+                </h3>
+                <p className="mt-2 max-w-sm break-words text-[13px] leading-snug text-white/70 md:text-sm md:leading-relaxed">
+                  {d.desc}
+                </p>
               </div>
-              <h3 className="mt-3 text-xl font-black tracking-tight md:text-2xl">
-                {d.title}
-              </h3>
-              <p className="mt-3 max-w-sm text-sm leading-relaxed text-white/70">
-                {d.desc}
-              </p>
-            </div>
-          </article>
-        ))}
+            </article>
+          ))}
+        </div>
       </div>
     </section>
   );
 
   const rankingSection = (
-    <section className="relative border-t border-ink-line" data-fx-seq>
-      <div className="container-msw section-pad grid gap-12 lg:grid-cols-12">
+    <section
+      className="pub-shell pub-band-0 relative border-t border-ink-line"
+      data-fx-seq
+    >
+      <div className="container-msw pub-pad grid gap-8 lg:grid-cols-12">
         <div className="lg:col-span-5">
-          <h2 className="display-xl mt-5">
+          <h2 className="pub-head-title">
             <span className="text-accent-blue block text-[0.4em] font-semibold uppercase tracking-[0.22em]">
               {monthLabel(month)}
             </span>
             <span className="block">排行榜</span>
           </h2>
-          <p className="mt-6 max-w-sm text-sm leading-relaxed text-white/70">
+          <p className="mt-4 max-w-sm text-sm leading-relaxed text-white/70">
             依當月已確認的跑步里程排序。提交紀錄經後台確認後才會計入排名。
           </p>
           <Link
             href="/leaderboard"
-            className="btn-base btn-ghost btn-slab mt-8"
+            className="btn-base btn-ghost btn-slab mt-5"
             data-fx-sheen
             data-fx-magnet
           >
@@ -700,9 +727,9 @@ export default async function HomePage() {
               {leaders.map((l, i) => (
                 <li
                   key={`home-leader-${i + 1}`}
-                  className="group flex items-center gap-5 border-b border-white/10 py-5"
+                  className="group flex items-center gap-4 border-b border-white/10 py-3.5 md:gap-5 md:py-5"
                 >
-                  <span className="stat-figure w-12 text-3xl text-white/25 transition-colors group-hover:text-vital-bright md:text-4xl">
+                  <span className="stat-figure w-10 shrink-0 text-2xl text-white/25 transition-colors group-hover:text-vital-bright md:w-12 md:text-4xl">
                     {String(i + 1).padStart(2, "0")}
                   </span>
                   <div className="min-w-0 flex-1">
@@ -713,8 +740,8 @@ export default async function HomePage() {
                       {l.runs} 次提交 · {l.points} 積分
                     </div>
                   </div>
-                  <div className="text-right">
-                    <div className="stat-figure text-2xl text-white md:text-3xl">
+                  <div className="shrink-0 text-right">
+                    <div className="stat-figure text-xl text-white md:text-2xl">
                       {formatKm(l.total_km)}
                     </div>
                     <div className="text-accent-blue text-[11px] font-semibold uppercase tracking-[0.22em]">
@@ -725,7 +752,7 @@ export default async function HomePage() {
               ))}
             </ol>
           ) : (
-            <div className="border-y border-white/10 px-6 py-14 text-center text-sm text-white/70">
+            <div className="border-y border-white/10 px-6 py-10 text-center text-sm text-white/70 md:py-14">
               {isSupabaseConfigured
                 ? "本月尚無已確認的跑步紀錄，成為第一位上榜者！"
                 : "排行榜準備中。"}
@@ -738,7 +765,7 @@ export default async function HomePage() {
 
   const ctaSection = (
     <section
-      className="relative overflow-hidden border-t border-ink-line"
+      className="pub-shell pub-band-2 relative overflow-hidden border-t border-ink-line"
       data-fx-seq
     >
       <div className="grid-lines absolute inset-0" />
@@ -758,23 +785,23 @@ export default async function HomePage() {
         MSW
       </span>
 
-      <div className="container-msw section-pad relative">
-        <div className="grid gap-12 lg:grid-cols-12">
+      <div className="container-msw pub-pad relative">
+        <div className="grid gap-6 md:gap-12 lg:grid-cols-12">
           <div className="lg:col-span-8">
-            <h2 className="mt-6 text-5xl font-black leading-[0.95] tracking-[-0.03em] sm:text-6xl lg:text-7xl">
+            <h2 className="mt-4 text-4xl font-black leading-[0.95] tracking-[-0.03em] sm:text-5xl lg:text-7xl">
               {isLoggedIn ? content.cta.title_member : content.cta.title_guest}
             </h2>
-            <p className="mt-7 max-w-xl text-base leading-relaxed text-white/70">
+            <p className="mt-5 max-w-xl text-base leading-relaxed text-white/70">
               {isLoggedIn ? content.cta.desc_member : content.cta.desc_guest}
             </p>
           </div>
 
-          <div className="flex flex-col items-start gap-4 lg:col-span-4 lg:pt-20">
+          <div className="flex flex-col items-start gap-3 lg:col-span-4 lg:gap-4 lg:pt-16">
             {isLoggedIn ? (
               <>
                 <Link
                   href="/run"
-                  className="btn-base btn-vital btn-slab"
+                  className="btn-base btn-vital btn-slab pub-press"
                   data-fx-sheen
                   data-fx-magnet
                 >
@@ -793,7 +820,7 @@ export default async function HomePage() {
               <>
                 <Link
                   href="/signup"
-                  className="btn-base btn-vital btn-slab"
+                  className="btn-base btn-vital btn-slab pub-press"
                   data-fx-sheen
                   data-fx-magnet
                 >

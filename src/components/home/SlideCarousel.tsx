@@ -152,7 +152,7 @@ export function SlideCarousel({ slides }: { slides: HomeSlide[] }) {
 
   return (
     <section
-      className="container-msw min-w-0 pt-8 md:pt-12"
+      className="container-msw min-w-0 pt-6 md:pt-8"
       role="region"
       aria-roledescription="carousel"
       aria-label="首頁形象輪播"
@@ -164,8 +164,12 @@ export function SlideCarousel({ slides }: { slides: HomeSlide[] }) {
       onBlur={() => setPaused(false)}
     >
       <div className="relative min-w-0 overflow-hidden rounded-2xl border border-ink-line bg-ink-soft">
+        {/* 圖高：手機 240→176、桌面 360→260。
+            輪播站在 h1 之前，原本手機吃掉 312px、桌面吃掉 448px，
+            直接把主 CTA 推到首屏之外（桌面 y≈935）。收短之後
+            首屏才容得下「這是什麼＋下一步做什麼」。 */}
         <div
-          className="relative h-[240px] w-full sm:h-[260px] md:h-[360px] lg:h-[360px]"
+          className="relative h-[176px] w-full sm:h-[210px] md:h-[240px] lg:h-[240px]"
           onTouchStart={(e) => {
             setPaused(true);
             touchStartX.current = e.touches[0]?.clientX ?? null;
@@ -250,8 +254,8 @@ export function SlideCarousel({ slides }: { slides: HomeSlide[] }) {
         {/* 圓點指示：放在圖外，永遠單行不換行（flex-nowrap + overflow-hidden）。
             張數 > MAX_DOTS 時只顯示當前位置附近的 6 點，右側補「N / 總數」計數。 */}
         {count > 1 && (
-          <div className="flex min-w-0 items-center justify-center gap-2 border-t border-white/10 px-3 py-2">
-            <div className="flex min-w-0 flex-nowrap items-center gap-1 overflow-hidden">
+          <div className="flex min-w-0 items-center justify-center gap-2 border-t border-white/10 px-3 py-0">
+            <div className="flex min-w-0 flex-nowrap items-center gap-0 overflow-hidden">
               {dotIndexes.map((i) => {
                 const isActive = i === current;
                 return (
@@ -261,8 +265,9 @@ export function SlideCarousel({ slides }: { slides: HomeSlide[] }) {
                     onClick={() => go(i)}
                     aria-label={`第 ${i + 1} 張`}
                     aria-current={isActive ? "true" : undefined}
-                    // 24×24 固定 slot：視覺是小點，但可點區域達標，且寬度固定不會讓整排左右跳動
-                    className="group inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-md focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white"
+                    // 44×44 可點區域（WCAG 2.5.8）：視覺仍是一個小點，
+                    // 但整塊都能按到，且每格寬度固定、整排不會左右跳動。
+                    className="group inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-md focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white"
                   >
                     <span
                       className={`block h-1.5 rounded-full transition-all ${

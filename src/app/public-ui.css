@@ -27,6 +27,13 @@
 
   /* 區塊標題字級：手機縮小，拉開與 h1 的比例 → 首屏主角唯一 */
   --pub-h2: clamp(1.75rem, 5.6vw, 4rem);
+  /* 首頁 h1 專用上限。
+     原 .display-hero 上限 10rem（1440 時 160px，兩行就吃掉 276px），
+     把主 CTA 擠到 y≈935、掉出 900px 首屏之外 —— 首屏因此「沒有主角」。
+     改成上限 7rem（112px）：仍然壓得住版面，但桌面主 CTA 能回到 y<700。
+     ⚠️ 只覆蓋這支 class，不動 globals.css 的 .display-hero
+     （CTA 區塊的巨型描邊字仍在用，且那三頁不能受影響）。 */
+  --pub-h1: clamp(3.25rem, 11vw, 7rem);
   /* 內文最大行寬：避免手機上一行塞太多字 */
   --pub-measure: 62ch;
 }
@@ -79,7 +86,6 @@
 
   /* ------------------------------------------------------------------
    * 3. 區塊抬頭（統一節奏）
-   *
    * 現況問題：programs 的 h2 掛 mt-5、reasons 也掛 mt-5，但上面沒有東西，
    * 憑空多出 20px；而各區塊「標題 → 內容」的距離一處 56px 一處 48px。
    * 這裡把抬頭與內容的距離收斂成單一來源，手機與桌面各一個值。
@@ -127,6 +133,16 @@
   }
 
   /* ------------------------------------------------------------------
+   * 3b. 首頁 h1（沿用 .display-hero 的造型，只收掉上限）
+   * ------------------------------------------------------------------ */
+  .pub-display-hero {
+    font-size: var(--pub-h1);
+    font-weight: 900;
+    line-height: 0.85;
+    letter-spacing: -0.03em;
+  }
+
+  /* ------------------------------------------------------------------
    * 4. 卡片三級（讓「主 / 次 / 輔」一眼分得出來）
    *
    * 現況問題：programs 的兩張大卡、disciplines 的六張小卡、reasons 的三列
@@ -146,17 +162,19 @@
     background-color: transparent;
     border: 1px solid var(--line-hairline);
   }
+  /* 輔助卡：底色要比所在的色帶再亮一階，否則「同色 = 看不見卡片」。
+     disciplines 區塊本身是 band-1，卡片就必須是 band-2。 */
   .pub-card-tile {
     position: relative;
-    background-color: var(--band-1);
+    background-color: var(--band-2);
     border: 1px solid transparent;
     transition:
       background-color 0.35s var(--ease-msw),
       border-color 0.35s var(--ease-msw);
   }
   .pub-card-tile:hover {
-    background-color: var(--band-2);
-    border-color: color-mix(in srgb, var(--color-white) 12%, transparent);
+    background-color: color-mix(in srgb, var(--band-2) 100%, var(--color-white) 5%);
+    border-color: color-mix(in srgb, var(--color-white) 18%, transparent);
   }
 
   /* 頂部強調線：只給 primary 卡，用的就是品牌主色 */
@@ -232,15 +250,6 @@
     min-width: 44px;
   }
 
-  .pub-shell :focus-visible,
-  .pub-focus-ring:focus-visible {
-    outline: 3px solid var(--color-white);
-    outline-offset: 2px;
-    box-shadow:
-      0 0 0 5px color-mix(in srgb, var(--color-ink) 85%, transparent),
-      0 0 0 6px color-mix(in srgb, var(--color-white) 45%, transparent);
-  }
-
   /* ------------------------------------------------------------------
    * 8. 按鈕層級
    *
@@ -296,4 +305,35 @@
       font-size: 3.5rem;
     }
   }
+}
+
+/* =====================================================================
+ * focus 態（刻意放在 @layer 之外）
+ *
+ * 為什麼不能放進 @layer components：globals.css 的 `:focus-visible`
+ * （2px 鈷藍）是「未分層」規則，而未分層樣式在 cascade 中永遠壓過
+ * 任何 @layer 內的樣式 —— 不管特異性多高。實測：放進 layer 時，
+ * 實心活力紅按鈕上仍然是 2px 藍框（藍框疊在紅底上對比不足）。
+ *
+ * 這裡改成「白色粗框 + 深色內導 + 白色外暈」：
+ *   ・白框在淺底（活力紅、鈷藍、淺灰）與深底（ink）上都看得見
+ *   ・外圈半透明白暈讓框在噪點/網格底紋上也不會糊掉
+ * 只作用在公開頁（本檔只被公開頁匯入），/training /events /leaderboard
+ * 三頁的 focus 樣式完全不動。
+ *
+ * ⚠️ 一定要有 inset 那一圈：
+ * .btn-slab / .clip-slab / .clip-notch 用 clip-path 做斜切角，而 clip-path
+ * 會把 outline 與「外」陰影一併裁掉。實測（390／1440）computed outline 明明
+ * 是 3px 純白，截圖上卻完全看不到 —— 整圈都在裁切區外。
+ * inset 陰影畫在元素內部，clip-path 只切掉超出斜切線的部分，
+ * 四邊仍留下一圈白線，所以任何形狀的按鈕都保證看得見。
+ * ===================================================================== */
+.pub-shell :focus-visible,
+.pub-focus-ring:focus-visible {
+  outline: 3px solid var(--color-white);
+  outline-offset: 2px;
+  box-shadow:
+    inset 0 0 0 2px var(--color-white),
+    0 0 0 5px color-mix(in srgb, var(--color-ink) 88%, transparent),
+    0 0 0 7px color-mix(in srgb, var(--color-white) 42%, transparent);
 }

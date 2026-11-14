@@ -1,0 +1,86 @@
+{
+  "390": {
+    "height": 1040,
+    "screens": 1.2,
+    "touch": [
+      {
+        "tag": "a",
+        "label": "MSW 街健館Macau Street Workout",
+        "w": 40,
+        "h": 40
+      },
+      {
+        "tag": "a",
+        "label": "主頁",
+        "w": 28,
+        "h": 44
+      },
+      {
+        "tag": "a",
+        "label": "活動",
+        "w": 28,
+        "h": 44
+      },
+      {
+        "tag": "a",
+        "label": "排行榜",
+        "w": 42,
+        "h": 44
+      }
+    ],
+    "overflow": {
+      "docOverflow": 0
+    },
+    "sections": [
+      {
+        "h": 424,
+        "head": "關於我們About"
+      }
+    ]
+  },
+  "1440": {
+    "height": 942,
+    "screens": 1,
+    "touch": [
+      {
+        "tag": "a",
+        "label": "MSW 街健館Macau Street Workout",
+        "w": 224,
+        "h": 40
+      },
+      {
+        "tag": "button",
+        "label": "展開「活動」子選單",
+        "w": 28,
+        "h": 44
+      },
+      {
+        "tag": "a",
+        "label": "主頁",
+        "w": 28,
+        "h": 44
+      },
+      {
+        "tag": "a",
+        "label": "活動",
+        "w": 28,
+        "h": 44
+      },
+      {
+        "tag": "a",
+        "label": "排行榜",
+        "w": 42,
+        "h": 44
+      }
+    ],
+    "overflow": {
+      "docOverflow": 0
+    },
+    "sections": [
+      {
+        "h": 542,
+        "head": "關於我們About"
+      }
+    ]
+  }
+}

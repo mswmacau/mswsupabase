@@ -1,0 +1,37 @@
+{
+  "390": {
+    "height": 950,
+    "screens": 1.1,
+    "touch": [],
+    "overflow": {
+      "docOverflow": 0
+    },
+    "sections": [
+      {
+        "h": 334,
+        "head": "關於我們About"
+      }
+    ]
+  },
+  "1440": {
+    "height": 900,
+    "screens": 1,
+    "touch": [
+      {
+        "tag": "button",
+        "label": "展開「活動」子選單",
+        "w": 28,
+        "h": 44
+      }
+    ],
+    "overflow": {
+      "docOverflow": 0
+    },
+    "sections": [
+      {
+        "h": 450,
+        "head": "關於我們About"
+      }
+    ]
+  }
+}

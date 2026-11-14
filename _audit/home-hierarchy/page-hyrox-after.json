@@ -1,0 +1,61 @@
+{
+  "390": {
+    "height": 3570,
+    "screens": 4.2,
+    "touch": [],
+    "overflow": {
+      "docOverflow": 0
+    },
+    "sections": [
+      {
+        "h": 350,
+        "head": "HYROX戶外綜合體能訓練"
+      },
+      {
+        "h": 846,
+        "head": "下一場"
+      },
+      {
+        "h": 1350,
+        "head": "活動資訊"
+      },
+      {
+        "h": 264,
+        "head": "往期場次"
+      }
+    ]
+  },
+  "1440": {
+    "height": 2465,
+    "screens": 2.7,
+    "touch": [
+      {
+        "tag": "button",
+        "label": "展開「活動」子選單",
+        "w": 28,
+        "h": 44
+      }
+    ],
+    "overflow": {
+      "docOverflow": 0
+    },
+    "sections": [
+      {
+        "h": 322,
+        "head": "HYROX戶外綜合體能訓練"
+      },
+      {
+        "h": 548,
+        "head": "下一場"
+      },
+      {
+        "h": 696,
+        "head": "活動資訊"
+      },
+      {
+        "h": 324,
+        "head": "往期場次"
+      }
+    ]
+  }
+}

@@ -45,6 +45,8 @@ import {
   photoCountLabel,
   pickNextEvent,
 } from "@/components/hyrox/shared";
+/* 公開頁視覺層級語彙（手機留白上限 / 觸控 44 / 白圈 focus） */
+import "../public-ui.css";
 
 export const dynamic = "force-dynamic";
 
@@ -76,7 +78,7 @@ export default async function HyroxPage() {
   const nextQr = publicAssetUrl(next?.payment_qr_path);
 
   return (
-    <div className="pb-24 pt-24 md:pt-28">
+    <div className="pub-shell pb-16 pt-20 md:pb-20 md:pt-24">
       {/* ===== 1. Hero ===== */}
       <section className="relative overflow-hidden">
         <div className="grid-lines absolute inset-0" />
@@ -90,7 +92,7 @@ export default async function HyroxPage() {
           }}
         />
 
-        <div className="container-msw relative z-10 pb-14 pt-10 md:pb-20 md:pt-14">
+        <div className="container-msw relative z-10 pb-10 pt-8 md:pb-16 md:pt-12">
           <h1 className="display-xl break-words">
             <span className="block text-white">HYROX</span>
             <span className="mt-1 block text-[0.42em] leading-tight tracking-tight">
@@ -99,7 +101,7 @@ export default async function HyroxPage() {
             </span>
           </h1>
 
-          <div className="mt-8 grid max-w-4xl gap-5 md:grid-cols-[1.15fr_0.85fr] md:gap-10">
+          <div className="mt-6 grid max-w-4xl gap-4 md:grid-cols-[1.15fr_0.85fr] md:gap-10">
             <p className="text-base leading-relaxed text-white/75">
               每月一次的戶外綜合體能訓練，把跑步同健身房搬去同一個場地：跑 1
               公里，做一站，再跑 1 公里。推雪橇、划船、負重行走，全部按你的程度分組。
@@ -113,7 +115,7 @@ export default async function HyroxPage() {
       </section>
 
       {/* ===== 2 + 3. 下一場 ＋ 報名 CTA ===== */}
-      <section className="section-pad container-msw">
+      <section className="pub-pad container-msw">
         <div className="flex flex-wrap items-end justify-between gap-3">
           <h2 className="text-2xl font-black tracking-tight md:text-3xl">
             下一場
@@ -310,21 +312,21 @@ export default async function HyroxPage() {
       </section>
 
       {/* ===== 4. 活動資訊 ===== */}
-      <section className="section-pad container-msw">
+      <section className="pub-pad container-msw">
         <h2 className="text-2xl font-black tracking-tight md:text-3xl">
           活動資訊
         </h2>
 
-        <div className="mt-6 grid gap-6 lg:grid-cols-[1.4fr_0.6fr]">
-          <div className="card-dark min-w-0 p-6 md:p-8">
+        <div className="mt-5 grid gap-5 lg:grid-cols-[1.4fr_0.6fr]">
+          <div className="card-dark min-w-0 p-5 md:p-8">
             <h3 className="text-[11px] font-bold uppercase tracking-[0.22em] text-white/45">
               訓練內容
             </h3>
-            <dl className="mt-4 divide-y divide-[var(--line-fine)]">
+            <dl className="mt-3 divide-y divide-[var(--line-fine)]">
               {HYROX_STATIONS.map((s) => (
                 <div
                   key={s.k}
-                  className="flex flex-col gap-1 py-3 sm:flex-row sm:items-baseline sm:justify-between sm:gap-6"
+                  className="flex flex-col gap-0.5 py-2.5 sm:flex-row sm:items-baseline sm:justify-between sm:gap-6"
                 >
                   <dt className="min-w-0 shrink-0 text-sm font-semibold text-white/85">
                     {s.k}
@@ -336,7 +338,7 @@ export default async function HyroxPage() {
               ))}
             </dl>
 
-            <div className="mt-6 grid gap-4 border-t border-[var(--line-fine)] pt-5 sm:grid-cols-2">
+            <div className="mt-5 grid gap-4 border-t border-[var(--line-fine)] pt-4 sm:grid-cols-2">
               <div className="min-w-0">
                 <p className="text-[11px] font-bold uppercase tracking-[0.22em] text-white/45">
                   分組
@@ -427,7 +429,7 @@ export default async function HyroxPage() {
 
       {/* ===== 5. 往期場次（沒有就整段不顯示；整張卡可點進詳情頁） ===== */}
       {past.length > 0 && (
-        <section className="section-pad container-msw">
+        <section className="pub-pad container-msw">
           <div className="flex flex-wrap items-end justify-between gap-3">
             <h2 className="flex items-center gap-2 text-2xl font-black tracking-tight md:text-3xl">
               <History size={22} className="text-white/45" /> 往期場次

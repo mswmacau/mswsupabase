@@ -2,6 +2,8 @@ import Link from "next/link";
 import type { Metadata } from "next";
 import { ArrowRight } from "lucide-react";
 import { getSiteContent, getSitePages } from "@/lib/queries";
+/* 公開頁視覺層級語彙（色帶 / 抬頭節奏 / 觸控 44 / 白圈 focus） */
+import "../public-ui.css";
 
 /** T-19：頁面標題改讀 site_pages.about（DB 無值 → 回落預設＝現有硬編碼） */
 export async function generateMetadata(): Promise<Metadata> {
@@ -30,7 +32,7 @@ export default async function AboutPage() {
   const [pages, content] = await Promise.all([getSitePages(), getSiteContent()]);
 
   return (
-    <section className="relative overflow-hidden border-b border-ink-line">
+    <section className="pub-shell pub-band-0 relative overflow-hidden border-b border-ink-line">
       <div className="grid-lines absolute inset-0" aria-hidden />
       <div className="noise-overlay" aria-hidden />
       {/* 單側光暈：沿用原 /about hero 的視覺語言 */}
@@ -45,8 +47,8 @@ export default async function AboutPage() {
       />
 
       <div className="container-msw relative z-10">
-        <div className="pb-16 pt-28 md:pb-20 md:pt-36">
-          <h1 className="display-xl mt-6">
+        <div className="pb-12 pt-24 md:pb-16 md:pt-32">
+          <h1 className="display-xl">
             <span className="block text-white">
               {pages.about.page_title}
             </span>
@@ -62,13 +64,14 @@ export default async function AboutPage() {
             </span>
           </h1>
 
-          <p className="mt-10 max-w-2xl text-base leading-relaxed text-white/70 sm:text-lg">
+          <p className="mt-6 max-w-2xl text-[15px] leading-relaxed text-white/70 md:text-base">
             {content.about.lead}
           </p>
 
+          {/* 這一頁只有一個動作，首屏唯一實心主色按鈕 */}
           <Link
             href="/coaches#about"
-            className="btn-base btn-vital btn-slab mt-10"
+            className="btn-base btn-vital btn-slab pub-press mt-6"
           >
             在教練團隊頁閱讀完整介紹 <ArrowRight size={18} />
           </Link>

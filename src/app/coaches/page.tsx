@@ -6,6 +6,8 @@ import {
 } from "@/lib/queries";
 import { publicAssetUrl } from "@/lib/assets";
 import { BrandIntro } from "@/components/BrandIntro";
+/* 公開頁視覺層級語彙（色帶 / 抬頭節奏 / 觸控 44 / 白圈 focus） */
+import "../public-ui.css";
 
 export const dynamic = "force-dynamic";
 
@@ -39,12 +41,14 @@ export default async function CoachesPage() {
 
   return (
     <>
-      <section className="relative overflow-hidden border-b border-ink-line">
+      <section className="pub-shell pub-band-0 relative overflow-hidden border-b border-ink-line">
         <div className="grid-lines absolute inset-0" />
         <div className="noise-overlay" />
 
-        <div className="container-msw relative py-16 md:py-24">
-          <h1 className="display-xl mt-5">{t.page_title}</h1>
+        {/* 上內距必須大於 fixed Nav 的高度（手機 64px／桌面 80px），
+            否則頁面標題會被導覽列蓋住（實測 390：pt-48 時 h1 被切掉一半）。 */}
+        <div className="container-msw relative pb-12 pt-20 md:pb-20 md:pt-24">
+          <h1 className="display-xl">{t.page_title}</h1>
           {/*
             引言段落：站主表示將向教練及活動負責人確認後再提供，
             因此在提供前不填入任何文字（避免編造文案）。
@@ -52,13 +56,14 @@ export default async function CoachesPage() {
         </div>
       </section>
 
-      <section className="container-msw py-14 md:py-20">
+      <section className="pub-band-1">
+        <div className="container-msw pub-shell pub-pad">
         {coaches.length === 0 ? (
-          <div className="rounded-xl border border-dashed border-white/15 px-6 py-16 text-center">
+          <div className="rounded-xl border border-dashed border-white/15 px-6 py-12 text-center">
             <p className="text-sm text-white/70">{t.empty_state}</p>
           </div>
         ) : (
-          <ul className="grid gap-8 sm:grid-cols-2 lg:grid-cols-3">
+          <ul className="grid gap-4 sm:grid-cols-2 md:gap-8 lg:grid-cols-3">
             {coaches.map((c) => {
               const img = publicAssetUrl(c.photo_path);
               return (
@@ -98,6 +103,7 @@ export default async function CoachesPage() {
             })}
           </ul>
         )}
+        </div>
       </section>
 
       {/* ===== 關於我們（原 /about 主要內容，搬到你正在看的這一頁底部）=====
@@ -106,14 +112,16 @@ export default async function CoachesPage() {
           （padding-block: var(--space-section, 80px)），用負上邊距把區塊標題
           與主敘述的間距收斂到與站內其他區塊一致的節奏，避免標題與內文之間
           留一大片空白。 */}
-      <section className="relative border-t border-ink-line">
-        <div className="container-msw pt-16 md:pt-20">
+      <section className="pub-shell relative border-t border-ink-line">
+        <div className="container-msw pt-12 md:pt-16">
           <span className="eyebrow">About / 關於我們</span>
-          <h2 className="display-xl mt-5">關於我們</h2>
+          <h2 className="display-xl mt-3">關於我們</h2>
         </div>
-        <div className="-mt-14 md:-mt-16">
-          <BrandIntro about={content.about} />
-        </div>
+        {/* 原本這裡用 -mt-14 把 BrandIntro 往上拉，結果 BrandIntro 自己的
+            pub-band-0 底色把「關於我們」這個 h2 整塊蓋住（剩下不到 12px 的殘影），
+            視覺上像「這一頁沒有區塊標題」。改成不再負上邊距：由 BrandIntro 的
+            pub-pad（手機 56px）自己提供標題與內文的間距，層級才讀得出來。 */}
+        <BrandIntro about={content.about} />
       </section>
     </>
   );
