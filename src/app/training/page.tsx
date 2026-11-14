@@ -66,9 +66,11 @@ export default async function TrainingPage() {
   const myMap = new Map(checkins.map((c) => [c.session_id, c.status]));
 
   const today = new Date().toISOString().slice(0, 10);
-  const upcoming = supabaseSessions.filter(
-    (s) => s.session_date >= today && s.status !== "cancelled"
-  );
+  // P2-1：getCachedAllSessions 是 session_date 降冪，直接 filter 出來會變成
+  // 「最遠的一堂排最前」。這裡改成升冪，手機「先顯示最近 5 場」才有意義。
+  const upcoming = supabaseSessions
+    .filter((s) => s.session_date >= today && s.status !== "cancelled")
+    .sort((a, b) => a.session_date.localeCompare(b.session_date));
 
   return (
     <>
@@ -91,9 +93,9 @@ export default async function TrainingPage() {
         <div className="noise-overlay" />
 
         <div className="container-msw relative z-10">
-          <div className="relative pb-14 pt-28 md:pt-36 lg:pb-16">
+          <div className="relative pt-14 pb-8 md:pt-36 lg:pb-16">
             <div className="lg:pl-14">
-              <h1 className="display-xl mt-6 lg:-ml-[3vw] lg:w-[112%]">
+              <h1 className="display-xl mt-2 md:mt-6 lg:-ml-[3vw] lg:w-[112%]">
                 <span className="block text-white">{t.page_title}</span>
                 <span className="relative mt-1 block">
                   {/* 錯位描邊副本：純裝飾，文字由 CSS content 產生 */}
@@ -108,7 +110,7 @@ export default async function TrainingPage() {
                 </span>
               </h1>
 
-              <div className="mt-10 grid gap-10 lg:grid-cols-12 lg:gap-8">
+              <div className="mt-6 grid gap-6 md:mt-10 md:gap-10 lg:grid-cols-12 lg:gap-8">
                 <p className="text-base leading-relaxed text-white/70 lg:col-span-6">
                   每週多堂，時間與教練
                   <span className="font-semibold text-white">見班表</span>
@@ -124,7 +126,7 @@ export default async function TrainingPage() {
                   <div className="text-[11px] font-semibold uppercase tracking-[0.22em] text-white/55">
                     場次節奏
                   </div>
-                  <div className="mt-4 flex flex-wrap items-end gap-x-4 gap-y-1">
+                  <div className="mt-2 flex flex-wrap items-end gap-x-4 gap-y-1 md:mt-4">
                     <span className="stat-figure text-5xl leading-none text-white md:text-6xl">
                       每週
                     </span>
@@ -132,8 +134,8 @@ export default async function TrainingPage() {
                       多時段
                     </span>
                   </div>
-                  <div className="mt-5 h-px w-16 bg-white/20" />
-                  <p className="mt-5 text-sm leading-relaxed text-white/65">
+                  <div className="mt-3 h-px w-16 bg-white/20 md:mt-5" />
+                  <p className="mt-3 text-sm leading-relaxed text-white/65 md:mt-5">
                     每週固定多個時段，實際上課時間與教練見班表。教練現場依程度分組調整動作難度。
                   </p>
                 </div>
@@ -147,20 +149,23 @@ export default async function TrainingPage() {
           <div className="container-msw">
             <div className="grid grid-cols-1 divide-y divide-white/10 sm:grid-cols-3 sm:divide-x sm:divide-y-0">
               {HERO_FACTS.map((f) => (
-                <div key={f.label} className="py-8 sm:px-8 sm:first:pl-0">
+                <div
+                  key={f.label}
+                  className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1 py-3 sm:block sm:px-8 sm:py-8 sm:first:pl-0"
+                >
                   <div className="flex items-start gap-2">
                     <span
-                      className={`stat-figure text-5xl leading-none md:text-6xl ${
+                      className={`stat-figure text-3xl leading-none sm:text-5xl md:text-6xl ${
                         f.accent ? "text-vital-bright" : "text-white"
                       }`}
                     >
                       {f.value}
                     </span>
-                    <span className="text-accent-blue mt-2 text-[11px] font-semibold uppercase tracking-[0.22em]">
+                    <span className="text-accent-blue mt-1 text-[11px] font-semibold uppercase tracking-[0.22em] sm:mt-2">
                       {f.unit}
                     </span>
                   </div>
-                  <div className="mt-4 text-[11px] font-semibold uppercase tracking-[0.22em] text-white/55">
+                  <div className="text-right text-[11px] font-semibold uppercase tracking-[0.22em] text-white/55 sm:mt-4 sm:text-left">
                     {f.label}
                   </div>
                 </div>
@@ -171,7 +176,7 @@ export default async function TrainingPage() {
       </section>
 
       {/* ============ 近期場次：標題 sticky，內容滾動覆蓋 ============ */}
-      <section className="container-msw section-pad">
+      <section className="container-msw section-pad max-lg:pt-6 max-lg:pb-14">
         {/* F-T1 / F-T2：下場訓練倒數卡（無場次時完全唔 render）
             資料來源與首頁「下一場定期訓練」同一個 getNextSession()，
             日期、時段、課名不會兩邊各講一套。 */}
@@ -205,6 +210,7 @@ export default async function TrainingPage() {
             {upcoming.length ? (
               // F-T3：月份篩選；SessionCard 原封不動，只係喺 client 端搬到 SessionFilter 內 render
               <SessionFilter
+                mobileVisible={5}
                 items={upcoming.map((s) => ({
                   id: s.id,
                   sessionDate: s.session_date,
@@ -246,7 +252,7 @@ export default async function TrainingPage() {
       {profile && (
         <section className="relative border-y border-ink-line bg-ink-soft">
           <div className="noise-overlay" />
-          <div className="container-msw section-pad relative">
+          <div className="container-msw section-pad relative max-lg:py-14">
             <div className="flex flex-wrap items-end justify-between gap-6 border-b border-white/10 pb-8">
               <div>
                 <h2 className="display-xl mt-5">我的訓練紀錄</h2>

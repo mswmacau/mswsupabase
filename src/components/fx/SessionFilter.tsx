@@ -21,6 +21,7 @@
  */
 
 import { Fragment, useMemo, useState, type ReactNode } from "react";
+import { ChevronDown } from "lucide-react";
 import { LayoutGroup, motion } from "motion/react";
 import { MotionRoot } from "@/components/motion/MotionRoot";
 import { MOTION_ENABLED, T_CHIP } from "@/components/motion/motionConfig";
@@ -53,14 +54,25 @@ function monthKey(offset: number): string {
 /** 高亮底塊：原本 active chip 身上嘅 `bg-vital`，抽成一塊可滑動嘅底 */
 const HIGHLIGHT_CLASS = "slab absolute inset-0 -z-10 bg-vital";
 
-export function SessionFilter({ items }: { items: SessionFilterItem[] }) {
+export function SessionFilter({
+  items,
+  mobileVisible,
+}: {
+  items: SessionFilterItem[];
+  /** 手機（<lg）預設只顯示的場次數；桌面一律全部顯示。0 / 未傳 = 不折疊 */
+  mobileVisible?: number;
+}) {
   const [filter, setFilter] = useState<FilterKey>("all");
+  const [expanded, setExpanded] = useState(false);
 
   const visible = useMemo(() => {
     if (filter === "all") return items;
     const target = monthKey(filter === "nextMonth" ? 1 : 0);
     return items.filter((item) => item.sessionDate.slice(0, 7) === target);
   }, [items, filter]);
+
+  const cap = mobileVisible && mobileVisible > 0 ? mobileVisible : 0;
+  const hiddenCount = cap > 0 ? Math.max(0, visible.length - cap) : 0;
 
   return (
     <MotionRoot>
@@ -104,11 +116,43 @@ export function SessionFilter({ items }: { items: SessionFilterItem[] }) {
 
       {/* ⚠️ 呢個網格維持原狀：`stagger` class 保留、唔加任何 motion（T-7 範圍只係 chips） */}
       {visible.length ? (
-        <div className="stagger grid gap-5 sm:grid-cols-2">
-          {visible.map((item) => (
-            <Fragment key={item.id}>{item.card}</Fragment>
-          ))}
-        </div>
+        <>
+          <div id="session-list" className="stagger grid gap-5 sm:grid-cols-2">
+            {visible.map((item, i) =>
+              cap === 0 || i < cap ? (
+                <Fragment key={item.id}>{item.card}</Fragment>
+              ) : (
+                // P2-1：超出 cap 的場次照樣 render（內容不減少），只是 <lg 收起來。
+                // 桌面 lg 起一律顯示，1440 的內容與高度完全不變。
+                <div
+                  key={item.id}
+                  className={expanded ? "" : "hidden lg:block"}
+                >
+                  {item.card}
+                </div>
+              )
+            )}
+          </div>
+
+          {hiddenCount > 0 && (
+            <button
+              type="button"
+              onClick={() => setExpanded((v) => !v)}
+              aria-expanded={expanded}
+              aria-controls="session-list"
+              className="btn-base btn-ghost btn-slab mt-6 min-h-11 w-full lg:hidden"
+            >
+              {expanded ? "收起" : `顯示全部 ${visible.length} 場`}
+              <ChevronDown
+                size={16}
+                aria-hidden
+                className={`transition-transform duration-200 ${
+                  expanded ? "rotate-180" : ""
+                }`}
+              />
+            </button>
+          )}
+        </>
       ) : (
         <p className="border-y border-white/10 px-6 py-14 text-center text-sm text-white/70">
           目前沒有已排定的場次。
