@@ -361,6 +361,14 @@ do $$ begin raise notice 'A 段 OK — redeem_reward 已加入運動紀錄門檻
 --   以管理員登入態打 → 應仍為全部 25 列（後台積分規則頁不得壞）
 --   以一般會員登入態打 → 應為 0 列（無法再探測規則）
 
+-- 【驗證 5】小程序橋接函式是否「原封不動」轉交（必須確認，否則小程序端會漏接 NO_ACTIVITY）
+--   小程序呼叫的是 mp_redeem_reward（把會員 id 注入 claims 後轉交 redeem_reward），
+--   若它有對回傳 jsonb 做過濾／重組，新錯誤碼會在那一層被吃掉。
+--   select prosrc from pg_proc p join pg_namespace n on n.oid = p.pronamespace
+--    where n.nspname = 'public' and p.proname = 'mp_redeem_reward';
+--   → 內文應只有「注入 claims → perform/select public.redeem_reward(...) → 原樣 return」，
+--     不應出現 code 白名單列舉。
+
 -- =============================================================
 -- 需要暫時放行某個帳號時（例：會員確實參加過活動，但紀錄漏登）
 --   本閘沒有「白名單開關」——它是查真實紀錄，不查旗標。正確做法是「補登真實紀錄」，
