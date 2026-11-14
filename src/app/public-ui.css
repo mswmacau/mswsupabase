@@ -337,3 +337,20 @@
     0 0 0 5px color-mix(in srgb, var(--color-ink) 88%, transparent),
     0 0 0 7px color-mix(in srgb, var(--color-white) 42%, transparent);
 }
+
+/* ---------------------------------------------------------------------
+ * 導覽列的「立即加入」（首頁降級成外框那顆 .pub-btn-outline）也要看得見 focus。
+ *
+ * 上面那條選擇器只在 .pub-shell 之內生效，而 <header> 在 .pub-shell 之外，
+ * 所以首頁導覽列這顆一直是舊的「2px 鈷藍 outline」；它又帶 .btn-slab 的
+ * clip-path，實測（390／1440 鍵盤 Tab）整圈 outline 被裁掉 = 完全看不到焦點。
+ *
+ * 這裡同樣改用 inset 白環：畫在元素內部，clip-path 只切斜切角，四邊仍留下
+ * 一圈白線。只在 .pub-btn-outline 上生效，而該 class 只在首頁導覽列出現，
+ * 因此 /training、/events、/leaderboard 的導覽列完全不受影響。
+ * ------------------------------------------------------------------- */
+.pub-btn-outline:focus-visible {
+  outline: 3px solid var(--color-white);
+  outline-offset: 2px;
+  box-shadow: inset 0 0 0 2px var(--color-white);
+}

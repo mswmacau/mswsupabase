@@ -93,7 +93,7 @@ export function MobileNav({
         aria-label="開啟選單"
         aria-expanded={open}
         onClick={() => setOpenPath(pathname)}
-        className="clip-slab inline-flex min-h-11 min-w-11 items-center justify-center bg-white/5 text-white/80 transition hover:bg-white/10 md:hidden"
+        className="clip-slab pub-focus-ring inline-flex min-h-11 min-w-11 items-center justify-center bg-white/5 text-white/80 transition hover:bg-white/10 md:hidden"
       >
         <Menu size={22} />
       </button>
@@ -114,7 +114,7 @@ export function MobileNav({
               type="button"
               aria-label="關閉選單"
               onClick={() => setOpenPath(null)}
-              className="clip-slab inline-flex min-h-11 min-w-11 items-center justify-center bg-white/5 text-white/80 transition hover:bg-white/10"
+              className="clip-slab pub-focus-ring inline-flex min-h-11 min-w-11 items-center justify-center bg-white/5 text-white/80 transition hover:bg-white/10"
             >
               <X size={22} />
             </button>

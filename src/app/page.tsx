@@ -345,7 +345,7 @@ export default async function HomePage() {
                     training_sessions（getNextSession），不再用 config 的固定字串。
                     沒有場次時不編造時間，改成「班表整理中」空狀態。 */}
                 {nextSession ? (
-                  <div className="mt-6 border-l-2 border-vital bg-white/[0.03] px-4 py-3">
+                  <div className="mt-6 border-l-2 border-vital bg-ink/75 px-4 py-3 backdrop-blur-sm">
                     <div className="flex items-center gap-2 text-[11px] font-semibold uppercase tracking-[0.22em] text-white/55">
                       <CalendarDays size={14} className="flex-none text-vital-bright" />
                       下一場定期訓練
@@ -379,7 +379,7 @@ export default async function HomePage() {
                     </Link>
                   </div>
                 ) : (
-                  <div className="mt-6 border-l-2 border-vital bg-white/[0.03] px-4 py-3">
+                  <div className="mt-6 border-l-2 border-vital bg-ink/75 px-4 py-3 backdrop-blur-sm">
                     <div className="flex items-center gap-2 text-[11px] font-semibold uppercase tracking-[0.22em] text-white/55">
                       <CalendarDays size={14} className="flex-none text-vital-bright" />
                       下一場定期訓練
@@ -394,10 +394,13 @@ export default async function HomePage() {
           </div>
 
           {/* Hero 視覺：放大並出血出邊界。
-              手機限高 h-40（160px）：原本 350 寬時 SVG 會長到 245px，白白吃掉
-              接近三分之一屏的垂直空間，而它純屬裝飾（aria-hidden）。 */}
+              手機限高 h-36（144px）：原本 350 寬時 SVG 會長到 245px，白白吃掉
+              接近三分之一屏的垂直空間，而它純屬裝飾（aria-hidden）。
+              桌面再壓到 0.55：裝飾的白色人字與弧線原本直接壓在日期卡與
+              「查看活動」上（1440 實測文字與白線交疊、對比掉一大截），
+              降權重後第一眼的焦點回到 h1 與紅色主 CTA。 */}
           <div className="pointer-events-none relative mt-6 h-36 w-full lg:absolute lg:-right-[12%] lg:top-[2%] lg:mt-0 lg:h-auto lg:w-[62%]">
-            <div className="clip-slant h-full opacity-90">
+            <div className="clip-slant h-full opacity-90 lg:opacity-[0.55]">
               <HeroVisual />
             </div>
           </div>

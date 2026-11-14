@@ -1,0 +1,285 @@
+{
+  "viewport": "390x844",
+  "cssCheck": {
+    "margin": "0px",
+    "bg": "rgb(15, 15, 15)",
+    "font": "Inter, \"PingFang TC\", \"PingFang SC\", \"Microsoft JhengHei\", \"Noto Sans TC\", \"Helvetica Neue\", Helvetica, Arial, sans-serif"
+  },
+  "pageHeight": 8219,
+  "screens": 9.7,
+  "cta": {
+    "vh": 844,
+    "vw": 390,
+    "solidCount": 2,
+    "solidOnes": [
+      {
+        "label": "立即加入",
+        "href": "/signup",
+        "bg": "rgb(227, 0, 27)",
+        "solid": true,
+        "inHeader": true,
+        "x": 221,
+        "y": 10,
+        "w": 97,
+        "h": 44,
+        "fontSize": "14px"
+      },
+      {
+        "label": "立即加入會員",
+        "href": "/signup",
+        "bg": "rgb(227, 0, 27)",
+        "solid": true,
+        "inHeader": false,
+        "x": 20,
+        "y": 735,
+        "w": 175,
+        "h": 47,
+        "fontSize": "15.2px"
+      }
+    ],
+    "allInFirstScreen": [
+      {
+        "label": "MSW 街健館Macau Street Workout",
+        "href": "/",
+        "bg": "rgba(0, 0, 0, 0)",
+        "solid": false,
+        "inHeader": true,
+        "x": 20,
+        "y": 12,
+        "w": 40,
+        "h": 40,
+        "fontSize": "16px"
+      },
+      {
+        "label": "立即加入",
+        "href": "/signup",
+        "bg": "rgb(227, 0, 27)",
+        "solid": true,
+        "inHeader": true,
+        "x": 221,
+        "y": 10,
+        "w": 97,
+        "h": 44,
+        "fontSize": "14px"
+      },
+      {
+        "label": "開啟選單",
+        "href": null,
+        "bg": "oklab(0.999994 0.0000455678 0.0000200868 / 0.05)",
+        "solid": false,
+        "inHeader": true,
+        "x": 326,
+        "y": 10,
+        "w": 44,
+        "h": 44,
+        "fontSize": "16px"
+      },
+      {
+        "label": "第 1 張",
+        "href": null,
+        "bg": "rgba(0, 0, 0, 0)",
+        "solid": false,
+        "inHeader": false,
+        "x": 141,
+        "y": 362,
+        "w": 24,
+        "h": 24,
+        "fontSize": "16px"
+      },
+      {
+        "label": "第 2 張",
+        "href": null,
+        "bg": "rgba(0, 0, 0, 0)",
+        "solid": false,
+        "inHeader": false,
+        "x": 169,
+        "y": 362,
+        "w": 24,
+        "h": 24,
+        "fontSize": "16px"
+      },
+      {
+        "label": "第 3 張",
+        "href": null,
+        "bg": "rgba(0, 0, 0, 0)",
+        "solid": false,
+        "inHeader": false,
+        "x": 197,
+        "y": 362,
+        "w": 24,
+        "h": 24,
+        "fontSize": "16px"
+      },
+      {
+        "label": "第 4 張",
+        "href": null,
+        "bg": "rgba(0, 0, 0, 0)",
+        "solid": false,
+        "inHeader": false,
+        "x": 225,
+        "y": 362,
+        "w": 24,
+        "h": 24,
+        "fontSize": "16px"
+      },
+      {
+        "label": "立即加入會員",
+        "href": "/signup",
+        "bg": "rgb(227, 0, 27)",
+        "solid": true,
+        "inHeader": false,
+        "x": 20,
+        "y": 735,
+        "w": 175,
+        "h": 47,
+        "fontSize": "15.2px"
+      },
+      {
+        "label": "查看活動",
+        "href": "/events",
+        "bg": "color(srgb 1 1 1 / 0.04)",
+        "solid": false,
+        "inHeader": false,
+        "x": 211,
+        "y": 734,
+        "w": 120,
+        "h": 49,
+        "fontSize": "15.2px"
+      }
+    ]
+  },
+  "touchTargetsUnder44": [
+    {
+      "tag": "a",
+      "label": "MSW 街健館Macau Street Workout",
+      "w": 40,
+      "h": 40,
+      "y": 12
+    },
+    {
+      "tag": "button",
+      "label": "第 1 張",
+      "w": 24,
+      "h": 24,
+      "y": 362
+    },
+    {
+      "tag": "button",
+      "label": "第 2 張",
+      "w": 24,
+      "h": 24,
+      "y": 362
+    },
+    {
+      "tag": "button",
+      "label": "第 3 張",
+      "w": 24,
+      "h": 24,
+      "y": 362
+    },
+    {
+      "tag": "button",
+      "label": "第 4 張",
+      "w": 24,
+      "h": 24,
+      "y": 362
+    },
+    {
+      "tag": "a",
+      "label": "報名",
+      "w": 47,
+      "h": 20,
+      "y": 946
+    },
+    {
+      "tag": "a",
+      "label": "主頁",
+      "w": 28,
+      "h": 44,
+      "y": 7849
+    },
+    {
+      "tag": "a",
+      "label": "活動",
+      "w": 28,
+      "h": 44,
+      "y": 7849
+    },
+    {
+      "tag": "a",
+      "label": "排行榜",
+      "w": 42,
+      "h": 44,
+      "y": 7901
+    }
+  ],
+  "overflow": {
+    "vw": 390,
+    "docOverflow": 0,
+    "offenders": [],
+    "offenderCount": 0
+  },
+  "sections": [
+    {
+      "i": 0,
+      "h": 1392,
+      "top": 0,
+      "head": "MSW街健館"
+    },
+    {
+      "i": 1,
+      "h": 315,
+      "top": 80,
+      "head": ""
+    },
+    {
+      "i": 2,
+      "h": 346,
+      "top": 1392,
+      "head": ""
+    },
+    {
+      "i": 3,
+      "h": 859,
+      "top": 1738,
+      "head": "歡迎大家加MSW HYROX 社區"
+    },
+    {
+      "i": 4,
+      "h": 1594,
+      "top": 2598,
+      "head": "兩大核心活動"
+    },
+    {
+      "i": 5,
+      "h": 938,
+      "top": 4192,
+      "head": "超越界限，讓訓練增加驅動力"
+    },
+    {
+      "i": 6,
+      "h": 1378,
+      "top": 5130,
+      "head": "各類訓練項目"
+    },
+    {
+      "i": 7,
+      "h": 580,
+      "top": 6508,
+      "head": "2026 年 11 月排行榜"
+    },
+    {
+      "i": 8,
+      "h": 516,
+      "top": 7088,
+      "head": "準備好開始累積了嗎？"
+    }
+  ],
+  "focusTarget": {
+    "label": "立即加入會員",
+    "x": 20,
+    "y": 695.1875,
+    "w": 175.03125,
+    "h": 46.796875
+  }
+}
