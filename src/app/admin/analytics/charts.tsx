@@ -264,14 +264,18 @@ export function BarRows({
   ariaLabel,
   color = "var(--color-cobalt)",
   maxOverride,
+  formatValue,
 }: {
   rows: BarRow[];
   ariaLabel: string;
   color?: string;
   /** 自訂比較基準（如三型人數互比、而非各自佔總數） */
   maxOverride?: number;
+  /** 數字顯示格式（如公里要 formatKm，避免四捨五入失真）；預設原樣輸出 */
+  formatValue?: (v: number) => string;
 }) {
   const max = Math.max(maxOverride ?? 0, ...rows.map((r) => r.value), 1);
+  const fmt = formatValue ?? String;
 
   return (
     <ul className="space-y-2.5" aria-label={ariaLabel}>
@@ -295,7 +299,7 @@ export function BarRows({
               />
             </span>
             <span className="stat-figure w-12 shrink-0 text-right text-sm font-bold">
-              {r.value}
+              {fmt(r.value)}
             </span>
             {r.note && (
               <span className="w-24 shrink-0 text-xs text-white/55">{r.note}</span>

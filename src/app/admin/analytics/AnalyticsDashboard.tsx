@@ -27,6 +27,8 @@ import {
   fmtPct,
   monthShort,
 } from "./charts";
+import { EventRegistrationCards, PagePathCards, SessionCards } from "./cards";
+import { Section } from "./Section";
 import { RetryButton } from "./RetryButton";
 import type {
   ActivityOverviewData,
@@ -56,9 +58,10 @@ function StatCard({
   sub?: string;
 }) {
   return (
-    <div className="rounded-xl border border-white/10 bg-white/[0.02] p-4">
+    // 手機內距／字級收一級（卡片在 390 要並排 2–3 欄才不會拖長頁面）；≥768px 與改動前一樣
+    <div className="rounded-xl border border-white/10 bg-white/[0.02] p-3.5 md:p-4">
       <div className="text-xs text-white/60">{label}</div>
-      <div className="stat-figure mt-1 text-2xl font-black">
+      <div className="stat-figure mt-1 text-xl font-black md:text-2xl">
         {value}
         {unit && <span className="ml-1 text-sm font-bold text-white/70">{unit}</span>}
       </div>
@@ -67,23 +70,11 @@ function StatCard({
   );
 }
 
-function Section({
-  title,
-  desc,
-  children,
-}: {
-  title: string;
-  desc: string;
-  children: React.ReactNode;
-}) {
-  return (
-    <section className="card-dark p-6 md:p-8">
-      <h3 className="text-lg font-bold">{title}</h3>
-      <p className="mt-1 max-w-3xl text-sm leading-relaxed text-white/70">{desc}</p>
-      <div className="mt-5">{children}</div>
-    </section>
-  );
-}
+/**
+ * 區塊外殼見 ./Section.tsx（<768px 可折疊、預設收起；≥768px 原標題不變）。
+ * 這裡原本的 Section 已搬去該檔，因為折疊需要 client state，而本檔維持
+ * server component（一次取數、同一份資料渲染，不因為改版而多取一次）。
+ */
 
 function SubHead({ children }: { children: React.ReactNode }) {
   return (
@@ -163,7 +154,14 @@ function NumberCards({ data }: { data: AnalyticsPayload }) {
   const thisMonthRun = run?.months.find((m) => m.month === currentMonth()) ?? null;
   const pendingTotal = data.pending ? data.pending.runs + data.pending.checkins : null;
 
-  const cards: { label: string; value: string; unit?: string; sub?: string }[] = [
+  const cards: {
+    label: string;
+    value: string;
+    unit?: string;
+    sub?: string;
+    /** 手機首屏只留 4 張（見下面 grid 註解）；第 5 張 ≥640px 照舊出現 */
+    compactHide?: boolean;
+  }[] = [
     {
       label: "總會員",
       value: growth ? String(growth.total_members) : "—",
@@ -189,17 +187,26 @@ function NumberCards({ data }: { data: AnalyticsPayload }) {
       label: "券核銷率",
       value: coupon ? fmtPct(coupon.redeemed_rate) : "—",
       sub: coupon ? `已發放 ${coupon.total} 張` : undefined,
+      /*
+       * 手機首屏只放 4 張「每日都要睇」的卡（總會員／30 天活躍／本月公里／待審核）。
+       * 券核銷率一樣的數字在「優惠券」區塊（核銷率）與該區塊收起時的摘要都有，
+       * 所以手機不重複佔一屏，≥640px 起照舊出現，桌面 5 欄完全不變。
+       */
+      compactHide: true,
     },
   ];
 
   return (
-    <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-5">
+    <div className="grid grid-cols-2 gap-3 sm:gap-4 sm:grid-cols-2 lg:grid-cols-5">
       {cards.map((c) => (
-        <div key={c.label} className="card-dark p-5">
+        <div
+          key={c.label}
+          className={`card-dark p-4 md:p-5 ${c.compactHide ? "hidden sm:block" : ""}`}
+        >
           <div className="text-xs uppercase tracking-[0.16em] text-white/60">
             {c.label}
           </div>
-          <div className="stat-figure mt-2 text-3xl font-black">
+          <div className="stat-figure mt-2 text-2xl font-black md:text-3xl">
             {c.value}
             {c.unit && (
               <span className="ml-1 text-base font-bold text-white/70">{c.unit}</span>
@@ -219,7 +226,7 @@ function NumberCards({ data }: { data: AnalyticsPayload }) {
 function MemberGrowthSection({ data }: { data: MemberGrowthData | null }) {
   if (!data) {
     return (
-      <Section title="會員增長（近 12 個月）" desc="每月有幾多人加入。">
+      <Section title="會員增長（近 12 個月）" desc="每月有幾多人加入。" summary="讀不到">
         <FailedNote />
       </Section>
     );
@@ -233,18 +240,32 @@ function MemberGrowthSection({ data }: { data: MemberGrowthData | null }) {
     <Section
       title="會員增長（近 12 個月）"
       desc="每一個月新加入的會員人數，連同累計會員數一睇就知個社群係脹定縮。"
+      summary={months.length === 0 ? "無資料" : `本月新增 ${last.new_members} 人`}
     >
       {months.length === 0 ? (
         <EmptyNote>尚未有會員註冊記錄。</EmptyNote>
       ) : (
         <>
-          <ColumnChart
-            data={months.map((m) => ({
-              label: monthShort(m.month),
-              value: m.new_members,
-            }))}
-            ariaLabel={`近 12 個月每月新加入會員人數，${monthLabel(first.month)} ${first.new_members} 人，${monthLabel(last.month)} ${last.new_members} 人`}
-          />
+          {/* 手機：640 寬的 12 柱圖縮到 342px 會變 5px 字，先睇「數字＋迷你條」 */}
+          <div className="md:hidden">
+            <BarRows
+              rows={months.map((m) => ({
+                label: monthShort(m.month),
+                value: m.new_members,
+              }))}
+              ariaLabel="近 12 個月每月新加入會員人數（迷你條）"
+            />
+          </div>
+          {/* 原圖：手機照樣留在下面（唔會因為簡化而冇咗張圖），桌面就係原本嗰張 */}
+          <div className="mt-4 md:mt-0">
+            <ColumnChart
+              data={months.map((m) => ({
+                label: monthShort(m.month),
+                value: m.new_members,
+              }))}
+              ariaLabel={`近 12 個月每月新加入會員人數，${monthLabel(first.month)} ${first.new_members} 人，${monthLabel(last.month)} ${last.new_members} 人`}
+            />
+          </div>
           <p className="mt-3 text-sm text-white/70">
             累計會員由 {monthLabel(first.month)}的 {first.cumulative_members} 人，增至{" "}
             {monthLabel(last.month)}的 {last.cumulative_members} 人。
@@ -266,7 +287,7 @@ function MemberGrowthSection({ data }: { data: MemberGrowthData | null }) {
 function ActivitySection({ data }: { data: ActivityOverviewData | null }) {
   if (!data) {
     return (
-      <Section title="會員活躍度" desc="30 / 90 天內有動作的會員有幾多。">
+      <Section title="會員活躍度" desc="30 / 90 天內有動作的會員有幾多。" summary="讀不到">
         <FailedNote />
       </Section>
     );
@@ -276,12 +297,15 @@ function ActivitySection({ data }: { data: ActivityOverviewData | null }) {
     <Section
       title="會員活躍度"
       desc="會員係唔係真係練開？睇活躍人數同沉默人數就知。"
+      summary={
+        data.total_members === 0 ? "無資料" : `30 天 ${data.active_30d} 人`
+      }
     >
       {data.total_members === 0 ? (
         <EmptyNote>尚未有會員資料。</EmptyNote>
       ) : (
         <>
-          <div className="grid gap-4 sm:grid-cols-3">
+          <div className="grid grid-cols-3 gap-2 sm:gap-4">
             <StatCard
               label="30 天活躍"
               value={String(data.active_30d)}
@@ -336,7 +360,7 @@ function ActivitySection({ data }: { data: ActivityOverviewData | null }) {
 function BehaviorSection({ data }: { data: BehaviorSegmentsData | null }) {
   if (!data) {
     return (
-      <Section title="行為畫像" desc="會員按積分、里程與訓練型分佈。">
+      <Section title="行為畫像" desc="會員按積分、里程與訓練型分佈。" summary="讀不到">
         <FailedNote />
       </Section>
     );
@@ -358,6 +382,7 @@ function BehaviorSection({ data }: { data: BehaviorSegmentsData | null }) {
     <Section
       title="行為畫像"
       desc="我哋會員係咩類型的人？積分、里程同訓練型三個角度睇。"
+      summary={allZero ? "無資料" : `簽到型 ${data.checkin_type_90d} 人`}
     >
       {allZero ? (
         <EmptyNote>尚未有會員數據，暫未能計算分佈。</EmptyNote>
@@ -417,7 +442,7 @@ function GoalRateSection({ data }: { data: BehaviorSegmentsData | null }) {
 
   if (!rows) {
     return (
-      <Section title="月度達標率" desc="每月有幾多人跑滿目標公里。">
+      <Section title="月度達標率" desc="每月有幾多人跑滿目標公里。" summary="讀不到">
         <FailedNote />
       </Section>
     );
@@ -427,25 +452,36 @@ function GoalRateSection({ data }: { data: BehaviorSegmentsData | null }) {
     <Section
       title="月度達標率（近 6 個月）"
       desc="跑步挑戰搞成唔成功？睇每月達標率嘅走勢。"
+      summary={
+        rows.length === 0 ? "無資料" : `本月 ${fmtPct(rows[rows.length - 1].rate)}`
+      }
     >
       {rows.length === 0 ? (
         <EmptyNote>尚無跑步紀錄，暫未能計算達標率。</EmptyNote>
       ) : (
         <>
-          <LineChart
-            data={rows.map((r) => ({ label: monthShort(r.month), value: r.rate }))}
-            yMax={1}
-            formatValue={fmtPct}
-            ariaLabel={`近 6 個月每月達標率，${rows
-              .map((r) => `${monthShort(r.month)} ${fmtPct(r.rate)}`)
-              .join("、")}`}
-          />
-          <div className="mt-3 flex flex-wrap gap-x-5 gap-y-1 text-xs text-white/65">
-            {rows.map((r) => (
-              <span key={r.month}>
-                {monthShort(r.month)}：{r.qualified} / {r.submitters} 人達標
-              </span>
-            ))}
+          {/*
+           * 手機：先睇得清嘅文字數字（每月達標人數），圖擺後面當走勢參考；
+           * 桌面：order-none + block，維持原本「圖在上、數字在下」。
+           */}
+          <div className="flex flex-col md:block">
+            <div className="order-2 md:order-none">
+              <LineChart
+                data={rows.map((r) => ({ label: monthShort(r.month), value: r.rate }))}
+                yMax={1}
+                formatValue={fmtPct}
+                ariaLabel={`近 6 個月每月達標率，${rows
+                  .map((r) => `${monthShort(r.month)} ${fmtPct(r.rate)}`)
+                  .join("、")}`}
+              />
+            </div>
+            <div className="order-1 mt-3 flex flex-wrap gap-x-5 gap-y-1 text-xs text-white/65 md:order-none">
+              {rows.map((r) => (
+                <span key={r.month}>
+                  {monthShort(r.month)}：{r.qualified} / {r.submitters} 人達標
+                </span>
+              ))}
+            </div>
           </div>
           <ChartNote>
             達標 = 當月已確認里程達到每月目標（預設 300 公里）；
@@ -468,7 +504,7 @@ function SessionAttendanceSection({
 }) {
   if (!data) {
     return (
-      <Section title="訓練場次出席" desc="邊場最多人報名、出席率有幾高。">
+      <Section title="訓練場次出席" desc="邊場最多人報名、出席率有幾高。" summary="讀不到">
         <FailedNote />
       </Section>
     );
@@ -481,6 +517,7 @@ function SessionAttendanceSection({
     <Section
       title="訓練場次出席"
       desc="每一場有幾多人報名、有幾多人真係到，直接睇出席率。"
+      summary={sessions.length === 0 ? "無資料" : `共 ${sessions.length} 場`}
     >
       {sessions.length === 0 ? (
         <EmptyNote>尚無訓練場次資料。</EmptyNote>
@@ -501,7 +538,10 @@ function SessionAttendanceSection({
             </p>
           </div>
 
-          <div className="overflow-x-auto rounded-xl border border-ink-line">
+          {/* 手機：卡片列表（原本 760px 寬塞入 300px 容器，要橫向捲 460px 才睇得到） */}
+          <SessionCards rows={sessions} />
+
+          <div className="hidden overflow-x-auto rounded-xl border border-ink-line md:block">
             <table className="w-full min-w-[760px] text-sm">
               <caption className="sr-only">
                 各訓練場次報名與出席明細（最多 20 場，依報名人數排序）
@@ -561,7 +601,7 @@ function SessionAttendanceSection({
 function RunMonthlySection({ data }: { data: RunMonthlyData | null }) {
   if (!data) {
     return (
-      <Section title="跑步挑戰" desc="每月總公里、提交與待審數。">
+      <Section title="跑步挑戰" desc="每月總公里、提交與待審數。" summary="讀不到">
         <FailedNote />
       </Section>
     );
@@ -574,12 +614,13 @@ function RunMonthlySection({ data }: { data: RunMonthlyData | null }) {
     <Section
       title="跑步挑戰（近 12 個月）"
       desc="每月跑咗幾多公里、有幾多人參與、有幾多仲等緊確認。"
+      summary={months.length === 0 ? "無資料" : `本月 ${formatKm(thisMonth?.total_km ?? 0)} km`}
     >
       {months.length === 0 ? (
         <EmptyNote>尚無跑步紀錄。</EmptyNote>
       ) : (
         <>
-          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-5">
+          <div className="grid grid-cols-2 gap-3 sm:gap-4 sm:grid-cols-2 lg:grid-cols-5">
             <StatCard
               label="本月總公里"
               value={thisMonth ? formatKm(thisMonth.total_km) : "0"}
@@ -605,6 +646,17 @@ function RunMonthlySection({ data }: { data: RunMonthlyData | null }) {
               label="本月達標人數"
               value={String(thisMonth?.qualified ?? 0)}
               sub="達到每月目標"
+            />
+          </div>
+          {/* 手機：12 個月的公里數改成「數字＋迷你條」（原圖照樣留在下面） */}
+          <div className="mt-6 md:hidden">
+            <BarRows
+              rows={months.map((m) => ({
+                label: monthShort(m.month),
+                value: m.total_km,
+              }))}
+              formatValue={formatKm}
+              ariaLabel="近 12 個月每月已確認總公里（迷你條）"
             />
           </div>
           <div className="mt-6">
@@ -636,7 +688,7 @@ function RunMonthlySection({ data }: { data: RunMonthlyData | null }) {
 function CouponSection({ data }: { data: CouponSummaryData | null }) {
   if (!data) {
     return (
-      <Section title="優惠券" desc="發咗幾多、用咗幾多。">
+      <Section title="優惠券" desc="發咗幾多、用咗幾多。" summary="讀不到">
         <FailedNote />
       </Section>
     );
@@ -646,12 +698,13 @@ function CouponSection({ data }: { data: CouponSummaryData | null }) {
     <Section
       title="優惠券"
       desc="達標獎勵發出去之後，會員到底有冇用？"
+      summary={data.total === 0 ? "無資料" : `核銷率 ${fmtPct(data.redeemed_rate)}`}
     >
       {data.total === 0 ? (
         <EmptyNote>尚未發放任何優惠券。</EmptyNote>
       ) : (
         <>
-          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+          <div className="grid grid-cols-2 gap-3 sm:gap-4 sm:grid-cols-2 lg:grid-cols-4">
             <StatCard label="可使用" value={String(data.by_status.active)} sub="未用、未過期" />
             <StatCard label="已使用" value={String(data.by_status.used)} sub="已核銷" />
             <StatCard label="已過期" value={String(data.by_status.expired)} sub="過期未用" />
@@ -709,44 +762,49 @@ function EventRegistrationsSection({ data }: { data: EventRegistrationsData | nu
     <Section
       title="活動報名（站內）"
       desc="會員喺網站內報名活動的人數；最多人報名的活動排最前。"
+      summary={total === 0 ? "無資料" : `共 ${total} 人報名`}
     >
       {total === 0 ? (
         <EmptyNote>尚未有站內報名。</EmptyNote>
       ) : (
-        <div className="overflow-x-auto rounded-xl border border-ink-line">
-          <table className="w-full min-w-[560px] text-sm">
-            <caption className="sr-only">
-              各活動站內報名人數（最多 20 場，依報名人數排序）
-            </caption>
-            <thead>
-              <tr className="border-b border-ink-line text-left text-xs uppercase tracking-[0.14em] text-white/70">
-                <th className="py-3 pl-4 pr-4">活動</th>
-                <th className="py-3 pr-4">日期</th>
-                <th className="py-3 pr-4 text-right">站內報名</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-ink-line">
-              {rows.map((r) => (
-                <tr key={r.event_id}>
-                  <td className="py-3 pl-4 pr-4 font-semibold">
-                    {r.title}
-                    {eventStatusSuffix(r.status) && (
-                      <span className="ml-1 text-xs font-normal text-white/50">
-                        {eventStatusSuffix(r.status)}
-                      </span>
-                    )}
-                  </td>
-                  <td className="py-3 pr-4 whitespace-nowrap text-white/75">
-                    {r.event_date}
-                  </td>
-                  <td className="py-3 pr-4 text-right font-semibold">
-                    {r.registered}
-                  </td>
+        <>
+          <EventRegistrationCards rows={rows} />
+
+          <div className="hidden overflow-x-auto rounded-xl border border-ink-line md:block">
+            <table className="w-full min-w-[560px] text-sm">
+              <caption className="sr-only">
+                各活動站內報名人數（最多 20 場，依報名人數排序）
+              </caption>
+              <thead>
+                <tr className="border-b border-ink-line text-left text-xs uppercase tracking-[0.14em] text-white/70">
+                  <th className="py-3 pl-4 pr-4">活動</th>
+                  <th className="py-3 pr-4">日期</th>
+                  <th className="py-3 pr-4 text-right">站內報名</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+              </thead>
+              <tbody className="divide-y divide-ink-line">
+                {rows.map((r) => (
+                  <tr key={r.event_id}>
+                    <td className="py-3 pl-4 pr-4 font-semibold">
+                      {r.title}
+                      {eventStatusSuffix(r.status) && (
+                        <span className="ml-1 text-xs font-normal text-white/50">
+                          {eventStatusSuffix(r.status)}
+                        </span>
+                      )}
+                    </td>
+                    <td className="py-3 pr-4 whitespace-nowrap text-white/75">
+                      {r.event_date}
+                    </td>
+                    <td className="py-3 pr-4 text-right font-semibold">
+                      {r.registered}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </>
       )}
       <ChartNote>
         只算站內報名；走外部連結報名的不在內。會員取消報名會即時扣除，
@@ -795,7 +853,7 @@ function DaysSwitcher({ days }: { days: number }) {
 function PageStatsSection({ data }: { data: PageStatsData | null }) {
   if (!data) {
     return (
-      <Section title="頁面流量（估算）" desc="邊個頁面最多人看。">
+      <Section title="頁面流量（估算）" desc="邊個頁面最多人看。" summary="讀不到">
         <FailedNote />
       </Section>
     );
@@ -807,6 +865,7 @@ function PageStatsSection({ data }: { data: PageStatsData | null }) {
     <Section
       title="頁面流量（估算）"
       desc="邊個頁面最多人睇、留低幾耐。追蹤數據有偏差，只供參考。"
+      summary={empty ? "無資料" : `瀏覽 ${data.total_views}`}
     >
       <DaysSwitcher days={data.days} />
       {empty ? (
@@ -829,7 +888,7 @@ function PageStatsSection({ data }: { data: PageStatsData | null }) {
               追蹤腳本被阻擋、連結預載或重整頁面都會造成偏差
             </span>
           </div>
-          <div className="mt-4 grid gap-4 sm:grid-cols-3">
+          <div className="mt-4 grid grid-cols-3 gap-2 sm:gap-4">
             <StatCard
               label="總瀏覽量"
               value={String(data.total_views)}
@@ -846,7 +905,13 @@ function PageStatsSection({ data }: { data: PageStatsData | null }) {
               sub="只計頁面喺眼前嘅時間"
             />
           </div>
-          <div className="mt-6 overflow-x-auto rounded-xl border border-ink-line">
+
+          {/* 手機：卡片列表（原本 560px 寬塞入 300px 容器，要橫向捲 260px） */}
+          <div className="mt-6 md:hidden">
+            <PagePathCards rows={data.paths} />
+          </div>
+
+          <div className="mt-6 hidden overflow-x-auto rounded-xl border border-ink-line md:block">
             <table className="w-full min-w-[560px] text-sm">
               <caption className="sr-only">
                 各頁面瀏覽量、估算到訪與平均停留（依瀏覽量排序）
@@ -894,7 +959,8 @@ function PageStatsSection({ data }: { data: PageStatsData | null }) {
 
 export function AnalyticsDashboard({ data }: { data: AnalyticsPayload }) {
   return (
-    <div className="space-y-8">
+    // 手機區塊間距收窄（space-y-4）；≥768px 仍是 8，桌面節奏不變
+    <div data-analytics-root className="space-y-4 md:space-y-8">
       <div>
         <h2 className="text-2xl font-bold">數據分析</h2>
         <p className="mt-2 text-sm leading-relaxed text-white/75">
@@ -916,9 +982,12 @@ export function AnalyticsDashboard({ data }: { data: AnalyticsPayload }) {
         </div>
       )}
 
-      <details className="card-dark p-6">
+      {/* 指標說明本來就係 <details>（預設收起）；手機只需把點擊區補到 44px 高 */}
+      <details className="card-dark p-4 md:p-6">
         <summary className="cursor-pointer select-none text-sm font-bold text-white/85">
-          指標說明（每個數字代表咩）
+          <span className="flex min-h-11 items-center md:inline md:min-h-0">
+            指標說明（每個數字代表咩）
+          </span>
         </summary>
         <dl className="mt-4 grid gap-x-8 gap-y-3 sm:grid-cols-2">
           {METRIC_DEFS.map((d) => (
