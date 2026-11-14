@@ -8,6 +8,7 @@ import {
   CheckCircle2,
   Diff,
   Eye,
+  FlaskConical,
   KeyRound,
   Loader2,
   Mail,
@@ -28,7 +29,7 @@ import { MemberEditDialog } from "./MemberEditDialog";
 import { MemberPasswordDialog } from "./MemberPasswordDialog";
 import { MemberPointsDialog } from "./MemberPointsDialog";
 import { MemberVerificationDialog } from "./MemberVerificationDialog";
-import { ErrorBanner, RoleBadge, StatusBadge } from "./ui";
+import { ErrorBanner, RoleBadge, StatusBadge, TestBadge } from "./ui";
 import {
   isOkEnvelope,
   parseError,
@@ -192,6 +193,50 @@ export function MemberManager() {
       );
       setNotice(
         `已將「${memberName(member)}」${nextStatus === "active" ? "啟用" : "停用"}。`
+      );
+    } catch {
+      setError("網路錯誤，請稍後再試。");
+    } finally {
+      setBusyId(null);
+    }
+  }
+
+  /* ---------- 測試帳號開關 ----------
+   * true = 不計入公開排行榜（view 端過濾，切換後榜單立即少一人）。
+   * 走 PATCH /api/admin/members，後端會再驗一次管理員身分並寫 admin_audit_log。
+   */
+  async function toggleTest(member: MemberRow) {
+    const nextTest = member.is_test !== true;
+    setBusyId(member.member_id);
+    setError(null);
+    setNotice(null);
+    try {
+      const res = await fetch("/api/admin/members", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ userId: member.member_id, is_test: nextTest }),
+      });
+      const body: unknown = await res.json();
+
+      if (!res.ok || !isOkEnvelope<{ member?: MemberRow; is_test?: boolean | null }>(body)) {
+        setError(parseError(body, "更新測試帳號旗標失敗。").error);
+        return;
+      }
+
+      const updated = body.data.member;
+      // updated 可能為 null（詳情查詢失敗），所以一定要有 ?? nextTest 保險
+      const saved = body.data.is_test ?? updated?.is_test ?? nextTest;
+      setMembers((prev) =>
+        prev.map((row) =>
+          row.member_id === member.member_id
+            ? { ...row, ...(updated ?? {}), is_test: saved }
+            : row
+        )
+      );
+      setNotice(
+        saved
+          ? `已將「${memberName(member)}」標記為測試帳號，已從公開排行榜移除。`
+          : `已取消「${memberName(member)}」的測試帳號標記，已回到公開排行榜。`
       );
     } catch {
       setError("網路錯誤，請稍後再試。");
@@ -394,6 +439,7 @@ export function MemberManager() {
                     >
                       {member.display_name?.trim() || "（未具名會員）"}
                     </span>
+                    {member.is_test === true && <TestBadge />}
                     <StatusBadge status={member.status} />
                     <ChevronDown
                       size={16}
@@ -499,6 +545,19 @@ export function MemberManager() {
                         {member.status === "active" ? "停用" : "啟用"}
                       </CardAction>
                       <CardAction
+                        onClick={() => void toggleTest(member)}
+                        disabled={busyId === member.member_id}
+                        tone={member.is_test === true ? "ok" : "default"}
+                        className="col-span-2"
+                      >
+                        {busyId === member.member_id ? (
+                          <Loader2 size={14} className="animate-spin" />
+                        ) : (
+                          <FlaskConical size={14} />
+                        )}
+                        {member.is_test === true ? "取消測試帳號" : "標記為測試帳號"}
+                      </CardAction>
+                      <CardAction
                         onClick={() => setDeleteMember(member)}
                         tone="danger"
                         className="col-span-2"
@@ -521,14 +580,16 @@ export function MemberManager() {
             會員列表，共 {total} 位；點擊列可開啟詳情抽屜
           </caption>
           <colgroup>
-            <col className="w-[17%]" />
-            <col className="w-[15%]" />
-            <col className="w-[10%]" />
+            {/* 操作欄 22% → 27%：多了「測試帳號」開關後共 8 顆圖示 ≈ 200px，
+                22% 在 840px 最小寬度下只有 161px 會擠出格線；其餘欄位各讓 1-2%。 */}
+            <col className="w-[16%]" />
+            <col className="w-[13%]" />
             <col className="w-[9%]" />
+            <col className="w-[8%]" />
             <col className="w-[7%]" />
             <col className="w-[9%]" />
             <col className="w-[11%]" />
-            <col className="w-[22%]" />
+            <col className="w-[27%]" />
           </colgroup>
           <thead className="bg-ink-soft text-left text-xs text-white/60">
             <tr>
@@ -585,8 +646,11 @@ export function MemberManager() {
                   className="cursor-pointer transition hover:bg-white/5 focus-within:bg-white/5"
                 >
                   <td className="px-3 py-3">
-                    <div className="truncate font-semibold" title={memberName(member)}>
-                      {member.display_name?.trim() || "（未具名會員）"}
+                    <div className="flex min-w-0 items-center gap-1.5">
+                      <span className="min-w-0 truncate font-semibold" title={memberName(member)}>
+                        {member.display_name?.trim() || "（未具名會員）"}
+                      </span>
+                      {member.is_test === true && <TestBadge />}
                     </div>
                     <div className="truncate text-xs text-white/45">
                       最後登入 {formatDate(member.last_sign_in_at)}
@@ -640,6 +704,22 @@ export function MemberManager() {
                       </IconAction>
                       <IconAction label="重寄驗證信" onClick={() => setVerifyMember(member)}>
                         <Mail size={15} />
+                      </IconAction>
+                      <IconAction
+                        label={
+                          member.is_test === true
+                            ? `取消「${memberName(member)}」的測試帳號標記`
+                            : `將「${memberName(member)}」標記為測試帳號（不計入公開排行榜）`
+                        }
+                        onClick={() => void toggleTest(member)}
+                        disabled={busyId === member.member_id}
+                        tone={member.is_test === true ? "ok" : "default"}
+                      >
+                        {busyId === member.member_id ? (
+                          <Loader2 size={15} className="animate-spin" />
+                        ) : (
+                          <FlaskConical size={15} />
+                        )}
                       </IconAction>
                       <IconAction
                         label={

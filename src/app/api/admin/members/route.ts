@@ -6,10 +6,11 @@
  *        → { ok: true, data: { members, total, page, limit, has_service_role } }
  * POST   { email, password, display_name?, role? }   → 建立帳號（需 service_role）
  * PATCH  { userId, display_name?, phone?, role?, status?, status_reason?,
- *          points_delta?, points_reason? }
+ *          points_delta?, points_reason?, is_test? }
  *        → RPC admin_update_member（有會員欄位時）
  *        → RPC admin_adjust_points（有 points_delta 時；非零整數且 |delta| ≤ 10000）
- *        兩段一律「先資料、後積分」依序執行，任一段失敗回 400 並標明是哪一段。
+ *        → RPC admin_set_member_test（有 is_test 時；true = 不計入公開排行榜）
+ *        三段一律依序執行，任一段失敗回 400 並標明是哪一段。
  * DELETE ?userId=  → 有 service_role：auth.admin.deleteUser + admin_delete_member
  *                    沒有：RPC admin_purge_member（SECURITY DEFINER，自己刪
  *                          auth.users，見 supabase/migration-member-purge.sql）；
@@ -27,7 +28,8 @@
  *               RPC 不存在（尚未跑 migration-member-purge.sql）時才降級為
  *               status='disabled' 軟刪除，並在回應的 note 說明要跑哪支 SQL
  *  - 成功後寫一筆 admin_audit_log（module=members，
- *    action=create/update/delete/soft_delete；best-effort，見 src/lib/audit.ts）
+ *    action=create/update/adjust_points/set_test/delete/soft_delete；
+ *    best-effort，見 src/lib/audit.ts）
  *
  * H6：全部包 try/catch，任何情況都回 JSON，不讓例外裸奔成 HTML 500。
  */
@@ -61,6 +63,12 @@ type MemberRow = {
   status_reason: string | null;
   points: number;
   total_km: number | string;
+  /**
+   * 測試帳號旗標（supabase/migration-profile-test-flag.sql）。
+   * optional 是因為「站主還沒跑該 migration」時 RPC 不會回這一欄；
+   * 對外回應一律補成 boolean（見 GET 的 map），契約不因 schema 版本而變。
+   */
+  is_test?: boolean;
   created_at: string;
   last_sign_in_at: string | null;
   run_count: number | string;
@@ -278,11 +286,39 @@ export async function GET(request: Request) {
 
     const rows = (Array.isArray(data) ? data : []) as MemberRow[];
 
+    // 遷移期相容：站主若還沒跑 migration-profile-test-flag.sql，
+    // admin_list_members 不會回 is_test，但 profiles.is_test 這一欄可能已經存在
+    // （本專案的過渡狀態：欄位先到、RPC 後到）。此時補一次直讀，
+    // 讓後台顯示的旗標與 DB 一致；真的沒有這一欄（42703）就維持 false。
+    // 只有在「有列缺 is_test」時才會多打這一次查詢，正常情況（跑完 SQL）不會發生。
+    if (rows.length > 0 && rows.some((row) => row.is_test === undefined)) {
+      const ids = rows.map((row) => row.member_id).filter(Boolean);
+      const { data: flags, error: flagError } = await supabase
+        .from("profiles")
+        .select("id, is_test")
+        .in("id", ids);
+      if (!flagError && Array.isArray(flags)) {
+        const byId = new Map<string, boolean>();
+        for (const flag of flags as { id: string; is_test?: boolean }[]) {
+          byId.set(flag.id, flag.is_test === true);
+        }
+        for (const row of rows) row.is_test = byId.get(row.member_id) ?? false;
+      } else if (flagError && flagError.code !== "42703") {
+        // 只寫 server log：列表本身已經拿到了，旗標退回 false 不該讓整頁失敗
+        console.warn(
+          `[api] GET /api/admin/members is_test 補讀失敗：code=${flagError.code ?? "-"}`
+        );
+      }
+    }
+
     // total_count 是 count(*) over() 的分頁總數；只取第一列，並從成員物件移除
     const total = rows.length > 0 ? Number(rows[0].total_count ?? 0) : 0;
     const members: MemberRow[] = rows.map((row) => {
       const member = { ...row };
       delete member.total_count;
+      // is_test：RPC 缺這一欄（尚未跑 migration-profile-test-flag.sql）時視為 false。
+      // 重要：無論如何都要在回應裡出現這個 key，前端才不用分辨 schema 版本。
+      member.is_test = row.is_test === true;
       return member;
     });
 
@@ -452,21 +488,38 @@ export async function PATCH(request: Request) {
     }
     if (Object.keys(fields).length > 0) return jsonValidation(fields);
 
+    // 測試帳號旗標（選填）：只接受真正的 boolean。
+    // 不接受 "true"/"1"/1 之類的寬鬆輸入 —— 這個旗標會把會員從公開榜單移除，
+    // 寧可 400 也不要靠隱式轉型去猜使用者意思。
+    let isTest: boolean | null = null;
+    const isTestRaw = body.is_test;
+    if (isTestRaw !== undefined && isTestRaw !== null) {
+      if (typeof isTestRaw !== "boolean") {
+        fields.is_test = "測試帳號旗標只能是 true 或 false。";
+      } else {
+        isTest = isTestRaw;
+      }
+    }
+    if (Object.keys(fields).length > 0) return jsonValidation(fields);
+
     const displayName = textOrNull(body.display_name, 80);
     const phone = textOrNull(body.phone, 30);
     const statusReason = textOrNull(body.status_reason, 200);
     const pointsReason = optionalText(body.points_reason, 200) ?? "管理員手動調整";
 
     const hasPointsDelta = pointsDelta !== null;
+    const hasTestChange = isTest !== null;
     const hasProfileChanges =
       displayName !== null ||
       phone !== null ||
       role !== null ||
       status !== null ||
       statusReason !== null;
-    // 只送積分時不必再跑一次 admin_update_member（避免兩段 RPC 無謂交錯）；
+    // 只送積分／只切換測試旗標時不必再跑一次 admin_update_member
+    //（避免無謂的 RPC 與一筆「什麼都沒改」的稽核）；
     // 其餘情況（含空 body）維持原行為，一律先更新 profile。
-    const shouldUpdateProfile = hasProfileChanges || !hasPointsDelta;
+    const shouldUpdateProfile =
+      hasProfileChanges || (!hasPointsDelta && !hasTestChange);
 
     /* ---------- 第一段：會員資料 / 角色 / 狀態 ---------- */
     if (shouldUpdateProfile) {
@@ -507,6 +560,34 @@ export async function PATCH(request: Request) {
       newPoints = Number(adjusted ?? 0);
     }
 
+    /* ---------- 第三段：測試帳號旗標（前兩段都成功後才執行） ---------- */
+    // 「測試帳號」= 不計入公開排行榜（public_leaderboard / monthly_leaderboard）
+    // 與 site_stats。資料庫端另有第二道門：admin_set_member_test 內建 is_admin()，
+    // 且 profiles 的 guard 觸發器會把非管理員對 is_test 的修改還原。
+    let testFlagSaved: boolean | null = null;
+    if (isTest !== null) {
+      const { data: flagData, error } = await supabase.rpc("admin_set_member_test", {
+        p_id: userId,
+        p_is_test: isTest,
+      });
+      if (error) {
+        // 部署了程式但沒跑 SQL → 給管理員可照做的中文提示，不要只丟「伺服器錯誤」
+        if (
+          error.code === "PGRST202" ||
+          /could not find the function/i.test(error.message ?? "")
+        ) {
+          return jsonErr(
+            "資料庫尚未建立測試帳號旗標。請到 Supabase → SQL Editor 執行 supabase/migration-profile-test-flag.sql，完成後重新整理本頁。",
+            "SCHEMA_OUTDATED",
+            503
+          );
+        }
+        return rpcFailure("PATCH /api/admin/members set_test", error);
+      }
+      const saved = (flagData ?? {}) as { is_test?: boolean };
+      testFlagSaved = saved.is_test === true;
+    }
+
     // 回傳「列表列」形狀（含三個計數與 email），前端才能直接覆蓋原本那一列。
     // admin_get_member 失敗時退回 null，由前端用本地狀態補上，不讓更新變失敗。
     const { data: detail, error: detailError } = await supabase.rpc(
@@ -517,6 +598,9 @@ export async function PATCH(request: Request) {
       !detailError && detail ? toMemberRow(detail as MemberDetail) : null;
     // 以 RPC 回傳的新點數為準（profiles.points 已同步）
     if (member && newPoints !== null) member.points = newPoints;
+    // admin_get_member 不含 is_test（那支 RPC 沒改），以剛剛 toggle 的結果補上，
+    // 讓前端可以就地覆蓋那一列，不必再打一次列表 API。
+    if (member && testFlagSaved !== null) member.is_test = testFlagSaved;
     const memberName = member?.display_name || member?.email || userId;
 
     if (shouldUpdateProfile) {
@@ -549,14 +633,50 @@ export async function PATCH(request: Request) {
       );
     }
 
-    const message = hasPointsDelta
-      ? hasProfileChanges
-        ? "已更新會員資料並調整積分。"
-        : "已調整會員積分。"
-      : "已更新會員資料。";
+    // 站主鐵律：危險操作要留痕。測試帳號旗標會讓一個人從公開榜單消失，
+    // 屬於「看得見的對外影響」，必須留下誰在什麼時候按的。
+    if (testFlagSaved !== null) {
+      await writeAuditLog(
+        supabase,
+        actorId,
+        "members",
+        "set_test",
+        testFlagSaved
+          ? `將「${memberName}」標記為測試帳號（不計入公開排行榜）。`
+          : `取消「${memberName}」的測試帳號標記（重新計入公開排行榜）。`
+      );
+    }
+
+    let message: string;
+    if (hasPointsDelta && hasProfileChanges) {
+      message = "已更新會員資料並調整積分。";
+    } else if (hasPointsDelta) {
+      message = "已調整會員積分。";
+    } else if (hasProfileChanges) {
+      message = "已更新會員資料。";
+    } else if (testFlagSaved !== null) {
+      message = testFlagSaved
+        ? "已將會員標記為測試帳號（不計入公開排行榜）。"
+        : "已取消測試帳號標記（重新計入公開排行榜）。";
+    } else {
+      message = "已更新會員資料。";
+    }
+
+    // 同時有資料／積分改動又有旗標改動：接成一句，不讓管理員只看到一半結果
+    if (testFlagSaved !== null && (hasPointsDelta || hasProfileChanges)) {
+      message = `${message.replace(/。$/, "")}，並${
+        testFlagSaved ? "標記為測試帳號" : "取消測試帳號標記"
+      }。`;
+    }
 
     return jsonOk({
-      data: { member, points: member?.points ?? newPoints ?? null },
+      data: {
+        member,
+        points: member?.points ?? newPoints ?? null,
+        // member 為 null（admin_get_member 失敗）時仍要把新旗標帶回去，
+        // 否則前端無從得知這次切換到底成不成功。
+        is_test: testFlagSaved ?? member?.is_test ?? null,
+      },
       message,
     });
   } catch (err) {

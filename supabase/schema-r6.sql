@@ -122,6 +122,13 @@ on conflict (key) do nothing;
 --    定義與 migration-leaderboard-no-id.sql 完全一致（該檔是這條修補的正本）。
 -- ------------------------------------------------------------
 drop view if exists public.monthly_leaderboard cascade;
+
+-- 【2026-11-14 測試帳號】monthly_leaderboard 也要排除 is_test（正本：
+-- migration-profile-test-flag.sql §5）。先確保欄位存在，否則下面的 view 建不起來；
+-- add column if not exists 可重複執行，既有環境不會有任何資料變動（預設 false）。
+alter table public.profiles
+  add column if not exists is_test boolean not null default false;
+
 create view public.monthly_leaderboard
 with (security_invoker = false) as
 select
@@ -134,7 +141,8 @@ select
   p.points
 from public.monthly_running_stats s
 join public.profiles p on p.id = s.user_id
-where p.role = 'member';
+where p.role = 'member'
+  and p.is_test = false;
 
 grant select on public.monthly_leaderboard to anon, authenticated;
 
@@ -236,6 +244,8 @@ begin
     new.role     := 'member';
     new.points   := 0;
     new.total_km := 0;
+    -- 測試帳號旗標也只能由管理員設定（預設 false，見 migration-profile-test-flag.sql）
+    new.is_test  := false;
   end if;
 
   return new;

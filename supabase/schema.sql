@@ -22,6 +22,8 @@
 --   2. public_leaderboard / monthly_leaderboard —— 加 role='member'、移除 id
 --   3. site_stats.members —— 排除管理員（與線上實測 6 一致）
 --   4. sessions_select_all(using true) —— 換成 sessions_select_visible
+--   5. profiles.is_test —— 測試帳號旗標（migration-profile-test-flag.sql 的正本）；
+--      排行榜兩張 view 與 site_stats 都會過濾它，護欄也會保護它
 -- =============================================================
 -- =============================================================
 -- MSW 街健館 (Macau Street Workout) — Supabase 一鍵初始化腳本
@@ -46,8 +48,22 @@ create table if not exists public.profiles (
   role          text not null default 'member' check (role in ('member', 'admin')),
   points        integer not null default 0,
   total_km      numeric(10, 2) not null default 0,
+  -- 測試帳號旗標（migration-profile-test-flag.sql）：true 者不計入公開排行榜與 site_stats
+  is_test       boolean not null default false,
   created_at    timestamptz not null default now()
 );
+
+-- 既有環境（profiles 已存在）補上 is_test：本檔後面的排行榜 view 與護欄都會引用它，
+-- 少了這段，重跑 schema.sql 會在建 view 時就失敗。add column if not exists 可重複執行。
+alter table public.profiles
+  add column if not exists is_test boolean not null default false;
+
+comment on column public.profiles.is_test is
+  '測試帳號旗標。true = 不計入公開排行榜（public_leaderboard / monthly_leaderboard）與 site_stats。'
+  '只有管理員能改（guard_profile_sensitive_fields 會把會員自己的修改還原）。';
+
+create index if not exists idx_profiles_role_is_test
+  on public.profiles (role, is_test);
 
 -- 判斷目前使用者是否為管理員（security definer 避免在 RLS 中遞迴查詢 profiles）
 create or replace function public.is_admin()
@@ -144,6 +160,8 @@ begin
   new.created_at        := old.created_at;
   new.status            := old.status;
   new.status_updated_at := old.status_updated_at;
+  -- 測試帳號旗標只有管理員能決定（後台走 admin_set_member_test）
+  new.is_test           := old.is_test;
 
   -- points 只有 credit_points 在交易內開旗標時才放行
   if not v_points_rpc then
@@ -173,6 +191,7 @@ begin
     new.role     := old.role;
     new.points   := old.points;
     new.total_km := old.total_km;
+    new.is_test  := old.is_test;
   end if;
 
   return new;
@@ -184,7 +203,7 @@ end
 $guard$;
 
 comment on function public.guard_profile_sensitive_fields() is
-  'profiles 敏感欄位護欄：非管理員不可改 role/points/total_km/created_at/status/status_updated_at；'
+  'profiles 敏感欄位護欄：非管理員不可改 role/points/total_km/created_at/status/status_updated_at/is_test；'
   '交易內 app.points_rpc=on（僅 credit_points 設定）時放行 points；auth.uid() 為 null 時全放行。'
   '（schema.sql 會依 status 欄是否存在自動選 6 欄或 bootstrap 3 欄版，重跑不會降級。）';
 
@@ -307,6 +326,9 @@ group by user_id, period_month;
 --
 --   另外補上 where role = 'member'（原版沒有，管理員會回到榜上）——
 --   這條與 migration-admin-separation.sql 一致。
+--
+--   【測試帳號】再補 `and is_test = false`（migration-profile-test-flag.sql）：
+--   測試帳號不上榜，但帳號本身保留、積分與里程不動。
 drop view if exists public.monthly_leaderboard;
 drop view if exists public.public_leaderboard;
 
@@ -319,7 +341,8 @@ select
   points,
   total_km
 from public.profiles
-where role = 'member';
+where role = 'member'
+  and is_test = false;
 
 grant select on public.public_leaderboard to anon, authenticated;
 
@@ -337,7 +360,8 @@ select
   p.points
 from public.monthly_running_stats s
 join public.profiles p on p.id = s.user_id
-where p.role = 'member';
+where p.role = 'member'
+  and p.is_test = false;
 
 grant select on public.monthly_leaderboard to anon, authenticated;
 
@@ -345,9 +369,10 @@ grant select on public.monthly_leaderboard to anon, authenticated;
 -- 【2026-11-14 P1-B 修補】members 原本 count(*) from profiles（含管理員，實測會是 8），
 -- 與排行榜的 6 人、後台會員表的 6 人不一致。線上實測 site_stats.members = 6，
 -- 因此這裡改為只算 role='member'，與線上現況對齊。
+-- 【測試帳號】再排除 is_test：否則首頁會員數會大於排行榜人數。
 create or replace view public.site_stats as
 select
-  (select count(*) from public.profiles where role = 'member')                        as members,
+  (select count(*) from public.profiles where role = 'member' and is_test = false)     as members,
   (select coalesce(sum(km), 0) from public.run_submissions where status = 'approved') as total_km,
   (select count(*) from public.run_submissions where status = 'approved')             as total_runs,
   (select count(*) from public.training_sessions)                                     as total_sessions;

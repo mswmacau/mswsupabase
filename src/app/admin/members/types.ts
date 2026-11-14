@@ -22,6 +22,12 @@ export interface MemberRow {
   status_reason: string | null;
   points: number;
   total_km: number | string;
+  /**
+   * 測試帳號旗標（supabase/migration-profile-test-flag.sql）。
+   * optional：站主尚未跑該 migration 時 RPC 不會回這一欄，
+   * 前端一律當 false 處理（`member.is_test === true`），不可假設一定有值。
+   */
+  is_test?: boolean;
   created_at: string;
   last_sign_in_at: string | null;
   run_count: number | string;

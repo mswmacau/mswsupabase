@@ -188,6 +188,12 @@ export interface Profile {
   gender?: Gender | null;
   /** 身分證件號後四位（只存後四位，用途：活動報名及保險登記） */
   id_last4?: string | null;
+  /**
+   * 測試帳號旗標（migration-profile-test-flag.sql）。
+   * true = 不計入公開排行榜（public_leaderboard / monthly_leaderboard）與站統計。
+   * optional：部分查詢只 select 少量欄位，且舊環境可能還沒有這一欄。
+   */
+  is_test?: boolean;
 }
 
 export interface TrainingSession {

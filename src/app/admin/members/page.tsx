@@ -20,6 +20,7 @@ export default function AdminMembersPage() {
         <h2 className="text-xl font-bold">會員管理</h2>
         <p className="mt-2 text-sm text-white/70">
           檢視會員資料與活動統計，調整角色、狀態與帳號。角色決定能否進入後台。
+          標記為「測試帳號」的會員不會出現在公開排行榜與站統計，但帳號、積分與里程都保留。
         </p>
       </div>
 

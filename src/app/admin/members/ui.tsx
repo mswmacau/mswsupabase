@@ -49,6 +49,22 @@ export function StatusBadge({ status }: { status: MemberStatus }) {
   );
 }
 
+/**
+ * 測試帳號徽章（migration-profile-test-flag.sql）。
+ * 標記為測試帳號的會員不會出現在公開排行榜與站統計，但帳號、積分、里程都保留。
+ * 刻意做得比 RoleBadge / StatusBadge 小一號：它是「後台註記」，不是帳號狀態。
+ */
+export function TestBadge({ className = "" }: { className?: string }) {
+  return (
+    <span
+      title="測試帳號：不計入公開排行榜與站統計"
+      className={`inline-flex shrink-0 items-center whitespace-nowrap rounded-full border border-amber-400/40 bg-amber-400/10 px-1.5 py-0 text-[10px] font-semibold leading-4 text-amber-200 ${className}`}
+    >
+      測試
+    </span>
+  );
+}
+
 export function ErrorBanner({
   message,
   onDismiss,

@@ -73,13 +73,14 @@
 | 22 | `migration-points-r1-3-redeem.sql` | 兌換 | 第 20 支 |
 | 23 | `migration-points-r1-4-admin-grants.sql` | 管理員授權 | 第 20 支 |
 
-### 第 6 組：排行榜與對帳（**2026-11-14 新增兩支**）
+### 第 6 組：排行榜與對帳（**2026-11-14 新增三支**）
 
 | # | 檔案 | 性質 |
 |---|---|---|
 | 24 | `migration-admin-separation.sql` | 排行榜排除管理員 |
 | 25 | `migration-leaderboard-no-id.sql` | **新**：排行榜移除 `id` / `user_id`，改 `public_code`（md5 前 8 碼） |
-| 26 | `migration-schema-reconcile.sql` | **新**：冪等對帳，把上面所有安全性重新套一次 |
+| 26 | `migration-schema-reconcile.sql` | **新**：冪等對帳，把上面所有安全性重新套一次（會順手補 `profiles.is_test` 欄位，但**不標記任何人**） |
+| 27 | `migration-profile-test-flag.sql` | **新**：測試帳號旗標 `profiles.is_test`。標記 `nokia` / `test` / `nokiababy`，重建兩張排行榜 view 與 `site_stats` 加 `is_test = false`，新增後台 `admin_set_member_test` toggle，並把 `is_test` 納入 `guard_profile_sensitive_fields` 護欄。**站主在後台按「測試帳號」開關前必須先跑這支** |
 
 ### 資料類（不是 migration，**不要重跑**）
 

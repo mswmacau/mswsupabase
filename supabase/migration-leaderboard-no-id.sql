@@ -5,6 +5,15 @@
 -- 前置條件：已執行 schema.sql / schema-r6.sql / migration-admin-separation.sql
 -- 幂等：drop view if exists + create view；不改任何 table、不改任何資料
 -- Owner：白客（backend-engineer）
+--
+-- ⚠️⚠️⚠️ 【2026-11-14 已被取代，正常情況請不要跑這支】⚠️⚠️⚠️
+--   本檔的兩張 view 定義「沒有」 `and is_test = false` 這段測試帳號過濾。
+--   測試帳號需求上線後，排行榜 view 的正本已改為：
+--       supabase/migration-profile-test-flag.sql
+--   若你重跑了本檔（例如為了修 UUID 外洩），排行榜會回到「含測試帳號」的狀態。
+--   補救方式：接著再跑一次 supabase/migration-profile-test-flag.sql
+--   （它冪等，會把 is_test 過濾與旗標欄位重新裝回正確狀態）。
+--   本檔保留原文是為了讓「當初修了什麼」可回溯，不是拿來重跑的。
 -- =============================================================
 --
 -- 【修的是什麼（已實測重現）】

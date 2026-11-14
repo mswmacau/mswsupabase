@@ -12,20 +12,26 @@
 --   這支檔的角色是「對帳單」：不管之前被跑過什麼，
 --   只要再跑這支一次，就會回到目前唯一正確的狀態。
 --
--- 【它會重新套用的 7 件事（每一件都對應一個實測過的漏洞或回歸）】
---   1. guard_profile_sensitive_fields —— 6 欄護欄
---      （重跑 schema.sql 會退回 3 欄 → 被停權會員可自行把 status 改回 active）
---   2. profiles_guard_insert —— INSERT 護欄
+-- 【它會重新套用的 8 件事（每一件都對應一個實測過的漏洞或回歸）】
+--   0. profiles.is_test 欄位存在（add column if not exists，預設 false）
+--      （排行榜 view 的定義要引用它；沒有這欄，本檔第 4、5 段會建不起來。
+--        對既有資料零影響：全部補成 false，不會有人被誤排除。
+--        要真的把測試帳號排除，請再跑 supabase/migration-profile-test-flag.sql）
+--   1. guard_profile_sensitive_fields —— 護欄（6 欄 + is_test）
+--      （重跑 schema.sql 會退回 3 欄 → 被停權會員可自行把 status 改回 active；
+--        少了 is_test 會員就能自己把自己從排行榜隱藏）
+--   2. profiles_guard_insert —— INSERT 護欄（含 is_test := false）
 --      （缺這支時，日後若出現「auth 使用者有、profile 沒有」的狀態，
---        該使用者可自行 insert role='admin'）
+--        該使用者可自行 insert role='admin' 或 is_test=true）
 --   3. training_sessions 讀取政策
 --      （舊的 sessions_select_all using(true) 與新的 sessions_select_visible
 --        形成 permissive OR → 草稿月份班表外洩。這支會先把舊政策 drop 掉）
 --   4. public_leaderboard / monthly_leaderboard
 --      （舊定義 select 了 id / user_id → 會員 auth UUID 外洩給匿名訪客；
 --        且 public_leaderboard 缺 where role='member' → 管理員回到榜上；
---        且 drop 用 cascade 會把 monthly_leaderboard 砍掉卻不重建 → 月度榜消失）
---   5. site_stats.members —— 只算 role='member'
+--        且 drop 用 cascade 會把 monthly_leaderboard 砍掉卻不重建 → 月度榜消失；
+--        且缺 is_test = false → 測試帳號回到榜上）
+--   5. site_stats.members —— 只算 role='member' 且 is_test=false
 --      （舊定義 count(*) 含管理員 → 與榜單人數、後台會員數不一致）
 --   6. monthly_running_stats 收回 anon 直讀
 --      （這張 view 以擁有者權限執行，繞過 run_submissions 的 RLS，
@@ -33,8 +39,11 @@
 --   7. training_months 的兩條政策（表存在時才處理）
 --
 -- 【它刻意不做的事】
---   · 不改任何資料（沒有任何 insert / update / delete）
---   · 不改任何 table 結構（沒有 create table / alter table add column）
+--   · 不改任何資料（沒有任何 insert / update / delete；測試帳號的標記在
+--     migration-profile-test-flag.sql，不在這裡）
+--   · 不改任何既有欄位的型別或約束
+--     （唯一例外是第 0 段的 add column if not exists is_test：欄位不存在時補一個
+--       預設 false 的布林欄，不影響任何既有資料）
 --   · 不動 event_registrations 的付款防護（那是 migration-security-fix-p0.sql 的範圍，
 --     重跑 schema.sql 不會影響它）
 --   · 不動 points 相關的 RPC（migration-points-r1-*.sql 的範圍）
@@ -52,8 +61,26 @@
 
 
 -- =============================================================
--- 1. profiles 敏感欄位護欄（6 欄）
---    正本：migration-points-r1-1-schema.sql:362-432
+-- 0. profiles.is_test 欄位（本檔第 1、2、4、5 段都會引用）
+--    冪等：已存在就跳過；既有環境全部補成 false，不會有人被誤排除。
+--    真正「把測試帳號從榜單拿掉」的標記在 migration-profile-test-flag.sql。
+-- =============================================================
+alter table public.profiles
+  add column if not exists is_test boolean not null default false;
+
+create index if not exists idx_profiles_role_is_test
+  on public.profiles (role, is_test);
+
+do $testflag$
+begin
+  raise notice '0 OK — profiles.is_test 已確保存在（預設 false；標記請跑 migration-profile-test-flag.sql）';
+end
+$testflag$;
+
+
+-- =============================================================
+-- 1. profiles 敏感欄位護欄（6 欄 + is_test）
+--    正本：migration-points-r1-1-schema.sql:362-432 + migration-profile-test-flag.sql §3
 -- =============================================================
 do $guard$
 declare
@@ -89,6 +116,7 @@ begin
   new.created_at        := old.created_at;
   new.status            := old.status;
   new.status_updated_at := old.status_updated_at;
+  new.is_test           := old.is_test;
 
   if not v_points_rpc then
     new.points := old.points;
@@ -98,9 +126,36 @@ begin
 end;
 $body$;
 $fn$;
-    raise notice '1 OK — guard_profile_sensitive_fields 已還原為 6 欄版';
+    raise notice '1 OK — guard_profile_sensitive_fields 已還原為 6 欄版＋is_test';
   else
-    raise notice '1 SKIP — profiles.status / status_updated_at 不存在（請先跑 migration-admin-members-v2.sql）';
+    -- profiles.status 還不存在（很舊的環境）：套 bootstrap 版，但 is_test 仍要保護
+    execute $fn$
+create or replace function public.guard_profile_sensitive_fields()
+returns trigger
+language plpgsql
+security definer
+set search_path = public
+as $body$
+begin
+  if auth.uid() is null then
+    return new;
+  end if;
+
+  if public.is_admin() then
+    return new;
+  end if;
+
+  new.role       := old.role;
+  new.points     := old.points;
+  new.total_km   := old.total_km;
+  new.created_at := old.created_at;
+  new.is_test    := old.is_test;
+
+  return new;
+end;
+$body$;
+$fn$;
+    raise notice '1 WARN — profiles.status / status_updated_at 不存在，套 bootstrap 版（含 is_test）；請跑 migration-admin-members-v2.sql';
   end if;
 end
 $guard$;
@@ -130,6 +185,7 @@ begin
     new.role     := 'member';
     new.points   := 0;
     new.total_km := 0;
+    new.is_test  := false;
   end if;
 
   return new;
@@ -192,8 +248,8 @@ create policy "sessions_admin_all" on public.training_sessions
 
 
 -- =============================================================
--- 4. 排行榜兩張 view：無 id、無 user_id、只有 role='member'
---    正本：migration-leaderboard-no-id.sql
+-- 4. 排行榜兩張 view：無 id、無 user_id、只有 role='member' 且 is_test=false
+--    正本：migration-leaderboard-no-id.sql + migration-profile-test-flag.sql §5
 -- =============================================================
 drop view if exists public.monthly_leaderboard;
 drop view if exists public.public_leaderboard;
@@ -207,7 +263,8 @@ select
   points,
   total_km
 from public.profiles
-where role = 'member';
+where role = 'member'
+  and is_test = false;
 
 grant select on public.public_leaderboard to anon, authenticated;
 
@@ -223,7 +280,8 @@ select
   p.points
 from public.monthly_running_stats s
 join public.profiles p on p.id = s.user_id
-where p.role = 'member';
+where p.role = 'member'
+  and p.is_test = false;
 
 grant select on public.monthly_leaderboard to anon, authenticated;
 
@@ -240,12 +298,13 @@ revoke select on public.monthly_running_stats from anon;
 
 
 -- =============================================================
--- 6. site_stats：members 只算 role='member'
+-- 6. site_stats：members 只算 role='member' 且 is_test=false
 --    線上實測 members=6、榜單 6 列、後台會員 6 人，三者一致。
+--    標記測試帳號後三者會一起降到 3（榜單、統計、前台會員數同步）。
 -- =============================================================
 create or replace view public.site_stats as
 select
-  (select count(*) from public.profiles where role = 'member')                        as members,
+  (select count(*) from public.profiles where role = 'member' and is_test = false)     as members,
   (select coalesce(sum(km), 0) from public.run_submissions where status = 'approved') as total_km,
   (select count(*) from public.run_submissions where status = 'approved')             as total_runs,
   (select count(*) from public.training_sessions)                                     as total_sessions;
@@ -291,8 +350,9 @@ notify pgrst, 'reload schema';
 
 do $done$
 begin
-  raise notice '=== migration-schema-reconcile.sql 完成（7 項，可重複執行）===';
+  raise notice '=== migration-schema-reconcile.sql 完成（8 項，可重複執行）===';
   raise notice '下一步：跑檔尾「執行後驗證」逐條確認。';
+  raise notice '要把測試帳號真的從排行榜拿掉：再跑 supabase/migration-profile-test-flag.sql（本檔只建欄位，不標記）。';
 end
 $done$;
 
@@ -309,9 +369,14 @@ $done$;
 -- -- 預期 public_leaderboard：public_code, display_name, avatar_url, points, total_km
 -- -- 預期 monthly_leaderboard：public_code, period_month, total_km, runs, display_name, avatar_url, points
 --
--- -- 2) 榜單列數與會員數、統計數三者一致（線上應同為 6）
+-- -- 2) 榜單列數與會員數、統計數三者一致
+-- --    跑完 migration-profile-test-flag.sql 後預期是 3 / 3（標記前是 6 / 6）
 -- select (select count(*) from public.public_leaderboard) as leaderboard_rows,
 --        (select members from public.site_stats)          as site_stats_members;
+--
+-- -- 2b) 測試帳號旗標分佈（預期 nokia / test / nokiababy = true，其餘 member = false）
+-- select left(id::text, 8) as id8, display_name, role, is_test
+--   from public.profiles order by role, created_at;
 --
 -- -- 3) 舊的 permissive 政策必須不存在
 -- select policyname, cmd, qual
@@ -320,7 +385,7 @@ $done$;
 --  order by policyname;
 -- -- 預期只有 sessions_admin_all 與 sessions_select_visible；不應出現 sessions_select_all
 --
--- -- 4) 護欄必須是 6 欄版（函式原始碼裡要能看到 status_updated_at）
+-- -- 4) 護欄必須是 6 欄版＋is_test（函式原始碼裡要能看到 status_updated_at 與 is_test）
 -- select pg_get_functiondef('public.guard_profile_sensitive_fields()'::regprocedure);
 --
 -- -- 5) 匿名不可直讀 monthly_running_stats
