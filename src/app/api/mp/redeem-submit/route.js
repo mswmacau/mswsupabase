@@ -44,6 +44,15 @@ function mapBizCode(res) {
       );
     case 'OUT_OF_STOCK':
       return fail('OUT_OF_STOCK', '這件禮品已換完', 409);
+    // 2026-11-15 止血（migration-redeem-activity-gate.sql）：
+    // redeem_reward 在餘額檢查之後加了「需至少一筆已核可運動紀錄」門檻，
+    // 不合格回 NO_ACTIVITY。不在此映射就會掉進 default 顯示 500 通用錯誤。
+    case 'NO_ACTIVITY':
+      return fail(
+        'NO_ACTIVITY',
+        '需要至少一筆已核可的運動紀錄才能兌換：請上傳跑步紀錄或完成訓練簽到，待教練核可後再試',
+        409
+      );
     case 'PER_USER_LIMIT':
       return fail(
         'PER_USER_LIMIT',

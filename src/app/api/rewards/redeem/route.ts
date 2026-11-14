@@ -93,6 +93,13 @@ export async function POST(request: Request) {
           );
         case "OUT_OF_STOCK":
           return jsonConflict("這件禮品已換完。");
+        // 2026-11-15 止血（migration-redeem-activity-gate.sql）：
+        // DB 的 redeem_reward 在餘額檢查之後加了「需至少一筆已核可運動紀錄」門檻，
+        // 不合格回 NO_ACTIVITY。這裡必須明確映射，否則會掉進 default 變成 500 通用錯誤。
+        case "NO_ACTIVITY":
+          return jsonConflict(
+            "需要至少一筆已核可的運動紀錄才能兌換：請上傳跑步紀錄或完成訓練簽到，待教練核可後再試。"
+          );
         case "PER_USER_LIMIT":
           return jsonConflict(
             `每人限換 ${Number(res.limit ?? 0)} 件，你已換 ${Number(res.used ?? 0)} 件。`
