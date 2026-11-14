@@ -43,11 +43,19 @@ export function RedemptionsView({
   counts,
   status,
   q,
+  hideFilters = false,
 }: {
   rows: RedemptionRow[];
   counts: StatusCounts;
   status: string;
   q: string;
+  /**
+   * IA 第二階段：`/admin/review?tab=redemptions` 只列「待審批」，
+   * 由伺服器決定資料範圍，狀態頁籤與搜尋在這邊按了也不會有意義
+   * （rows 只有待審批那 100 筆），因此藏起來；動作按鈕與二次確認完全保留。
+   * 預設 false = /admin/redemptions 行為與 HEAD 一字不差。
+   */
+  hideFilters?: boolean;
 }) {
   const router = useRouter();
   const [query, setQuery] = useState(q);
@@ -106,7 +114,8 @@ export function RedemptionsView({
       {error && <AdminError message={error} onDismiss={() => setError(null)} />}
       {notice && <AdminNotice message={notice} onDismiss={() => setNotice(null)} />}
 
-      {/* 篩選 */}
+      {/* 篩選（hideFilters = 待審核中心內嵌，資料範圍已由伺服器限定） */}
+      {hideFilters ? null : (
       <div className="space-y-3">
         <div className="flex flex-wrap gap-2">
           {TABS.map((tab) => {
@@ -185,6 +194,7 @@ export function RedemptionsView({
           </button>
         </form>
       </div>
+      )}
 
       {rows.length === 0 ? (
         <div className="rounded-xl border border-dashed border-white/15 px-4 py-14 text-center text-sm text-white/70">
@@ -389,7 +399,7 @@ function RowActions({
   onDanger: (kind: "reject" | "cancel") => void;
 }) {
   const base = mobile
-    ? "inline-flex min-h-10 flex-1 items-center justify-center gap-1 rounded-lg border px-3 text-xs font-semibold disabled:opacity-50"
+    ? "inline-flex min-h-11 flex-1 items-center justify-center gap-1 rounded-lg border px-3 text-xs font-semibold disabled:opacity-50"
     : "inline-flex items-center justify-center rounded-lg border p-1.5 text-xs font-semibold disabled:opacity-50";
 
   if (row.status === "pending_approval") {

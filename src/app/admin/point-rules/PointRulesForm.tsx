@@ -73,7 +73,7 @@ const GROUPS: { title: string; hint: string; items: RuleDef[] }[] = [
 
 const ALL_KEYS = GROUPS.flatMap((g) => g.items.map((i) => i.key));
 
-interface MemberOption {
+export interface MemberOption {
   id: string;
   display_name: string | null;
   points?: number;
@@ -99,11 +99,19 @@ export function PointRulesForm({
   initialEnabled,
   initialMembers,
   hasServiceRole,
+  mode = "all",
 }: {
   initialRules: RuleValues;
   initialEnabled: boolean;
   initialMembers: MemberOption[];
   hasServiceRole: boolean;
+  /**
+   * IA 第二階段：/admin/points 把這一頁拆成「積分規則」與「補發獎勵」兩個分頁。
+   *
+   * 只做「顯示哪一段」的切換——state、handler、送出路徑（POST /api/admin/point-rules）
+   * 與欄位完全沒動。"all" 是預設值，`/admin/point-rules` 的行為與 HEAD 一字不差。
+   */
+  mode?: "all" | "rules" | "award";
 }) {
   const router = useRouter();
   const [values, setValues] = useState<Record<string, string>>(() => {
@@ -169,11 +177,16 @@ export function PointRulesForm({
     }
   }
 
+  const showRules = mode === "all" || mode === "rules";
+  const showAward = mode === "all" || mode === "award";
+
   return (
     <div className="min-w-0 space-y-6">
       {error && <AdminError message={error} onDismiss={() => setError(null)} />}
       {notice && <AdminNotice message={notice} onDismiss={() => setNotice(null)} />}
 
+      {showRules && (
+        <>
       <SaveRow dirty={dirty} pending={savePending} onSave={() => void save()} />
 
       <div className="space-y-4">
@@ -236,8 +249,12 @@ export function PointRulesForm({
       </section>
 
       <SaveRow dirty={dirty} pending={savePending} onSave={() => void save()} />
+        </>
+      )}
 
-      <ManualAward initialMembers={initialMembers} hasServiceRole={hasServiceRole} />
+      {showAward && (
+        <ManualAward initialMembers={initialMembers} hasServiceRole={hasServiceRole} />
+      )}
     </div>
   );
 }

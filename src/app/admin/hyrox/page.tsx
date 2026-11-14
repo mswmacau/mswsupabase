@@ -5,15 +5,19 @@
  * 權限：已由 src/app/admin/layout.tsx 統一擋（未登入／非管理員都走 redirect）。
  * 寫入：一律經 API 路由，前端不直接改 DB。
  *
- * P1-09：這頁原本沒有側欄入口（孤兒頁）。現在①側欄「活動」分組有入口、
- * ②頁面上方有「一般活動 / HYROX 場次」分段切換與 /admin/events 互連。
- * 路由本身保留，不刪（可能已有書籤）。
+ * P1-09：這頁原本沒有側欄入口（孤兒頁）。現在頁面上方有
+ * 「一般活動 / HYROX 場次」切換與 /admin/events 互連。
+ *
+ * 【IA 第二階段 20261114】側欄的「HYROX 場次」入口已下架，本頁內容成為
+ * `/admin/events?tab=hyrox` 的第二個分頁。本路由**保留**（可能有人 bookmark），
+ * 頂部加導引橫幅；付款審核則另外收在 `/admin/review?tab=hyrox`。
  */
 
 import { ShieldAlert } from "lucide-react";
 import { getHyroxEvents } from "@/lib/queries";
 import { isSupabaseConfigured } from "@/lib/supabase/env";
 import { SectionTabs } from "../_components/SectionTabs";
+import { MovedNotice } from "../_components/MovedNotice";
 import { HyroxAdmin } from "./HyroxAdmin";
 
 export const metadata = { title: "HYROX 管理" };
@@ -45,6 +49,12 @@ export default async function AdminHyroxPage() {
   return (
     <div className="min-w-0 space-y-5">
       <SectionTabs active="hyrox" />
+      <MovedNotice
+        compact
+        title="HYROX 場次已併入「活動」頁；付款審核在待審核中心"
+        href="/admin/events?tab=hyrox"
+        ctaLabel="去活動頁"
+      />
       <HyroxAdmin initialEvents={events} />
     </div>
   );

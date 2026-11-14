@@ -54,7 +54,7 @@ export function RunReviewActions({ submissionId }: { submissionId: string }) {
         type="button"
         disabled={pending !== null}
         onClick={() => act(true)}
-        className="btn-base btn-cobalt !px-5 !py-2 text-sm"
+        className="btn-base btn-cobalt min-h-11 !px-5 !py-2 text-sm sm:min-h-9"
       >
         {pending === "approve" ? (
           <Loader2 size={16} className="animate-spin" />
@@ -67,7 +67,7 @@ export function RunReviewActions({ submissionId }: { submissionId: string }) {
         type="button"
         disabled={pending !== null}
         onClick={() => act(false)}
-        className="btn-base btn-ghost !px-5 !py-2 text-sm hover:!border-red-500 hover:!bg-red-500/10 hover:!text-red-300"
+        className="btn-base btn-ghost min-h-11 !px-5 !py-2 text-sm hover:!border-red-500 hover:!bg-red-500/10 hover:!text-red-300 sm:min-h-9"
       >
         {pending === "reject" ? (
           <Loader2 size={16} className="animate-spin" />
@@ -122,7 +122,7 @@ export function CheckinReviewActions({ checkinId }: { checkinId: string }) {
         type="button"
         disabled={pending !== null}
         onClick={() => act(true)}
-        className="btn-base btn-cobalt !px-5 !py-2 text-sm"
+        className="btn-base btn-cobalt min-h-11 !px-5 !py-2 text-sm sm:min-h-9"
       >
         {pending === "approve" ? (
           <Loader2 size={16} className="animate-spin" />
@@ -135,7 +135,7 @@ export function CheckinReviewActions({ checkinId }: { checkinId: string }) {
         type="button"
         disabled={pending !== null}
         onClick={() => act(false)}
-        className="btn-base btn-ghost !px-5 !py-2 text-sm hover:!border-red-500 hover:!bg-red-500/10 hover:!text-red-300"
+        className="btn-base btn-ghost min-h-11 !px-5 !py-2 text-sm hover:!border-red-500 hover:!bg-red-500/10 hover:!text-red-300 sm:min-h-9"
       >
         {pending === "reject" ? (
           <Loader2 size={16} className="animate-spin" />

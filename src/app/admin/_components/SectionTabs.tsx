@@ -2,19 +2,22 @@ import Link from "next/link";
 import { CalendarDays, Trophy } from "lucide-react";
 
 /**
- * 活動管理的兩視角切換（P1-09）
+ * 活動管理的兩視角切換（P1-09；IA 第二階段 20261114 改為同頁分頁）
  *
- * /admin/events（一般活動）與 /admin/hyrox（HYROX 場次）原本是兩套並行的
- * 活動管理面，且後者沒有側欄入口。這裡在上方加分段切換把兩頁互連，
- * 讓使用者知道是同一件事的兩個視角；/admin/hyrox 路由保留（可能已有書籤）。
+ * 第二階段：`/admin/hyrox` 的入口在側欄下架，HYROX 場次成為
+ * `/admin/events?tab=hyrox` 的第二個分頁（同一張 `events` 表，只是欄位不同）。
+ * 舊路由 `/admin/hyrox` **保留**（可能有人 bookmark），仍會渲染本元件並高亮 HYROX。
  *
- * 語意：這是「導覽」不是 tab —— 兩頁各自是完整頁面，所以用 nav + aria-current，
- * 不用 role="tablist"（那需要對應的 tabpanel，會誤導輔助技術）。
+ * 語意：這是「導覽」不是 tab —— 每個分頁都有自己的 URL 與伺服器資料，
+ * 所以用 nav + aria-current，不用 role="tablist"（那需要對應的 tabpanel，
+ * 否則輔助技術會找不到面板）。
+ *
+ * 390：兩項各 flex-1 撐滿、min-h-11（44px），不換行。
  */
 
 const TABS = [
   { key: "events", href: "/admin/events", label: "一般活動", icon: CalendarDays },
-  { key: "hyrox", href: "/admin/hyrox", label: "HYROX 場次", icon: Trophy },
+  { key: "hyrox", href: "/admin/events?tab=hyrox", label: "HYROX 場次", icon: Trophy },
 ] as const;
 
 export function SectionTabs({ active }: { active: "events" | "hyrox" }) {

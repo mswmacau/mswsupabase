@@ -1,139 +1,116 @@
-import { createClient } from "@/lib/supabase/server";
-import { isSupabaseConfigured } from "@/lib/supabase/env";
+import { MovedNotice } from "../_components/MovedNotice";
+import { SectionTabNav } from "../_components/SectionTabNav";
 import { RedemptionsView } from "./RedemptionsView";
-import type { RedemptionRow, StatusCounts } from "./types";
+import { loadRedemptions, REDEMPTION_STATUSES, type RedemptionStatus } from "./query";
+import { MerchantsManager } from "../merchants/MerchantsManager";
+import { loadMerchants } from "../merchants/query";
 
-export const metadata = { title: "兌換管理" };
+export const metadata = { title: "兌換與商戶" };
 export const dynamic = "force-dynamic";
 
-const STATUSES = ["pending_approval", "pending", "completed", "cancelled"] as const;
-
 /**
- * /admin/redemptions — 兌換紀錄（電子券）管理
+ * /admin/redemptions — 兌換與商戶（IA 第二階段：兩個分頁）
  *
- * 取數在伺服器端完成（依 ?status= 與 ?q=），操作一律打 /api/admin/redemptions。
- * 拒絕／取消會退分與回庫存，全部由 DB 函式處理，本頁不自行計算金額。
+ * 分頁：
+ *   1. 兌換紀錄（?status=／?q= 由伺服器取數，操作一律打 /api/admin/redemptions）
+ *   2. 商戶 PIN（吸收 /admin/merchants）
+ *
+ * 為什麼合併：兩者是同一件事的兩端——管理員在這裡審批／核銷券，
+ * 商戶在那裡用 PIN 核銷同一批券。原本分兩個一級入口，客戶要改一個店員 PIN
+ * 得先想「這是商城還是系統」。
+ *
+ * 舊路由 `/admin/merchants` **保留**（可能有人 bookmark），頂部有導引橫幅。
+ *
+ * 分頁切換用整頁導覽（Link → 伺服器重繪），不是 client state：商戶分頁要讀
+ * 另一份資料，且 PIN 對話框「只顯示一次」的行為不能被分頁卸載影響
+ * （`MerchantsManager` 是 client component，重新進入分頁就是全新狀態，
+ * 不會殘留上一次的明碼 PIN）。
  */
 export default async function AdminRedemptionsPage({
   searchParams,
 }: {
-  searchParams: Promise<{ status?: string; q?: string }>;
+  searchParams: Promise<{ status?: string; q?: string; tab?: string }>;
 }) {
   const params = await searchParams;
-  const status = (STATUSES as readonly string[]).includes(params.status ?? "")
-    ? (params.status as (typeof STATUSES)[number])
+  const tab = params.tab === "merchants" ? "merchants" : "records";
+  const status = (REDEMPTION_STATUSES as readonly string[]).includes(params.status ?? "")
+    ? (params.status as RedemptionStatus)
     : "all";
   const q = (params.q ?? "").trim().slice(0, 60);
 
-  if (!isSupabaseConfigured) {
-    return (
-      <Shell>
-        <div className="rounded-xl border border-amber-500/40 bg-amber-500/10 px-4 py-3 text-sm text-amber-200">
-          尚未連接 Supabase，暫時無法讀取兌換紀錄。
-        </div>
-      </Shell>
-    );
-  }
+  // counts 一律要（分頁徽章要用），紀錄列只有 records 分頁才需要
+  const redemptions = await loadRedemptions({ status, q });
+  const merchants = tab === "merchants" ? await loadMerchants() : null;
 
-  const supabase = await createClient();
-  let rows: RedemptionRow[] = [];
-  const counts: StatusCounts = { all: 0, pending_approval: 0, pending: 0, completed: 0, cancelled: 0 };
-  let loadError = false;
-
-  if (supabase) {
-    /* 搜尋：先以會員名找 id，再 combined filter，避免依賴 embedded or */
-    let matchedUserIds: string[] = [];
-    if (q) {
-      const { data: profiles } = await supabase
-        .from("profiles")
-        .select("id")
-        .ilike("display_name", `%${q}%`)
-        .limit(50);
-      matchedUserIds = (profiles ?? []).map((p) => (p as { id: string }).id);
-    }
-
-    let query = supabase
-      .from("reward_redemptions")
-      .select(
-        `id,pickup_code,status,points_spent,created_at,decided_at,merchant_verified_at,expires_at,note,redeemed_via,
-         user:profiles!user_id(id,display_name,created_at),
-         reward:rewards(id,name),
-         merchant:merchants(id,name)`
-      )
-      .order("created_at", { ascending: false })
-      .limit(100);
-
-    if (status !== "all") query = query.eq("status", status);
-    if (q) {
-      const escaped = q.replace(/[(),]/g, " ");
-      query = matchedUserIds.length
-        ? query.or(`pickup_code.ilike.%${escaped}%,user_id.in.(${matchedUserIds.join(",")})`)
-        : query.ilike("pickup_code", `%${escaped}%`);
-    }
-
-    const [list, allCount, ...statusCounts] = await Promise.all([
-      query,
-      supabase.from("reward_redemptions").select("id", { count: "exact", head: true }),
-      ...STATUSES.map((s) =>
-        supabase
-          .from("reward_redemptions")
-          .select("id", { count: "exact", head: true })
-          .eq("status", s)
-      ),
-    ]);
-
-    if (list.error) {
-      if (process.env.NODE_ENV !== "production") {
-        console.error("[admin/redemptions] query failed:", list.error.message);
-      }
-      loadError = true;
-    } else {
-      rows = ((list.data ?? []) as unknown as RedemptionRow[]).map((row) => ({
-        ...row,
-        points_spent: Number(row.points_spent),
-        user: Array.isArray(row.user) ? row.user[0] ?? null : row.user,
-        reward: Array.isArray(row.reward) ? row.reward[0] ?? null : row.reward,
-        merchant: Array.isArray(row.merchant) ? row.merchant[0] ?? null : row.merchant,
-      }));
-      counts.all = allCount.count ?? 0;
-      STATUSES.forEach((s, index) => {
-        counts[s] = statusCounts[index].count ?? 0;
-      });
-    }
-  } else {
-    loadError = true;
-  }
-
-  return (
-    <Shell>
-      {loadError ? (
-        <div className="rounded-xl border border-amber-500/40 bg-amber-500/10 px-4 py-3 text-sm text-amber-200">
-          兌換紀錄暫時讀不到，請稍後重新整理；若持續失敗請聯絡技術人員。
-        </div>
-      ) : (
-        <RedemptionsView
-          key={`${status}:${q}`}
-          rows={rows}
-          counts={counts}
-          status={status}
-          q={q}
-        />
-      )}
-    </Shell>
-  );
-}
-
-function Shell({ children }: { children: React.ReactNode }) {
   return (
     <div className="min-w-0 space-y-6">
       <div>
-        <h2 className="text-xl font-bold">兌換管理</h2>
+        <h2 className="text-xl font-bold">兌換與商戶</h2>
         <p className="mt-2 text-sm leading-relaxed text-white/70">
-          審批新會員的兌換申請、替現場券做後備核銷。拒絕或取消都會退回積分並回補庫存，
-          操作前請先確認券碼與會員。
+          審批新會員的兌換申請、替現場券做後備核銷，以及產生核銷商戶的 PIN。
+          拒絕或取消都會退回積分並回補庫存，操作前請先確認券碼與會員。
         </p>
       </div>
-      {children}
+
+      <SectionTabNav
+        label="兌換與商戶分類"
+        active={tab}
+        items={[
+          {
+            key: "records",
+            label: "兌換紀錄",
+            href: "/admin/redemptions",
+            count: redemptions.loadError ? null : redemptions.counts.pending_approval,
+          },
+          { key: "merchants", label: "商戶 PIN", href: "/admin/redemptions?tab=merchants" },
+        ]}
+      />
+
+      {tab === "records" ? (
+        <>
+          {redemptions.loadError ? (
+            <div className="rounded-xl border border-amber-500/40 bg-amber-500/10 px-4 py-3 text-sm text-amber-200">
+              {redemptions.notConfigured
+                ? "尚未連接 Supabase，暫時無法讀取兌換紀錄。"
+                : "兌換紀錄暫時讀不到，請稍後重新整理；若持續失敗請聯絡技術人員。"}
+            </div>
+          ) : (
+            <>
+              <MovedNotice
+                compact
+                title="待審批的兌換申請也可在「待審核」一次看完"
+                href="/admin/review?tab=redemptions"
+                ctaLabel="去待審核中心"
+              />
+              <RedemptionsView
+                key={`${status}:${q}`}
+                rows={redemptions.rows}
+                counts={redemptions.counts}
+                status={status}
+                q={q}
+              />
+            </>
+          )}
+        </>
+      ) : (
+        <>
+          {merchants?.loadError ? (
+            <div className="rounded-xl border border-amber-500/40 bg-amber-500/10 px-4 py-3 text-sm text-amber-200">
+              {merchants.notConfigured
+                ? "尚未連接 Supabase，暫時無法讀取商戶資料。"
+                : "商戶資料暫時讀不到，請稍後重新整理；若持續失敗請聯絡技術人員。"}
+            </div>
+          ) : merchants ? (
+            <>
+              <p className="text-sm leading-relaxed text-white/70">
+                核銷商戶與其 6 位 PIN。PIN 只儲存加密雜湊，產生時顯示一次——
+                請即場抄下或列印 PIN 卡交給店員，遺失只能重設。
+              </p>
+              <MerchantsManager initialMerchants={merchants.merchants} />
+            </>
+          ) : null}
+        </>
+      )}
     </div>
   );
 }

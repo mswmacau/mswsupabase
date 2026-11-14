@@ -105,25 +105,25 @@ export default async function AdminHome() {
 
   const todoCards = [
     {
-      href: "/admin/runs",
+      href: "/admin/review?tab=runs",
       icon: <ClipboardCheck size={18} />,
       label: "跑步待審",
       value: todos.pendingRuns,
     },
     {
-      href: "/admin/checkins",
+      href: "/admin/review?tab=checkins",
       icon: <Users size={18} />,
       label: "簽到待確認",
       value: todos.pendingCheckins,
     },
     {
-      href: "/admin/redemptions?status=pending_approval",
+      href: "/admin/review?tab=redemptions",
       icon: <TicketCheck size={18} />,
       label: "兌換待審批",
       value: todos.pendingRedemptions,
     },
     {
-      href: "/admin/hyrox",
+      href: "/admin/review?tab=hyrox",
       icon: <Trophy size={18} />,
       label: "HYROX 待確認付款",
       value: todos.pendingHyroxPayments,
@@ -356,7 +356,7 @@ export default async function AdminHome() {
             </span>{" "}
             位 · 本月發券名單{" "}
             <Link
-              href={`/admin/monthly?m=${currentMonth()}`}
+              href={`/admin/points?tab=monthly&m=${currentMonth()}`}
               className="underline underline-offset-2 hover:text-white"
             >
               {monthLabel(currentMonth())}

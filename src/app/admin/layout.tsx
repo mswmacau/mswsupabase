@@ -1,6 +1,7 @@
 import { redirect } from "next/navigation";
 import { ShieldAlert } from "lucide-react";
 import { AdminNav } from "@/components/AdminNav";
+import { getAdminTodoCounts } from "@/lib/queries";
 import { getCurrentProfile } from "@/lib/supabase/server";
 import { isSupabaseConfigured } from "@/lib/supabase/env";
 
@@ -44,6 +45,25 @@ where id = (select id from auth.users where email = 'you@example.com');`}
     redirect("/dashboard");
   }
 
+  /*
+   * 側欄「待審核」的待辦數字（IA 第二階段 C）。
+   *
+   * 為什麼在 layout 取：側欄每一頁都在，數字必須跨頁一致；若各自在頁面取，
+   * 換頁時會出現「側欄 3、頁面 0」的錯位。
+   * 為什麼任一項是 null 就整體顯示「—」：四類相加只有在四類都確定時才有意義，
+   * 用已知的三項相加會少報（管理員會漏按）。null 的顯示規則見 AdminNav。
+   */
+  const todos = await getAdminTodoCounts();
+  const todoValues = [
+    todos.pendingRuns,
+    todos.pendingCheckins,
+    todos.pendingRedemptions,
+    todos.pendingHyroxPayments,
+  ];
+  const pendingTotal = todoValues.every((v) => v !== null)
+    ? (todoValues as number[]).reduce((sum, v) => sum + v, 0)
+    : null;
+
   return (
     <section className="pt-20 pb-20 md:pt-[5.5rem]">
       <div className="container-msw">
@@ -58,7 +78,7 @@ where id = (select id from auth.users where email = 'you@example.com');`}
           <aside className="min-w-0 md:sticky md:top-[5.5rem] md:self-start">
             {/* overflow-y-auto 只在視窗高度 < 760px 時當保險；1440×900 不得觸發 */}
             <div className="card-dark overflow-hidden p-0 md:max-h-[calc(100dvh-5rem)] md:overflow-y-auto md:overscroll-contain md:p-2">
-              <AdminNav />
+              <AdminNav pendingTotal={pendingTotal} />
             </div>
           </aside>
           <div className="min-w-0">{children}</div>

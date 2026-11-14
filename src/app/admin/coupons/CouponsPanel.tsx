@@ -1,0 +1,88 @@
+import { getAllCoupons, getAllMembers } from "@/lib/queries";
+import { RedeemForm } from "./RedeemForm";
+import { ManualIssueForm } from "./ManualIssueForm";
+import { StatusBadge } from "@/components/StatusBadge";
+import { formatDate } from "@/lib/utils";
+
+/**
+ * 優惠券核銷 ＋ 手動發券 ＋ 全部券列表（Server Component）。
+ *
+ * IA 第二階段：`/admin/coupons` 與 `/admin/points?tab=coupons` 共用這一支。
+ * 三塊順序與文案沿用 HEAD：先「現場核銷」（最常用），再「手動發券」，最後列表。
+ * 資料來源仍是 `getAllCoupons` / `getAllMembers`，沒有新查詢。
+ */
+export async function CouponsPanel() {
+  const [coupons, members] = await Promise.all([getAllCoupons(300), getAllMembers()]);
+
+  return (
+    <div className="space-y-8">
+      <div>
+        <h3 className="text-lg font-bold">優惠券核銷</h3>
+        <p className="mt-1.5 text-sm text-white/70">
+          輸入會員出示的券碼即可標記為已使用。
+        </p>
+        <div className="mt-5 max-w-xl">
+          <RedeemForm />
+        </div>
+      </div>
+
+      <div className="rounded-2xl border border-ink-line bg-black/20 p-6">
+        <h3 className="text-lg font-bold">手動發放優惠券</h3>
+        <p className="mt-1.5 text-sm text-white/70">
+          不限於月度達標會員，可自由選人發券（例如活動獎勵、補發）。
+        </p>
+        <div className="mt-5">
+          <ManualIssueForm members={members} />
+        </div>
+      </div>
+
+      <div>
+        <h3 className="text-lg font-bold">全部優惠券（{coupons.length}）</h3>
+        <div className="mt-4 overflow-x-auto rounded-xl border border-ink-line">
+          {coupons.length ? (
+            <table className="w-full min-w-[640px] text-sm">
+              <caption className="sr-only">全部優惠券，共 {coupons.length} 張</caption>
+              <thead>
+                <tr className="border-b border-ink-line text-left text-xs uppercase tracking-[0.14em] text-white/70">
+                  <th scope="col" className="py-3 pl-4 pr-4">券碼</th>
+                  <th scope="col" className="py-3 pr-4">會員</th>
+                  <th scope="col" className="py-3 pr-4">名稱</th>
+                  <th scope="col" className="py-3 pr-4">月份</th>
+                  <th scope="col" className="py-3 pr-4">期限</th>
+                  <th scope="col" className="py-3 pr-4">狀態</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-ink-line">
+                {coupons.map((c) => (
+                  <tr key={c.id}>
+                    <td className="py-3.5 pl-4 pr-4 font-mono text-xs font-bold">
+                      {c.code}
+                    </td>
+                    <td className="py-3.5 pr-4">
+                      {(c as unknown as { profile?: { display_name?: string } })
+                        .profile?.display_name ?? "—"}
+                    </td>
+                    <td className="py-3.5 pr-4 text-white/70">{c.title}</td>
+                    <td className="py-3.5 pr-4 text-white/75">
+                      {c.month_awarded ?? "—"}
+                    </td>
+                    <td className="py-3.5 pr-4 text-white/75">
+                      {formatDate(c.expires_at)}
+                    </td>
+                    <td className="py-3.5 pr-4">
+                      <StatusBadge status={c.status} />
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          ) : (
+            <div className="px-4 py-12 text-center text-sm text-white/70">
+              尚未發放任何優惠券。
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}

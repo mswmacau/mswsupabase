@@ -43,3 +43,6 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# Next.js 建置產物（沙箱 safe-delete 會擋 rm -rf .next，改用 mv 備份）
+/.next-stale-*
