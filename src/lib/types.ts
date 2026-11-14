@@ -37,6 +37,12 @@ export interface Event {
   cover_path: string | null;
   status: EventStatus;
   /**
+   * 報名費（分）。DB 的 events.fee_cents 本來就有這個欄位（migration-paid-events-1.sql），
+   * 只是一般活動的查詢與型別一直沒帶它 —— 前台活動卡要顯示「費用」才補上。
+   * optional：一般活動多為 null／0 → 前台顯示「免費」；HYROX 才有實際金額。
+   */
+  fee_cents?: number | null;
+  /**
    * 活動分類（訓練 / 跑步 / 比賽 / 聚會）。
    * F-E2 階段一：只做 UI 準備。DB 尚未建立此欄位，故為 optional，
    * 現有 `.select("*")` 查詢唔使改、唔會影響既有資料。

@@ -15,9 +15,16 @@
  */
 
 import Link from "next/link";
-import { ArrowRight, CalendarDays, MapPin, Ticket, Users } from "lucide-react";
+import {
+  ArrowRight,
+  CalendarDays,
+  MapPin,
+  Ticket,
+  Users,
+  Wallet,
+} from "lucide-react";
 import type { Event } from "@/lib/types";
-import type { HyroxEvent } from "@/components/hyrox/shared";
+import { feeLabel, type HyroxEvent } from "@/components/hyrox/shared";
 import { DEFAULT_PAGES, type SitePageEvents } from "@/lib/content";
 import { publicAssetUrl } from "@/lib/assets";
 import { formatDate, weekdayLabel } from "@/lib/utils";
@@ -143,6 +150,11 @@ export function EventCard({
           <div className="flex items-center gap-2">
             <Users size={15} className="shrink-0 text-vital-bright" />
             {event.capacity ? `名額 ${event.capacity} 人` : "名額不限"}
+          </div>
+          {/* 費用：一般活動 fee_cents 為 null／0 → 「免費」；HYROX 有實際金額 */}
+          <div className="flex items-center gap-2">
+            <Wallet size={15} className="shrink-0 text-vital-bright" />
+            <span className="min-w-0 truncate">{feeLabel(event.fee_cents)}</span>
           </div>
           {(event.start_time || event.end_time) && (
             <div className="flex items-center gap-2">

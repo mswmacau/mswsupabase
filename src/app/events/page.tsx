@@ -10,11 +10,14 @@ import { RULES } from "@/lib/config";
 import { getCurrentProfile } from "@/lib/supabase/server";
 import {
   getAvailableMonths,
+  getCachedPublishedEvents,
   getHyroxEvents,
+  getMyEventRegistrations,
   getScheduleLegend,
   getScheduleMonth,
   getSitePages,
 } from "@/lib/queries";
+import { EventCard } from "@/components/EventCard";
 import { CategoryCards } from "./_components/CategoryCards";
 import { ScheduleCalendar } from "@/components/schedule/ScheduleCalendar";
 import {
@@ -201,7 +204,7 @@ export default async function EventsPage({
 }) {
   const params = await searchParams;
 
-  const [months, hyroxAll, profile, legend] = await Promise.all([
+  const [months, hyroxAll, profile, legend, upcomingEvents] = await Promise.all([
     getAvailableMonths(),
     // 前台要看到「已結束（archived）」的付費場次，否則 11/11 那場在日曆上會消失。
     // includeArchived 會回 draft —— draft 一律在下面過濾掉，不能外洩。
@@ -209,7 +212,14 @@ export default async function EventsPage({
     getCurrentProfile(),
     // 顏色圖例（後台可編輯）。表未建時回 [] → 圖例整段不顯示，日曆照常。
     getScheduleLegend(),
+    // 已發布、未過期的一般活動（已排除 HYROX）。空陣列 → 「近期活動」整段不渲染。
+    getCachedPublishedEvents(),
   ]);
+
+  // 會員已報名的 activity id（未登入不查）。查詢失敗回 [] → 全部顯示「站內報名」。
+  const registeredIds = profile
+    ? new Set(await getMyEventRegistrations(profile.id))
+    : new Set<string>();
 
   const todayISO = macauTodayISO();
   const today: YearMonth = {
@@ -428,7 +438,37 @@ export default async function EventsPage({
         </div>
       </section>
 
-      {/* ================= 2. 當月班表日曆 ================= */}
+      {/* ================= 2. 近期活動（已發布的一般活動） =================
+          修復「管理員發布了但會員看不到」的斷裂：/admin/events 發布的一般活動
+          從這裡才真的有前台出口。HYROX 已在上面分類卡與 /hyrox 承接，故查詢端
+          就排除 series='hyrox'（見 getCachedPublishedEvents）。
+          空狀態刻意整段不渲染：留一個「暫無活動」的空盒子比沒有更難看。 */}
+      {upcomingEvents.length > 0 && (
+        <section className="container-msw pb-16">
+          <div className="flex flex-wrap items-end justify-between gap-6 border-b border-white/10 pb-8">
+            <div>
+              <span className="eyebrow">Upcoming</span>
+              <h2 className="display-xl mt-5">近期活動</h2>
+            </div>
+            <p className="max-w-md text-sm leading-relaxed text-white/65">
+              已開放報名的一般活動。日期、地點、費用與名額都在卡片上。
+            </p>
+          </div>
+
+          <div className="mt-10 grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
+            {upcomingEvents.map((ev) => (
+              <EventCard
+                key={ev.id}
+                event={ev}
+                isLoggedIn={isLoggedIn}
+                registered={registeredIds.has(ev.id)}
+              />
+            ))}
+          </div>
+        </section>
+      )}
+
+      {/* ================= 3. 當月班表日曆 ================= */}
       <section
         id="schedule"
         className="relative border-y border-ink-line bg-ink-soft"
@@ -587,7 +627,7 @@ export default async function EventsPage({
         </div>
       </section>
 
-      {/* ================= 3. 往期班表 ================= */}
+      {/* ================= 4. 往期班表 ================= */}
       {pastMonths.length > 0 && (
         <section className="container-msw pb-4 pt-14">
           <div className="flex flex-wrap items-end justify-between gap-4">

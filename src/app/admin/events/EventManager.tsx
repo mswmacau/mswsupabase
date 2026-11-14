@@ -22,6 +22,7 @@ import { useRouter } from "next/navigation";
 import {
   Archive,
   ArchiveRestore,
+  ArrowRight,
   ChevronDown,
   ChevronUp,
   Loader2,
@@ -31,6 +32,7 @@ import {
   Trash2,
   Users,
 } from "lucide-react";
+import Link from "next/link";
 import type { Event, EventStatus } from "@/lib/types";
 import { AssetUploader } from "@/components/AssetUploader";
 import {
@@ -295,6 +297,21 @@ export function EventManager({ events }: { events: Event[] }) {
           {error}
         </div>
       )}
+
+      {/* 「發布 ≠ 生效」的斷點提示：一般活動發布後，前台出口在 /events 的
+          「近期活動」區塊。以前沒有任何前台頁面會顯示已發布的一般活動，
+          管理員發布完只看到列表多一筆「已上架」，自然會懷疑沒生效。 */}
+      <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-cobalt/40 bg-cobalt/10 px-4 py-3 text-sm text-white/85">
+        <span className="min-w-0">
+          已發布的活動會顯示在「活動總覽」頁的近期活動區塊
+        </span>
+        <Link
+          href="/events"
+          className="inline-flex min-h-11 shrink-0 items-center gap-1.5 border border-white/25 px-3 text-xs font-semibold text-white transition hover:border-white/50 hover:bg-white/10"
+        >
+          查看活動總覽 <ArrowRight size={14} />
+        </Link>
+      </div>
 
       {/* T-26：站內報名人數取數失敗——可讀提示 + 重試，不影響其他操作 */}
       {regError && (

@@ -12,9 +12,10 @@
  * H6：全部包 try/catch，任何情況都回 JSON。
  */
 
-import { revalidatePath } from "next/cache";
+import { revalidatePath, revalidateTag } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { isSupabaseConfigured } from "@/lib/supabase/env";
+import { PUBLISHED_EVENTS_TAG } from "@/lib/queries";
 import {
   jsonBadJson,
   jsonConflict,
@@ -321,6 +322,7 @@ export async function POST(request: Request) {
     if (error) return jsonInternal("POST /api/admin/events insert", error);
 
     revalidatePath("/events");
+    revalidateTag(PUBLISHED_EVENTS_TAG, { expire: 60 });
     revalidatePath("/admin/events");
     revalidatePath("/");
 
@@ -376,6 +378,7 @@ export async function PATCH(request: Request) {
       if (error) return jsonInternal("PATCH /api/admin/events toggle", error);
 
       revalidatePath("/events");
+      revalidateTag(PUBLISHED_EVENTS_TAG, { expire: 60 });
       revalidatePath("/admin/events");
       revalidatePath("/");
 
@@ -489,6 +492,7 @@ export async function PATCH(request: Request) {
     }
 
     revalidatePath("/events");
+    revalidateTag(PUBLISHED_EVENTS_TAG, { expire: 60 });
     revalidatePath("/admin/events");
     revalidatePath("/");
 
@@ -537,6 +541,7 @@ export async function DELETE(request: Request) {
     if (error) return jsonInternal("DELETE /api/admin/events update", error);
 
     revalidatePath("/events");
+    revalidateTag(PUBLISHED_EVENTS_TAG, { expire: 60 });
     revalidatePath("/admin/events");
     revalidatePath("/");
 

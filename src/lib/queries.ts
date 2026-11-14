@@ -788,7 +788,25 @@ export function getCachedAllSessions(limit = 60): Promise<TrainingSession[]> {
   )();
 }
 
-/** 已上架活動（快取 60 秒，前台活動頁用） */
+/**
+ * 已上架活動的快取 tag。
+ * 寫入端（POST / PATCH / DELETE /api/admin/events）必須 revalidateTag 這個字串，
+ * 否則管理員發布完，前台 /events 的「近期活動」區塊最多要等 60 秒才出現
+ * ——那正是「發布了但沒生效」的成因之一。
+ */
+export const PUBLISHED_EVENTS_TAG = "published-events";
+
+/**
+ * 已上架、且尚未過期的一般活動（前台 /events「近期活動」區塊用；快取 60 秒）。
+ *
+ * 篩選口徑：
+ *   · status = 'published' 且 event_date >= 今天（口徑同 /api/event-registrations）
+ *   · 排除 HYROX（series = 'hyrox'）—— HYROX 由 getCachedHyroxEvents 與 /hyrox 承接
+ *
+ * ⚠️ 為什麼一定要用 `.or("series.is.null,series.neq.hyrox")`：
+ *   一般活動的 `series` 是 NULL，而 PostgREST 的 `.neq()` 產生的 `series <> 'hyrox'`
+ *   對 NULL 求值為 NULL → 這些列會被整批濾掉。實測過，用 `.neq()` 會回 0 筆。
+ */
 export function getCachedPublishedEvents(limit = 50): Promise<Event[]> {
   return unstable_cache(
     cache(async (): Promise<Event[]> => {
@@ -799,13 +817,14 @@ export function getCachedPublishedEvents(limit = 50): Promise<Event[]> {
         .select("*")
         .eq("status", "published")
         .gte("event_date", todayISO())
+        .or("series.is.null,series.neq.hyrox")
         .order("event_date", { ascending: true })
         .order("sort_order", { ascending: false })
         .limit(limit);
       return (data as Event[]) ?? [];
     }),
-    ["published-events", String(limit)],
-    { revalidate: 60 }
+    [PUBLISHED_EVENTS_TAG, String(limit)],
+    { tags: [PUBLISHED_EVENTS_TAG], revalidate: 60 }
   )();
 }
 
