@@ -1,0 +1,299 @@
+/* =====================================================================
+ * public-ui.css — 公開頁視覺層級（重點突出）語彙
+ *
+ * 只由「公開頁」匯入：src/app/page.tsx（首頁）、about、coaches、hyrox。
+ * 刻意不放進 globals.css —— /training、/events、/leaderboard 三頁已各自
+ * 優化過，本檔的任何規則都不應該波及它們。Next.js 的 App Router 會依
+ * 路由收集 CSS，所以只有匯入本檔的路由會載入。
+ *
+ * 設計目的（站主鐵律：手機優先）：
+ *   1. 區塊之間要有「節奏差」——深淺交替 + 間距差，不要八塊長得一樣
+ *   2. 數字要有主次——一組統計只讓 1 個大，其餘縮成輔助
+ *   3. 手機單欄時內距收窄（≥16px 為下限，不要用 24px 浪费高度）
+ *   4. 觸控目標 ≥44px、focus 必須看得見
+ *
+ * 所有顏色一律由 globals.css 的 --color-* 變數以 color-mix 衍生，
+ * 不寫死任何 hex —— 後台換色時本檔自動跟隨。
+ * ===================================================================== */
+
+:root {
+  /* ===== 三段色帶（深 → 淺）：用「差」做出區塊段落感 =====
+     band-0 就是頁面底色 ink，band-1 / band-2 由 ink-soft 混白推出來。
+     實測值（預設主題）：#0f0f0f / #1d1d1d / #262626 —— 三個都仍在近黑區間，
+     但並排時肉眼分得出「這是另一個段落」。 */
+  --band-0: var(--color-ink);
+  --band-1: color-mix(in srgb, var(--color-ink-soft) 100%, var(--color-white) 4%);
+  --band-2: color-mix(in srgb, var(--color-ink-soft) 100%, var(--color-white) 9%);
+
+  /* 區塊標題字級：手機縮小，拉開與 h1 的比例 → 首屏主角唯一 */
+  --pub-h2: clamp(1.75rem, 5.6vw, 4rem);
+  /* 內文最大行寬：避免手機上一行塞太多字 */
+  --pub-measure: 62ch;
+}
+
+@layer components {
+  /* ------------------------------------------------------------------
+   * 1. 色帶
+   * ------------------------------------------------------------------ */
+  .pub-band-0 {
+    background-color: var(--band-0);
+  }
+  .pub-band-1 {
+    background-color: var(--band-1);
+  }
+  .pub-band-2 {
+    background-color: var(--band-2);
+  }
+
+  /* ------------------------------------------------------------------
+   * 2. 區塊留白（節奏差）
+   *
+   * 沿用後台 --space-section（48–160px），但手機上限壓到 56px：
+   * 390 寬度下 80px 上下留白純粹是浪費高度，且八個區塊各浪費 48px
+   * 就是 384px。桌面上限不變，所以 1440 的高度不受影響。
+   *
+   * 三檔節奏：pub-pad-l（重要區塊，多一點空氣）
+   *           pub-pad（一般）
+   *           pub-pad-s（收尾區塊，收一點）
+   * ------------------------------------------------------------------ */
+  .pub-pad {
+    padding-block: var(--space-section, 80px);
+  }
+  .pub-pad-l {
+    padding-block: var(--space-section, 80px);
+  }
+  .pub-pad-s {
+    padding-block: calc(var(--space-section, 80px) * 0.8);
+  }
+  @media (max-width: 767px) {
+    .pub-pad {
+      padding-block: min(var(--space-section, 80px), 56px);
+    }
+    .pub-pad-l {
+      padding-block: min(var(--space-section, 80px), 64px);
+    }
+    .pub-pad-s {
+      padding-block: min(calc(var(--space-section, 80px) * 0.8), 44px);
+    }
+  }
+
+  /* ------------------------------------------------------------------
+   * 3. 區塊抬頭（統一節奏）
+   *
+   * 現況問題：programs 的 h2 掛 mt-5、reasons 也掛 mt-5，但上面沒有東西，
+   * 憑空多出 20px；而各區塊「標題 → 內容」的距離一處 56px 一處 48px。
+   * 這裡把抬頭與內容的距離收斂成單一來源，手機與桌面各一個值。
+   * ------------------------------------------------------------------ */
+  .pub-head {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: flex-end;
+    justify-content: space-between;
+    gap: 0.75rem 1.5rem;
+    border-bottom: 1px solid var(--line-hairline-strong);
+    padding-bottom: 1.25rem;
+  }
+  .pub-head-title {
+    margin: 0;
+    font-size: var(--pub-h2);
+    font-weight: 900;
+    line-height: 0.95;
+    letter-spacing: -0.03em;
+  }
+  /* 抬頭底下的第一層內容：手機 24px / 桌面 40px */
+  .pub-head-body {
+    margin-top: 1.5rem;
+  }
+  @media (min-width: 768px) {
+    .pub-head {
+      padding-bottom: 2rem;
+    }
+    .pub-head-body {
+      margin-top: 2.5rem;
+    }
+  }
+
+  /* 區塊導言（抬頭右側那句說明）：手機降到 13px，避免三行變五行 */
+  .pub-lede {
+    max-width: 34rem;
+    font-size: 0.8125rem;
+    line-height: 1.6;
+    color: color-mix(in srgb, var(--color-white) 68%, var(--color-ink));
+  }
+  @media (min-width: 768px) {
+    .pub-lede {
+      font-size: 0.875rem;
+    }
+  }
+
+  /* ------------------------------------------------------------------
+   * 4. 卡片三級（讓「主 / 次 / 輔」一眼分得出來）
+   *
+   * 現況問題：programs 的兩張大卡、disciplines 的六張小卡、reasons 的三列
+   * 全部是「標題 + 說明」的同構排版，視覺重量接近 → 沒有重點。
+   * 這裡給三個明確等級，元素本身不變、只換材質：
+   *   --primary   實心面板 + 較亮描邊 + 頂部強調線（一個區塊最多 1–2 張）
+   *   --plain     透明底 + 髮絲描邊（次要）
+   *   --tile      淺色帶底、無描邊（輔助，最小重量）
+   * ------------------------------------------------------------------ */
+  .pub-card-primary {
+    position: relative;
+    background-color: var(--band-2);
+    border: 1px solid color-mix(in srgb, var(--color-white) 16%, transparent);
+  }
+  .pub-card-plain {
+    position: relative;
+    background-color: transparent;
+    border: 1px solid var(--line-hairline);
+  }
+  .pub-card-tile {
+    position: relative;
+    background-color: var(--band-1);
+    border: 1px solid transparent;
+    transition:
+      background-color 0.35s var(--ease-msw),
+      border-color 0.35s var(--ease-msw);
+  }
+  .pub-card-tile:hover {
+    background-color: var(--band-2);
+    border-color: color-mix(in srgb, var(--color-white) 12%, transparent);
+  }
+
+  /* 頂部強調線：只給 primary 卡，用的就是品牌主色 */
+  .pub-accent-top::before {
+    content: "";
+    position: absolute;
+    inset-inline: 0;
+    top: 0;
+    height: 2px;
+    background: linear-gradient(
+      90deg,
+      var(--color-cobalt-bright),
+      var(--color-vital-bright)
+    );
+  }
+
+  /* ------------------------------------------------------------------
+   * 5. 卡片內距（手機收窄）
+   *
+   * 站主要求：單欄堆疊時 ≥16px 即可，不要 24px（p-6）或 32px（p-8）。
+   * ------------------------------------------------------------------ */
+  .pub-card-pad {
+    padding: 1rem;
+  }
+  .pub-card-pad-lg {
+    padding: 1.25rem;
+  }
+  @media (min-width: 768px) {
+    .pub-card-pad {
+      padding: 1.5rem;
+    }
+    .pub-card-pad-lg {
+      padding: 2rem;
+    }
+  }
+
+  /* ------------------------------------------------------------------
+   * 6. 數字主次
+   *
+   * 一組統計只讓 1 個數字「大」，其餘一律走 --aux 的尺寸。
+   * 這樣「累積里程」是第一眼看到的數字，其他三個退成佐證。
+   * ------------------------------------------------------------------ */
+  .pub-figure-primary {
+    font-variant-numeric: tabular-nums;
+    font-weight: 900;
+    letter-spacing: -0.04em;
+    line-height: 0.9;
+    font-size: clamp(2.75rem, 13vw, 5.5rem);
+  }
+  .pub-figure-aux {
+    font-variant-numeric: tabular-nums;
+    font-weight: 900;
+    letter-spacing: -0.03em;
+    line-height: 1;
+    font-size: 1.375rem;
+  }
+  @media (min-width: 768px) {
+    .pub-figure-aux {
+      font-size: 2rem;
+    }
+  }
+
+  /* ------------------------------------------------------------------
+   * 7. 觸控與 focus
+   *
+   * 觸控：把可點區域墊到 44×44（WCAG 2.5.8 / Apple HIG）。
+   *       只加最小尺寸，不改視覺大小（用 inline-flex + min-* 撐開 hit area）。
+   * focus：全站現有規則是 2px 鈷藍外框；在活力紅按鈕上藍框對比不足，
+   *       這裡改成「白內圈 + 深色外圈」，任何底色都看得見。
+   * ------------------------------------------------------------------ */
+  .pub-hit {
+    min-height: 44px;
+    min-width: 44px;
+  }
+
+  .pub-shell :focus-visible,
+  .pub-focus-ring:focus-visible {
+    outline: 3px solid var(--color-white);
+    outline-offset: 2px;
+    box-shadow:
+      0 0 0 5px color-mix(in srgb, var(--color-ink) 85%, transparent),
+      0 0 0 6px color-mix(in srgb, var(--color-white) 45%, transparent);
+  }
+
+  /* ------------------------------------------------------------------
+   * 8. 按鈕層級
+   *
+   * 「唯一一個實心主色按鈕」在首屏。次要動作一律走外框，
+   * 不再出現兩顆同色實心按鈕並排（現況 programs / hero 都有）。
+   * ------------------------------------------------------------------ */
+  .pub-btn-outline {
+    border: 1px solid color-mix(in srgb, var(--color-vital) 65%, transparent);
+    background-color: color-mix(in srgb, var(--color-vital) 10%, transparent);
+    color: var(--color-white);
+  }
+  .pub-btn-outline:hover:not(:disabled) {
+    background-color: color-mix(in srgb, var(--color-vital) 22%, transparent);
+    border-color: var(--color-vital-bright);
+  }
+  /* 觸控裝置也要有按下回饋（hover 在手機不存在） */
+  .pub-btn-outline:active:not(:disabled) {
+    background-color: color-mix(in srgb, var(--color-vital) 30%, transparent);
+    transform: scale(0.985);
+  }
+
+  /* ------------------------------------------------------------------
+   * 9. 手感：hover（滑鼠）與 active（觸控）分開處理
+   * ------------------------------------------------------------------ */
+  @media (hover: hover) {
+    .pub-lift {
+      transition:
+        transform 0.3s var(--ease-msw),
+        border-color 0.3s var(--ease-msw),
+        background-color 0.3s var(--ease-msw);
+    }
+    .pub-lift:hover {
+      transform: translateY(-3px);
+      border-color: color-mix(in srgb, var(--color-white) 26%, transparent);
+    }
+  }
+  .pub-press:active {
+    transform: scale(0.985);
+  }
+
+  /* ------------------------------------------------------------------
+   * 10. 手機單欄：把「裝飾性大數字」縮小，避免它吃掉標題的注意力
+   * ------------------------------------------------------------------ */
+  .pub-ghost-figure {
+    font-variant-numeric: tabular-nums;
+    font-weight: 900;
+    letter-spacing: -0.04em;
+    line-height: 1;
+    font-size: 2.25rem;
+  }
+  @media (min-width: 768px) {
+    .pub-ghost-figure {
+      font-size: 3.5rem;
+    }
+  }
+}

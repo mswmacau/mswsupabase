@@ -211,6 +211,20 @@ export function Nav({
   const pathname = usePathname();
   const menuOpen = menuOpenPath !== null && menuOpenPath === pathname;
 
+  /**
+   * 首頁的 Nav CTA 降級為外框樣式。
+   *
+   * 理由（站主鐵律「首屏只能有一個實心主色按鈕」）：
+   * 首頁首屏本來有兩顆一模一樣的活力紅實心按鈕（Nav 的「立即加入」與 hero 的
+   * 「立即加入會員」），而且兩者指向同一個 /signup —— 等於同一個動作用同樣的
+   * 音量喊兩次，反而沒有人是主角。因此首頁保留 hero 那顆為唯一實心主色，
+   * Nav 這顆降級為外框（仍是可點、仍 ≥44px、文案不變）。
+   *
+   * ⚠️ 刻意只在 pathname === "/" 生效：/training、/events、/leaderboard
+   * 三頁已各自優化過且不在本次範圍，它們的 Nav 外觀完全不受影響。
+   */
+  const dimNavCta = pathname === "/";
+
   useEffect(() => {
     const onScroll = () => setScrolled(window.scrollY > 24);
     onScroll();
@@ -246,7 +260,10 @@ export function Nav({
       }`}
     >
       <div className="container-msw flex h-16 items-center justify-between gap-4 md:h-20">
-        <Link href="/" className="group flex items-center gap-3">
+        {/* min-h-11 min-w-11：LOGO 圖本身是 40×40，但整塊連結的可點區域要墊到
+            44×44（WCAG 2.5.8 / Apple HIG）。Nav 高度固定 h-16 / md:h-20，
+            所以不會造成任何版位位移。 */}
+        <Link href="/" className="group flex min-h-11 min-w-11 items-center gap-3">
           {logoUrl ? (
             // width/height = 原圖 1015×1024 的固有尺寸：載入前就讓瀏覽器
             // 推出正確寬高比，避免 CLS；實際顯示仍由 h-10 w-auto 控制（40px 高）。
@@ -368,7 +385,11 @@ export function Nav({
                 href="/signup"
                 // E08 按下回饋：只喺未帶 data-fx-magnet / data-fx-tilt 嘅元素上加（紅線 8）
                 // 用 Tailwind v4 嘅 `scale` 獨立合成屬性，唔會同 hover 嘅 transform 打架
-                className="btn-base btn-vital btn-slab min-h-11 !px-5 !py-2 text-sm active:scale-[0.97] active:duration-100"
+                // 首頁：降級為外框（.pub-btn-outline 由 public-ui.css 提供），
+                // 令 hero 的實心主色 CTA 成為首屏唯一主角。
+                className={`btn-base btn-slab min-h-11 min-w-11 !px-5 !py-2 text-sm active:scale-[0.97] active:duration-100 ${
+                  dimNavCta ? "pub-btn-outline" : "btn-vital"
+                }`}
               >
                 立即加入
               </Link>

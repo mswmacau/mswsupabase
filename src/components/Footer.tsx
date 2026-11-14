@@ -152,7 +152,7 @@ export function Footer({
                   <Link
                     key={l.href}
                     href={l.href}
-                    className="inline-flex min-h-11 items-center text-sm font-semibold text-white/75 transition hover:text-vital-bright"
+                    className="inline-flex min-h-11 min-w-11 items-center text-sm font-semibold text-white/75 transition hover:text-vital-bright"
                   >
                     {l.label}
                   </Link>
@@ -160,14 +160,14 @@ export function Footer({
                 {/* F-G3：站主要求額外加嘅獨立連結（內部連結，唔開新視窗） */}
                 <Link
                   href="/about"
-                  className="inline-flex min-h-11 items-center text-sm font-semibold text-white/75 transition hover:text-vital-bright"
+                  className="inline-flex min-h-11 min-w-11 items-center text-sm font-semibold text-white/75 transition hover:text-vital-bright"
                 >
                   聯絡我們
                 </Link>
                 {/* 私隱政策：Google OAuth 同意畫面需要一個公開可達的政策頁 */}
                 <Link
                   href="/privacy"
-                  className="inline-flex min-h-11 items-center text-sm font-semibold text-white/75 transition hover:text-vital-bright"
+                  className="inline-flex min-h-11 min-w-11 items-center text-sm font-semibold text-white/75 transition hover:text-vital-bright"
                 >
                   私隱政策
                 </Link>
@@ -181,13 +181,13 @@ export function Footer({
                   <>
                     <Link
                       href="/signup"
-                      className="inline-flex min-h-11 items-center gap-1 text-sm font-semibold text-white/75 transition hover:text-vital-bright"
+                      className="inline-flex min-h-11 min-w-11 items-center gap-1 text-sm font-semibold text-white/75 transition hover:text-vital-bright"
                     >
                       註冊會員 <ArrowUpRight size={14} />
                     </Link>
                     <Link
                       href="/login"
-                      className="inline-flex min-h-11 items-center text-sm font-semibold text-white/75 transition hover:text-vital-bright"
+                      className="inline-flex min-h-11 min-w-11 items-center text-sm font-semibold text-white/75 transition hover:text-vital-bright"
                     >
                       會員登入
                     </Link>
@@ -197,13 +197,13 @@ export function Footer({
                   <>
                     <Link
                       href="/dashboard"
-                      className="inline-flex min-h-11 items-center text-sm font-semibold text-white/75 transition hover:text-vital-bright"
+                      className="inline-flex min-h-11 min-w-11 items-center text-sm font-semibold text-white/75 transition hover:text-vital-bright"
                     >
                       我的帳戶
                     </Link>
                     <Link
                       href="/dashboard/coupons"
-                      className="inline-flex min-h-11 items-center text-sm font-semibold text-white/75 transition hover:text-vital-bright"
+                      className="inline-flex min-h-11 min-w-11 items-center text-sm font-semibold text-white/75 transition hover:text-vital-bright"
                     >
                       我的優惠券
                     </Link>
