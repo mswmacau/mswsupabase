@@ -38,10 +38,10 @@ export default async function LeaderboardPage({
   ]);
   const t = pages.leaderboard;
 
-  /** user_id → 上月名次（1 起） */
+  /** public_code → 上月名次（1 起）；public_code 是 md5 前 8 碼，不是會員 UUID */
   const prevRanks: Record<string, number> = {};
   prevMonthly.forEach((r, i) => {
-    prevRanks[r.user_id] = i + 1;
+    prevRanks[r.public_code] = i + 1;
   });
 
   const months = recentMonths(6);

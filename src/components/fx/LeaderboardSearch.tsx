@@ -28,10 +28,38 @@ interface Props {
   monthly: LeaderRow[];
   allTime: LeaderRow[];
   goalKm: number;
-  /** 上月名次對照表：user_id → 名次（1 起）。上月無資料時傳空物件 */
+  /** 上月名次對照表：public_code → 名次（1 起）。上月無資料時傳空物件 */
   prevRanks: Record<string, number | undefined>;
   /** 上月係咪有資料：false 時全部顯示「–」，唔好判成 NEW */
   prevAvailable: boolean;
+}
+
+/**
+ * P1-A：把顯示名稱壓成 4 碼 base36。
+ * 只為 DOM id／React key 而生，**不參與任何查詢**、不代表任何會員身分。
+ * 必須是純函式（唔可以用 Math.random / Date），否則 SSR 與 CSR 會算出唔同值，
+ * React 會報 hydration mismatch。
+ */
+function nameHash(name: string): string {
+  let h = 5381;
+  for (let i = 0; i < name.length; i += 1) {
+    h = ((h * 33) ^ name.charCodeAt(i)) >>> 0;
+  }
+  return h.toString(36).slice(-4);
+}
+
+/**
+ * P1-A：產生穩定的 DOM id。
+ * 由「排名序號 + 顯示名稱摘要」組成，**完全不含任何會員識別碼**。
+ * 改動前這裡是「`alltime-detail-` + 會員 UUID」——
+ * 等於把會員的 auth UUID 寫進 HTML，任何匿名訪客都能撈。
+ */
+function rowDomId(
+  prefix: "rank-detail" | "alltime-detail",
+  rank: number,
+  name: string
+): string {
+  return `${prefix}-${rank}-${nameHash(name)}`;
 }
 
 /**
@@ -40,15 +68,17 @@ interface Props {
  * - 上月有資料但搵唔到呢個人 → "new"（顯示 NEW）
  * - 名次一樣 → "same"（顯示 –）
  * - 其餘 → delta（上月名次 - 今月名次，正數 = 上升）
+ *
+ * 第一參數是排行榜的公開代號 public_code（md5 前 8 碼），不是 auth UUID。
  */
 function rankChange(
-  userId: string,
+  publicCode: string,
   rank: number,
   prevAvailable: boolean,
   prevRanks: Record<string, number | undefined>
 ): number | "none" | "same" | "new" {
   if (!prevAvailable) return "none";
-  const prev = prevRanks[userId];
+  const prev = prevRanks[publicCode];
   if (prev === undefined) return "new";
   const delta = prev - rank;
   return delta === 0 ? "same" : delta;
@@ -165,12 +195,12 @@ export function LeaderboardSearch({
                     .filter((r): r is RankedRow => Boolean(r))
                     .map((r) => (
                       <PodiumCard
-                        key={r.row.user_id}
+                        key={rowDomId("rank-detail", r.rank, r.row.name)}
                         row={r.row}
                         rank={r.rank}
                         goalKm={goalKm}
                         change={rankChange(
-                          r.row.user_id,
+                          r.row.public_code,
                           r.rank,
                           prevAvailable,
                           prevRanks
@@ -194,12 +224,12 @@ export function LeaderboardSearch({
                       <tbody>
                         {rest.map((r) => (
                           <RankRow
-                            key={r.row.user_id}
+                            key={rowDomId("rank-detail", r.rank, r.row.name)}
                             row={r.row}
                             rank={r.rank}
                             goalKm={goalKm}
                             change={rankChange(
-                              r.row.user_id,
+                              r.row.public_code,
                               r.rank,
                               prevAvailable,
                               prevRanks
@@ -243,7 +273,11 @@ export function LeaderboardSearch({
             filteredAllTime.length ? (
               <div className="stagger mt-12 grid gap-px sm:grid-cols-2">
                 {filteredAllTime.map((r) => (
-                  <AllTimeRow key={r.row.user_id} row={r.row} rank={r.rank} />
+                  <AllTimeRow
+                    key={rowDomId("alltime-detail", r.rank, r.row.name)}
+                    row={r.row}
+                    rank={r.rank}
+                  />
                 ))}
               </div>
             ) : (
@@ -454,7 +488,7 @@ function RankRow({
   change: number | "none" | "same" | "new";
 }) {
   const [open, setOpen] = useState(false);
-  const detailId = `rank-detail-${row.user_id}`;
+  const detailId = rowDomId("rank-detail", rank, row.name);
   const pct = goalKm > 0 ? Math.min(100, (row.total_km / goalKm) * 100) : 0;
 
   return (
@@ -522,7 +556,7 @@ function RankRow({
 /** 累積總榜行（F-L2：可展開明細） */
 function AllTimeRow({ row, rank }: { row: LeaderRow; rank: number }) {
   const [open, setOpen] = useState(false);
-  const detailId = `alltime-detail-${row.user_id}`;
+  const detailId = rowDomId("alltime-detail", rank, row.name);
 
   return (
     <div className="group row-em flex flex-col border-b border-white/10 py-5 pr-4 transition-colors duration-500 hover:bg-white/[0.03]">

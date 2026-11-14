@@ -411,7 +411,13 @@ export interface MonthlyStat {
 }
 
 export interface LeaderRow {
-  user_id: string;
+  /**
+   * P1-A：排行榜公開代號 = `substr(md5(profiles.id::text), 1, 8)`。
+   * 不是會員的 auth UUID，不可逆推；同一會員跨月份穩定，
+   * 只用來比對「名次上升／下降」，刻意不寫進任何 DOM 屬性。
+   * 定義見 supabase/migration-leaderboard-no-id.sql。
+   */
+  public_code: string;
   name: string;
   total_km: number;
   runs: number;

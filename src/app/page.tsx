@@ -699,7 +699,7 @@ export default async function HomePage() {
             <ol className="border-t border-white/10">
               {leaders.map((l, i) => (
                 <li
-                  key={l.user_id}
+                  key={`home-leader-${i + 1}`}
                   className="group flex items-center gap-5 border-b border-white/10 py-5"
                 >
                   <span className="stat-figure w-12 text-3xl text-white/25 transition-colors group-hover:text-vital-bright md:text-4xl">

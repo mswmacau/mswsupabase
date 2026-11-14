@@ -114,12 +114,18 @@ on conflict (key) do nothing;
 --    security_invoker = false → 匿名訪客可讀（與既有 public_leaderboard 一致）
 --    註：即使本檔 §5 收回 anon 對 monthly_running_stats 的直接讀取權，
 --        本 view 以擁有者（postgres）權限執行，匿名仍可正常讀取。
+--
+--    【2026-11-14 P1-A 修補】原版本 select 了 s.user_id（= auth.users.id），
+--    並 join public_leaderboard p on p.id —— 這同時是「UUID 外洩」與
+--    「public_leaderboard 移除 id 後本 view 會壞掉」兩個問題。
+--    現在改為 public_code = substr(md5(user_id::text),1,8)，並直接 join profiles。
+--    定義與 migration-leaderboard-no-id.sql 完全一致（該檔是這條修補的正本）。
 -- ------------------------------------------------------------
 drop view if exists public.monthly_leaderboard cascade;
 create view public.monthly_leaderboard
 with (security_invoker = false) as
 select
-  s.user_id,
+  substr(md5(s.user_id::text), 1, 8) as public_code,
   s.period_month,
   s.total_km,
   s.runs,
@@ -127,7 +133,8 @@ select
   p.avatar_url,
   p.points
 from public.monthly_running_stats s
-join public.public_leaderboard p on p.id = s.user_id;
+join public.profiles p on p.id = s.user_id
+where p.role = 'member';
 
 grant select on public.monthly_leaderboard to anon, authenticated;
 

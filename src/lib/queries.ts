@@ -1004,6 +1004,44 @@ export async function getHyroxPastEvents(): Promise<HyroxPastEvent[]> {
   )();
 }
 
+/**
+ * P1-A 部署順序保險：排行榜 view 的新欄位叫 `public_code`
+ * （= substr(md5(profiles.id::text), 1, 8)，見 supabase/migration-leaderboard-no-id.sql）。
+ * 若客戶還沒跑那支 migration，查 `public_code` 會拿到 42703「欄位不存在」，
+ * 這時用顯示名稱的 djb2 摘要頂替 ——
+ * 目的只有一個：**SQL 還沒跑時榜單不要變成空白**。
+ * 正常情況（已跑 migration）永遠不會走到這條路；
+ * 一旦看到這行 warning，就代表該去跑那支 SQL 了。
+ */
+function legacyPublicCode(name: string): string {
+  let h = 5381;
+  for (let i = 0; i < name.length; i += 1) {
+    h = ((h * 33) ^ name.charCodeAt(i)) >>> 0;
+  }
+  return h.toString(36).slice(-8);
+}
+
+/** 排行榜 view 的原始列（新舊 view 共用；新 view 才有 public_code） */
+type LeaderboardRawRow = {
+  public_code?: string | null;
+  period_month?: string | null;
+  display_name: string | null;
+  points: number | null;
+  total_km: number | string | null;
+  runs?: number | string | null;
+};
+
+/** 把 view 的原始列轉成前端用的 LeaderRow（PUBLIC 型別見 types.ts） */
+function toLeaderRows(rows: LeaderboardRawRow[]): LeaderRow[] {
+  return rows.map((d) => ({
+    public_code: d.public_code || legacyPublicCode(d.display_name ?? "匿名會員"),
+    name: d.display_name ?? "匿名會員",
+    total_km: Number(d.total_km),
+    runs: Number(d.runs ?? 0),
+    points: Number(d.points ?? 0),
+  }));
+}
+
 /** 月度排行榜（快取 60 秒，首頁 + 排行榜頁用） */
 export function getCachedMonthlyLeaderboard(
   month: string,
@@ -1015,22 +1053,25 @@ export function getCachedMonthlyLeaderboard(
       if (!supabase) return [];
       const { data, error } = await supabase
         .from("monthly_leaderboard")
-        .select("user_id, period_month, total_km, runs, display_name, points")
+        .select("public_code, period_month, total_km, runs, display_name, points")
         .eq("period_month", month)
         .order("total_km", { ascending: false })
         .limit(limit);
-      if (error || !data?.length) return [];
-      type LeaderboardRow = MonthlyStat & {
-        display_name: string | null;
-        points: number | null;
-      };
-      return (data as LeaderboardRow[]).map((d) => ({
-        user_id: d.user_id,
-        name: d.display_name ?? "匿名會員",
-        total_km: Number(d.total_km),
-        runs: Number(d.runs),
-        points: Number(d.points ?? 0),
-      }));
+      if (!error) return toLeaderRows((data as LeaderboardRawRow[]) ?? []);
+
+      console.warn(
+        "[leaderboard] monthly_leaderboard.public_code 不存在，改用顯示名稱摘要（請執行 supabase/migration-leaderboard-no-id.sql）：",
+        error.message
+      );
+      const legacy = await supabase
+        .from("monthly_leaderboard")
+        .select("period_month, total_km, runs, display_name, points")
+        .eq("period_month", month)
+        .order("total_km", { ascending: false })
+        .limit(limit);
+      return legacy.error
+        ? []
+        : toLeaderRows((legacy.data as LeaderboardRawRow[]) ?? []);
     }),
     ["monthly-leaderboard", month, String(limit)],
     { revalidate: 60 }
@@ -1043,19 +1084,27 @@ export function getCachedAllTimeLeaderboard(limit = 20): Promise<LeaderRow[]> {
     cache(async (): Promise<LeaderRow[]> => {
       const supabase = anonClient();
       if (!supabase) return [];
-      const { data } = await supabase
+      const { data, error } = await supabase
         .from("public_leaderboard")
-        .select("id, display_name, avatar_url, points, total_km")
+        .select("public_code, display_name, points, total_km")
         .order("total_km", { ascending: false })
         .order("points", { ascending: false })
         .limit(limit);
-      return ((data as Profile[]) ?? []).map((p) => ({
-        user_id: p.id,
-        name: p.display_name ?? "匿名會員",
-        total_km: Number(p.total_km),
-        runs: 0,
-        points: p.points,
-      }));
+      if (!error) return toLeaderRows((data as LeaderboardRawRow[]) ?? []);
+
+      console.warn(
+        "[leaderboard] public_leaderboard.public_code 不存在，改用顯示名稱摘要（請執行 supabase/migration-leaderboard-no-id.sql）：",
+        error.message
+      );
+      const legacy = await supabase
+        .from("public_leaderboard")
+        .select("display_name, points, total_km")
+        .order("total_km", { ascending: false })
+        .order("points", { ascending: false })
+        .limit(limit);
+      return legacy.error
+        ? []
+        : toLeaderRows((legacy.data as LeaderboardRawRow[]) ?? []);
     }),
     ["all-time-leaderboard", String(limit)],
     { revalidate: 60 }
@@ -1107,26 +1156,27 @@ export async function getMonthlyLeaderboard(
   // Q3：改用 monthly_leaderboard view（Schema R6 §3），一次拿到統計 + 暱稱 + 積分
   const { data, error } = await supabase
     .from("monthly_leaderboard")
-    .select("user_id, period_month, total_km, runs, display_name, points")
+    .select("public_code, period_month, total_km, runs, display_name, points")
     .eq("period_month", month)
     .order("total_km", { ascending: false })
     .limit(limit);
 
-  if (error || !data?.length) return [];
+  if (!error) return toLeaderRows((data as LeaderboardRawRow[]) ?? []);
 
-  // monthly_leaderboard view 回傳「統計 + 暱稱 + 積分」，與既有 LeaderRow 完全一致（Q3）
-  type LeaderboardRow = MonthlyStat & {
-    display_name: string | null;
-    points: number | null;
-  };
-
-  return (data as LeaderboardRow[]).map((d) => ({
-    user_id: d.user_id,
-    name: d.display_name ?? "匿名會員",
-    total_km: Number(d.total_km),
-    runs: Number(d.runs),
-    points: Number(d.points ?? 0),
-  }));
+  // P1-A 部署順序保險（說明見 legacyPublicCode）
+  console.warn(
+    "[leaderboard] monthly_leaderboard.public_code 不存在，改用顯示名稱摘要（請執行 supabase/migration-leaderboard-no-id.sql）：",
+    error.message
+  );
+  const legacy = await supabase
+    .from("monthly_leaderboard")
+    .select("period_month, total_km, runs, display_name, points")
+    .eq("period_month", month)
+    .order("total_km", { ascending: false })
+    .limit(limit);
+  return legacy.error
+    ? []
+    : toLeaderRows((legacy.data as LeaderboardRawRow[]) ?? []);
 }
 
 /** 總排行榜（依累積總公里數 + 積分） */
@@ -1134,20 +1184,29 @@ export async function getAllTimeLeaderboard(limit = 20): Promise<LeaderRow[]> {
   const supabase = await createClient();
   if (!supabase) return [];
 
-  const { data } = await supabase
+  const { data, error } = await supabase
     .from("public_leaderboard")
-    .select("id, display_name, avatar_url, points, total_km")
+    .select("public_code, display_name, points, total_km")
     .order("total_km", { ascending: false })
     .order("points", { ascending: false })
     .limit(limit);
 
-  return ((data as Profile[]) ?? []).map((p) => ({
-    user_id: p.id,
-    name: p.display_name ?? "匿名會員",
-    total_km: Number(p.total_km),
-    runs: 0,
-    points: p.points,
-  }));
+  if (!error) return toLeaderRows((data as LeaderboardRawRow[]) ?? []);
+
+  // P1-A 部署順序保險（說明見 legacyPublicCode）
+  console.warn(
+    "[leaderboard] public_leaderboard.public_code 不存在，改用顯示名稱摘要（請執行 supabase/migration-leaderboard-no-id.sql）：",
+    error.message
+  );
+  const legacy = await supabase
+    .from("public_leaderboard")
+    .select("display_name, points, total_km")
+    .order("total_km", { ascending: false })
+    .order("points", { ascending: false })
+    .limit(limit);
+  return legacy.error
+    ? []
+    : toLeaderRows((legacy.data as LeaderboardRawRow[]) ?? []);
 }
 
 /** 某會員某月的累積（只計已確認） */

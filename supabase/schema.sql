@@ -1,4 +1,29 @@
 -- =============================================================
+-- ⚠️⚠️⚠️  請先讀完這段再動手  ⚠️⚠️⚠️
+--
+-- 此檔已被多個 migration 取代，重跑會回歸安全修補，請勿在生產環境執行。
+--
+-- 本檔現在只作為「全新空環境的一次性 bootstrap」。
+-- 線上環境（ref yaacbsdltqfdzwmawzes）已跑過下列 migration，
+-- 本檔內少數段落即使已對齊，仍不代表重跑是安全的（migration 有加欄位、加表）。
+--
+-- 重跑本檔會碰到的已知落差（你若是為了修某個 bug 才跑，幾乎一定踩到）：
+--   · training_months / is_month_visible() 不存在 → 班表可見性政策會退回保守值
+--   · event_registrations 付款防護 trigger、points 相關函式、admin_audit_log
+--     都不在本檔內，重跑不會重建它們，但也不會刪掉它們
+--   · 任何在本檔內「已被取代」的定義，一律以 migration 為準
+--
+-- 正確做法：
+--   · 只想「把安全性拉回正確狀態」→ 執行 supabase/migration-schema-reconcile.sql
+--   · 想知道到底哪些檔該跑、哪些不要重跑 → 看 supabase/README-執行順序.md
+--
+-- 本檔已對齊 migration 的段落（2026-11-14 修補，四處「重跑即回歸」的洞）：
+--   1. guard_profile_sensitive_fields —— 由 3 欄擴為 6 欄（status 曾可被自行改回）
+--   2. public_leaderboard / monthly_leaderboard —— 加 role='member'、移除 id
+--   3. site_stats.members —— 排除管理員（與線上實測 6 一致）
+--   4. sessions_select_all(using true) —— 換成 sessions_select_visible
+-- =============================================================
+-- =============================================================
 -- MSW 街健館 (Macau Street Workout) — Supabase 一鍵初始化腳本
 -- 用法：Supabase 後台 → SQL Editor → 貼上全部 → Run
 -- 可重複執行（已加 if not exists / drop policy if exists）
@@ -66,15 +91,80 @@ create trigger on_auth_user_created
   after insert on auth.users
   for each row execute function public.handle_new_user();
 
--- 防止會員自行竄改 role / points / total_km
+-- 防止會員自行竄改 role / points / total_km / created_at / status / status_updated_at
+--
+-- 【2026-11-14 P1-B 修補】原版本只還原 3 欄（role / points / total_km），
+-- 而 migration-admin-members-v2.sql 後來加了 profiles.status，
+-- 於是「重跑 schema.sql」會把護欄降級成 3 欄版本 ——
+-- 被停權（status='disabled'）的會員就能把自己的 status 改回 'active'，自我解封。
+-- 現行的正確版本在 migration-points-r1-1-schema.sql:362-432（6 欄 + app.points_rpc 旗標）。
+--
+-- 為什麼這裡要分兩版而不是直接貼 6 欄版：
+--   本檔是「全新空環境」的 bootstrap，那時 profiles.status / status_updated_at
+--   還不存在（它們由 migration-admin-members-v2.sql 加入），
+--   直接引用會讓整份 schema.sql 在第二行就炸掉。
+--   所以在「欄位不存在」的環境用 3 欄版（此時也沒有 status 可被竄改，不存在漏洞），
+--   在「欄位已存在」的環境（含任何已上線的環境）自動用 6 欄版。
+--   判斷在執行期做，重跑本檔不會再把護欄降級。
+do $guard$
+declare
+  v_full boolean;
+begin
+  select (count(*) = 2) into v_full
+    from information_schema.columns
+   where table_schema = 'public'
+     and table_name   = 'profiles'
+     and column_name in ('status', 'status_updated_at');
+
+  if v_full then
+    -- 已跑過 migration-admin-members-v2.sql：6 欄完整護欄
+    execute $fn$
 create or replace function public.guard_profile_sensitive_fields()
 returns trigger
 language plpgsql
 security definer
 set search_path = public
-as $$
+as $body$
+declare
+  v_points_rpc boolean := coalesce(current_setting('app.points_rpc', true), 'off') = 'on';
 begin
-  -- auth.uid() 為 null 代表是後端／服務角色在操作（已繞過 RLS），放行
+  -- 沒有 JWT = 後端／service_role／trigger／SQL Editor，已繞過 RLS，放行
+  if auth.uid() is null then
+    return new;
+  end if;
+
+  -- 管理員可改任何欄位
+  if public.is_admin() then
+    return new;
+  end if;
+
+  -- 非管理員：一律還原敏感欄位
+  new.role              := old.role;
+  new.total_km          := old.total_km;
+  new.created_at        := old.created_at;
+  new.status            := old.status;
+  new.status_updated_at := old.status_updated_at;
+
+  -- points 只有 credit_points 在交易內開旗標時才放行
+  if not v_points_rpc then
+    new.points := old.points;
+  end if;
+
+  return new;
+end;
+$body$;
+$fn$;
+  else
+    -- 尚未跑 migration-admin-members-v2.sql 的空環境：只有 3 個敏感欄位存在
+    raise notice 'schema.sql：profiles.status 不存在，guard 使用 bootstrap 版（3 欄）';
+    execute $fn$
+create or replace function public.guard_profile_sensitive_fields()
+returns trigger
+language plpgsql
+security definer
+set search_path = public
+as $body$
+begin
   if auth.uid() is null then
     return new;
   end if;
@@ -84,9 +174,19 @@ begin
     new.points   := old.points;
     new.total_km := old.total_km;
   end if;
+
   return new;
 end;
-$$;
+$body$;
+$fn$;
+  end if;
+end
+$guard$;
+
+comment on function public.guard_profile_sensitive_fields() is
+  'profiles 敏感欄位護欄：非管理員不可改 role/points/total_km/created_at/status/status_updated_at；'
+  '交易內 app.points_rpc=on（僅 credit_points 設定）時放行 points；auth.uid() 為 null 時全放行。'
+  '（schema.sql 會依 status 欄是否存在自動選 6 欄或 bootstrap 3 欄版，重跑不會降級。）';
 
 drop trigger if exists profiles_guard_sensitive on public.profiles;
 create trigger profiles_guard_sensitive
@@ -193,25 +293,61 @@ from public.run_submissions
 where status = 'approved'
 group by user_id, period_month;
 
--- 公開排行榜檢視表：只暴露暱稱／頭像／積分／里程，不暴露 role 與其他欄位。
+-- 公開排行榜檢視表：只暴露公開代號／暱稱／頭像／積分／里程，不暴露 role 與任何識別碼。
 -- security_invoker = false → 以擁有者（postgres）權限讀取，匿名訪客也能看到排行榜。
-drop view if exists public.public_leaderboard cascade;
+--
+-- 【2026-11-14 P1-B 修補，這一段原本有兩個洞】
+--   洞 1（安全）：select 了 id，前端拿去當 DOM id，於是每個匿名訪客都能從 HTML
+--                 撈到會員的 auth UUID（實測 6 個）。已改為 public_code
+--                 = substr(md5(id::text),1,8)，不可逆。
+--   洞 2（可用性）：原本 `drop view ... cascade` 會把 monthly_leaderboard
+--                  （由 schema-r6.sql §3 建立）一起砍掉，但這裡不重建它，
+--                  重跑 schema.sql 後月度榜就整個消失。
+--                  現在改成「先明確 drop、不用 cascade、兩張都重建」。
+--
+--   另外補上 where role = 'member'（原版沒有，管理員會回到榜上）——
+--   這條與 migration-admin-separation.sql 一致。
+drop view if exists public.monthly_leaderboard;
+drop view if exists public.public_leaderboard;
+
 create view public.public_leaderboard
 with (security_invoker = false) as
 select
-  id,
+  substr(md5(id::text), 1, 8) as public_code,
   display_name,
   avatar_url,
   points,
   total_km
-from public.profiles;
+from public.profiles
+where role = 'member';
 
 grant select on public.public_leaderboard to anon, authenticated;
 
+-- 月度里程榜：與 migration-leaderboard-no-id.sql 同一個定義。
+-- 刻意直接 join profiles（而非 join public_leaderboard），因為後者已無 id 可比對。
+create view public.monthly_leaderboard
+with (security_invoker = false) as
+select
+  substr(md5(s.user_id::text), 1, 8) as public_code,
+  s.period_month,
+  s.total_km,
+  s.runs,
+  p.display_name,
+  p.avatar_url,
+  p.points
+from public.monthly_running_stats s
+join public.profiles p on p.id = s.user_id
+where p.role = 'member';
+
+grant select on public.monthly_leaderboard to anon, authenticated;
+
 -- 全站統計（首頁數字用）
+-- 【2026-11-14 P1-B 修補】members 原本 count(*) from profiles（含管理員，實測會是 8），
+-- 與排行榜的 6 人、後台會員表的 6 人不一致。線上實測 site_stats.members = 6，
+-- 因此這裡改為只算 role='member'，與線上現況對齊。
 create or replace view public.site_stats as
 select
-  (select count(*) from public.profiles)                                              as members,
+  (select count(*) from public.profiles where role = 'member')                        as members,
   (select coalesce(sum(km), 0) from public.run_submissions where status = 'approved') as total_km,
   (select count(*) from public.run_submissions where status = 'approved')             as total_runs,
   (select count(*) from public.training_sessions)                                     as total_sessions;
@@ -586,10 +722,55 @@ drop policy if exists "profiles_insert_self" on public.profiles;
 create policy "profiles_insert_self" on public.profiles
   for insert with check (auth.uid() = id);
 
--- training_sessions：所有人可讀，管理員可寫
-drop policy if exists "sessions_select_all" on public.training_sessions;
-create policy "sessions_select_all" on public.training_sessions
-  for select using (true);
+-- training_sessions：管理員全看；其他人只看「已發布且生效時間已到」的月份
+--
+-- 【2026-11-14 P1-B 修補】原版本是 `for select using (true)`：
+-- 所有人可讀全部場次，包含還沒發布的未來月份 —— 草稿月份班表直接外洩。
+-- 更糟的是它與 migration-training-months.sql 建的 sessions_select_visible
+-- 形成 permissive OR，等於那個修補被完全抵銷。
+--
+-- 現行正確政策在 migration-training-months.sql 的 B-2 段：
+--   using (is_admin() or is_month_visible(年, 月))
+--
+-- 這裡依「is_month_visible() 是否已存在」分兩種情況，因為本檔也要能在
+-- 全新空環境完整跑完：
+--   · 已存在（跑過 migration-training-months.sql）→ 用完整政策
+--   · 不存在（全新空環境）→ 只給管理員讀（fail-closed）
+-- 兩種情況都「不會」再建立 using (true)，所以重跑本檔不會讓草稿班表外洩。
+drop policy if exists "sessions_select_all"     on public.training_sessions;
+drop policy if exists "sessions_select_visible" on public.training_sessions;
+
+do $sess$
+begin
+  if exists (
+    select 1
+      from pg_proc p
+      join pg_namespace n on n.oid = p.pronamespace
+     where n.nspname = 'public'
+       and p.proname = 'is_month_visible'
+  ) then
+    execute $p$
+create policy "sessions_select_visible" on public.training_sessions
+  for select to anon, authenticated
+  using (
+    public.is_admin()
+    or public.is_month_visible(
+         extract(year  from session_date)::int,
+         extract(month from session_date)::int
+       )
+  )$p$;
+  else
+    raise notice 'schema.sql：is_month_visible() 不存在，班表讀取暫設為僅管理員（請接著跑 migration-training-months.sql）';
+    execute $p$
+create policy "sessions_select_visible" on public.training_sessions
+  for select to anon, authenticated
+  using (public.is_admin())$p$;
+  end if;
+end
+$sess$;
+
+comment on policy "sessions_select_visible" on public.training_sessions is
+  '管理員全看；其他人只看已發布且生效時間已到的月份（定義見 migration-training-months.sql B-2）。';
 
 drop policy if exists "sessions_admin_all" on public.training_sessions;
 create policy "sessions_admin_all" on public.training_sessions

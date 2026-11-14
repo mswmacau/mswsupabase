@@ -1,6 +1,7 @@
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { isSupabaseConfigured } from "@/lib/supabase/env";
+import { writeAuditLog } from "@/lib/audit";
 import {
   jsonBadJson,
   jsonConflict,
@@ -86,15 +87,32 @@ export async function POST(request: Request) {
       ? Math.min(3650, Math.max(1, Math.trunc(daysRaw)))
       : 90;
 
+    // 先算出最終值，RPC 與稽核摘要共用同一份，避免兩邊寫出不同的內容
+    const title = text(body.title) || "MSW 專屬優惠券";
+    const month = text(body.month) || null;
+
     const { error } = await supabase.rpc("issue_coupons", {
       p_user_ids: userIds,
-      p_title: text(body.title) || "MSW 專屬優惠券",
+      p_title: title,
       p_desc: text(body.description) || null,
-      p_month: text(body.month) || null,
+      p_month: month,
       p_days: days,
     });
 
     if (error) return jsonDbError("POST /api/admin/coupons issue", error);
+
+    // P1-C：發券會產生實質權益，屬於危險操作 —— 成功後寫一筆稽核。
+    // writeAuditLog 內部包 try/catch，日誌失敗不會阻斷發券（只 console.error）。
+    await writeAuditLog(
+      supabase,
+      user.id,
+      "coupons",
+      "issue",
+      `發放優惠券 ${userIds.length} 張給 ${userIds.length} 位會員（標題「${title.slice(
+        0,
+        60
+      )}」，有效 ${days} 天${month ? `，適用月份 ${month}` : ""}）`
+    );
 
     revalidatePath("/admin/monthly");
     revalidatePath("/admin/coupons");
@@ -143,6 +161,18 @@ export async function PATCH(request: Request) {
     // 已核銷／已失效：拒絕重複核銷，DB 不變
     if (result === "already_used") return jsonConflict("此優惠券已核銷。");
     if (result !== "ok") return jsonInternal("PATCH /api/admin/coupons unknown result", result);
+
+    // P1-C：核銷會消耗會員的券，屬於危險操作 —— 成功後寫一筆稽核。
+    await writeAuditLog(
+      supabase,
+      user.id,
+      "coupons",
+      "redeem",
+      `核銷優惠券 ${code.slice(0, 40)}（券名「${(rows[0]?.coupon_title ?? "").slice(
+        0,
+        60
+      )}」，持有人：${rows[0]?.member_name ?? "未提供"}）`
+    );
 
     revalidatePath("/admin/coupons");
 

@@ -7,7 +7,7 @@
  *
  * 【取捨（如實註記）】日誌失敗不阻斷主流程：
  * 寫入點在管理員路由的主寫入成功之後呼叫本函式；本函式自身包 try/catch，
- * 失敗只寫 server log（console.warn），HTTP 回應與已完成的 DB 寫入不受影響。
+ * 失敗只寫 server log（console.error），HTTP 回應與已完成的 DB 寫入不受影響。
  * 理由：操作日誌屬「事後稽核」屬性，不應讓管理員儲存內容因為日誌表暫時故障
  * 而失敗；代價是極少數情況下日誌會缺一筆——server log 留有同一筆錯誤，
  * 必要時可據此手動補記。
@@ -41,12 +41,12 @@ export async function writeAuditLog(
     });
     if (error) {
       // 只記錄、不拋出：日誌失敗不得影響管理員的主流程（見檔頭取捨）
-      console.warn(
+      console.error(
         `[audit] ${module}/${action} 寫入失敗（不影響主流程）：`,
         error.message
       );
     }
   } catch (err) {
-    console.warn(`[audit] ${module}/${action} 寫入例外（不影響主流程）：`, err);
+    console.error(`[audit] ${module}/${action} 寫入例外（不影響主流程）：`, err);
   }
 }
