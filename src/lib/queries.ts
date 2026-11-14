@@ -26,7 +26,7 @@ import {
   getDraftOverride,
   type DraftSectionKey,
 } from "./draft";
-import { currentMonth, monthLabel, todayISO } from "./utils";
+import { addMonths, currentMonth, monthLabel, todayISO } from "./utils";
 import { isUuid } from "./api";
 import type {
   Coupon,
@@ -1610,4 +1610,478 @@ export function getVisibleCoaches(limit = 50): Promise<Coach[]> {
     ["visible-coaches", String(limit)],
     { revalidate: 60 }
   )();
+}
+
+/* ── 後台「今日工作台」唯讀查詢（IA 重整第一階段 20261114）─────────────
+ *
+ * 全部唯讀：不改任何表、不呼叫任何寫入 API、不動 RLS。
+ * 每個數字都回 `number | null`，語意刻意分成兩種：
+ *   null → 「查詢失敗」，畫面顯示「—」
+ *   0    → 「查了，真的是 0」
+ * 這個區分是整頁的前提。首頁若把失敗畫成 0，管理員會以為「今天沒事」，
+ * 而實際上只是查詢掛掉——那比空白更危險。
+ *
+ * 為什麼不用 unstable_cache：後台資料要「重新整理就看到最新」，
+ * 管理員剛審完一筆就跑回首頁，看到舊數字會以為沒生效。
+ * ──────────────────────────────────────────────────────────────────── */
+
+/** 計數結果 → number | null（error 或 count 為 null 一律視為「不知道」） */
+function countOrNull(result: {
+  count: number | null;
+  error: { message?: string } | null;
+}): number | null {
+  if (result.error) {
+    if (process.env.NODE_ENV !== "production") {
+      console.error("[admin-workbench] count failed:", result.error.message);
+    }
+    return null;
+  }
+  return result.count ?? null;
+}
+
+/** ISO 日期（yyyy-mm-dd）加減天數：一律用 UTC 運算，不受執行環境時區影響 */
+function shiftISODate(iso: string, days: number): string {
+  const [y, m, d] = iso.split("-").map(Number);
+  const t = Date.UTC(y, m - 1, d) + days * 86_400_000;
+  return new Date(t).toISOString().slice(0, 10);
+}
+
+/** 'YYYY-MM' → { year, month }；格式不對回 null */
+function monthParts(month: string): { year: number; month: number } | null {
+  const matched = /^(\d{4})-(\d{2})$/.exec(month);
+  if (!matched) return null;
+  return { year: Number(matched[1]), month: Number(matched[2]) };
+}
+
+/** 「等你處理」四張卡的數字 */
+export interface AdminTodoCounts {
+  pendingRuns: number | null;
+  pendingCheckins: number | null;
+  pendingRedemptions: number | null;
+  pendingHyroxPayments: number | null;
+}
+
+/**
+ * 首頁區塊 1「等你處理」：四個待辦數字。
+ *
+ * 狀態值域（寫死在四支查詢裡，改了要同步 schema）：
+ *   run_submissions.status      pending | approved | rejected
+ *   training_checkins.status    pending | approved | rejected
+ *   reward_redemptions.status   pending_approval | pending | completed | cancelled
+ *   event_registrations         payment_status = pending_review 且 status = registered
+ */
+export async function getAdminTodoCounts(): Promise<AdminTodoCounts> {
+  const supabase = await createClient();
+  if (!supabase) {
+    return {
+      pendingRuns: null,
+      pendingCheckins: null,
+      pendingRedemptions: null,
+      pendingHyroxPayments: null,
+    };
+  }
+
+  const [runs, checkins, redemptions, hyrox] = await Promise.all([
+    supabase
+      .from("run_submissions")
+      .select("id", { count: "exact", head: true })
+      .eq("status", "pending"),
+    supabase
+      .from("training_checkins")
+      .select("id", { count: "exact", head: true })
+      .eq("status", "pending"),
+    supabase
+      .from("reward_redemptions")
+      .select("id", { count: "exact", head: true })
+      .eq("status", "pending_approval"),
+    supabase
+      .from("event_registrations")
+      .select("id", { count: "exact", head: true })
+      .eq("status", "registered")
+      .eq("payment_status", "pending_review"),
+  ]);
+
+  return {
+    pendingRuns: countOrNull(runs),
+    pendingCheckins: countOrNull(checkins),
+    pendingRedemptions: countOrNull(redemptions),
+    pendingHyroxPayments: countOrNull(hyrox),
+  };
+}
+
+/** 首頁區塊 2 的單場資料 */
+export interface AdminUpcomingSession {
+  id: string;
+  session_date: string;
+  start_time: string | null;
+  end_time: string | null;
+  title: string;
+  location: string | null;
+  location_override: string | null;
+  capacity: number;
+  status: "open" | "closed" | "cancelled";
+  class_name: string | null;
+  color_key: string | null;
+  /** 已報名＝該場簽到紀錄中非 rejected 的筆數（DB 沒有獨立報名表，見下方註釋） */
+  registered: number;
+  /** 已簽到＝status = approved 的筆數 */
+  checked_in: number;
+}
+
+type UpcomingRow = {
+  id: string;
+  session_date: string;
+  start_time: string | null;
+  end_time: string | null;
+  title: string;
+  location: string | null;
+  location_override: string | null;
+  capacity: number;
+  status: "open" | "closed" | "cancelled";
+  class: { name: string | null; color_key: string | null } | null;
+};
+
+/**
+ * 首頁區塊 2「今日與未來 3 天場次」。
+ *
+ * 「已報名／已簽到」的來源：本專案沒有獨立的報名表，會員按下報名就是
+ * 在 training_checkins 插一列（status 預設 pending，管理員確認後 approved）。
+ * 所以「已報名」= 非 rejected 的簽到列，「已簽到」= approved 的簽到列。
+ * 兩者都取，是為了讓首頁的數字能對得上 /admin/schedule 的「已簽 N／名額」。
+ *
+ * 簽到筆數用「一次 .in() 查回全部再在記憶體統計」，避免每場一次查詢的 N+1。
+ */
+export async function getAdminUpcomingSessions(
+  days = 3
+): Promise<{ ok: boolean; rows: AdminUpcomingSession[] }> {
+  const supabase = await createClient();
+  if (!supabase) return { ok: false, rows: [] };
+
+  const from = todayISO();
+  const to = shiftISODate(from, days);
+
+  const { data, error } = await supabase
+    .from("training_sessions")
+    .select(
+      "id, session_date, start_time, end_time, title, location, location_override, capacity, status, class:training_classes(name, color_key)"
+    )
+    .gte("session_date", from)
+    .lte("session_date", to)
+    .order("session_date", { ascending: true })
+    .order("start_time", { ascending: true })
+    .order("id", { ascending: true });
+
+  if (error || !data) {
+    if (process.env.NODE_ENV !== "production") {
+      console.error("[admin-workbench] sessions failed:", error?.message);
+    }
+    return { ok: false, rows: [] };
+  }
+
+  const rows = data as unknown as UpcomingRow[];
+  if (!rows.length) return { ok: true, rows: [] };
+
+  const ids = rows.map((r) => r.id);
+  const { data: checkinData, error: checkinError } = await supabase
+    .from("training_checkins")
+    .select("session_id, status")
+    .in("session_id", ids);
+
+  // 簽到統計失敗不讓整個區塊變成「讀不到」：場次本身是好的，只是人數不知道 → 0/0 會誤導，
+  // 所以標成 -1 讓畫面顯示「—」。
+  const checkinsKnown = !checkinError;
+  const registeredMap = new Map<string, number>();
+  const approvedMap = new Map<string, number>();
+  if (checkinsKnown) {
+    for (const row of (checkinData ?? []) as {
+      session_id: string;
+      status: string;
+    }[]) {
+      if (row.status !== "rejected") {
+        registeredMap.set(
+          row.session_id,
+          (registeredMap.get(row.session_id) ?? 0) + 1
+        );
+      }
+      if (row.status === "approved") {
+        approvedMap.set(
+          row.session_id,
+          (approvedMap.get(row.session_id) ?? 0) + 1
+        );
+      }
+    }
+  }
+
+  return {
+    ok: true,
+    rows: rows.map((row) => {
+      const cls = Array.isArray(row.class) ? row.class[0] ?? null : row.class;
+      return {
+        id: row.id,
+        session_date: row.session_date,
+        start_time: row.start_time,
+        end_time: row.end_time,
+        title: row.title,
+        location: row.location,
+        location_override: row.location_override,
+        capacity: Number(row.capacity ?? 0),
+        status: row.status,
+        class_name: cls?.name ?? null,
+        color_key: cls?.color_key ?? null,
+        registered: checkinsKnown ? registeredMap.get(row.id) ?? 0 : -1,
+        checked_in: checkinsKnown ? approvedMap.get(row.id) ?? 0 : -1,
+      };
+    }),
+  };
+}
+
+/** 某個月班表的發布狀態；missing = training_months 沒有這一列（從未建立） */
+export type AdminMonthPublishState =
+  | "published"
+  | "draft"
+  | "missing"
+  | null;
+
+/** 首頁區塊 4「本月進度」 */
+export interface AdminMonthProgress {
+  ok: boolean;
+  month: string;
+  monthText: string;
+  sessionCount: number | null;
+  publishState: AdminMonthPublishState;
+  nextMonth: string;
+  nextMonthText: string;
+  nextSessionCount: number | null;
+  nextState: AdminMonthPublishState;
+}
+
+/**
+ * 首頁區塊 4「本月進度」：本月／下月的場次數與發布狀態。
+ *
+ * `training_months` 是 (year, month) 複合主鍵、status in ('draft','published')。
+ * **該月沒有列就是 missing（未建立）**，不能當成 draft——這兩件事對管理員
+ * 的意義完全不同（「還沒排」vs「排好了但沒發布」）。
+ */
+export async function getAdminMonthProgress(): Promise<AdminMonthProgress> {
+  const month = currentMonth();
+  const nextMonth = addMonths(month, 1);
+  const base: AdminMonthProgress = {
+    ok: false,
+    month,
+    monthText: monthLabel(month),
+    sessionCount: null,
+    publishState: null,
+    nextMonth,
+    nextMonthText: monthLabel(nextMonth),
+    nextSessionCount: null,
+    nextState: null,
+  };
+
+  const supabase = await createClient();
+  if (!supabase) return base;
+
+  const curParts = monthParts(month);
+  const nextParts = monthParts(nextMonth);
+  if (!curParts || !nextParts) return base;
+
+  const curRange = trainingMonthRange(curParts.year, curParts.month);
+  const nextRange = trainingMonthRange(nextParts.year, nextParts.month);
+
+  const [curMonthRow, nextMonthRow, curSessions, nextSessions] =
+    await Promise.all([
+      supabase
+        .from("training_months")
+        .select("status")
+        .eq("year", curParts.year)
+        .eq("month", curParts.month)
+        .maybeSingle(),
+      supabase
+        .from("training_months")
+        .select("status")
+        .eq("year", nextParts.year)
+        .eq("month", nextParts.month)
+        .maybeSingle(),
+      curRange
+        ? supabase
+            .from("training_sessions")
+            .select("id", { count: "exact", head: true })
+            .gte("session_date", curRange.from)
+            .lte("session_date", curRange.to)
+        : Promise.resolve({ count: null, error: null }),
+      nextRange
+        ? supabase
+            .from("training_sessions")
+            .select("id", { count: "exact", head: true })
+            .gte("session_date", nextRange.from)
+            .lte("session_date", nextRange.to)
+        : Promise.resolve({ count: null, error: null }),
+    ]);
+
+  const publishState: AdminMonthPublishState = curMonthRow.error
+    ? null
+    : (curMonthRow.data?.status as "draft" | "published" | undefined) ?? "missing";
+  const nextState: AdminMonthPublishState = nextMonthRow.error
+    ? null
+    : (nextMonthRow.data?.status as "draft" | "published" | undefined) ?? "missing";
+
+  return {
+    ok: !curMonthRow.error && !nextMonthRow.error,
+    month,
+    monthText: monthLabel(month),
+    sessionCount: countOrNull(curSessions),
+    publishState,
+    nextMonth,
+    nextMonthText: monthLabel(nextMonth),
+    nextSessionCount: countOrNull(nextSessions),
+    nextState,
+  };
+}
+
+/** 首頁區塊 4「需要你決定」的單一條目 */
+export interface AdminDecisionItem {
+  key: string;
+  text: string;
+  href: string;
+  tone: "warn" | "info";
+}
+
+/**
+ * 首頁區塊 4「需要你決定」：只放「管理員不做，會員就會卡住」的事。
+ *
+ * 現階段三條規則（全部沿用既有欄位，沒有新增功能）：
+ *   1. 本月班表不是 published → 會員看不到本月課表
+ *   2. 下月班表 missing / draft  → 月底前不處理，下個月就沒課表
+ *   3. HYROX 場次已上架但 payment_qr_path 為 null → 會員無法付款
+ *
+ * 「班表狀態」由呼叫端傳入（頁面已經為了區塊 4 查過一次），避免同一頁
+ * 對同一張表查兩次；本函式自己只多查一支 HYROX 收款碼計數。
+ */
+export async function getAdminDecisions(
+  progress: AdminMonthProgress
+): Promise<{ ok: boolean; items: AdminDecisionItem[] }> {
+  const supabase = await createClient();
+  if (!supabase) return { ok: false, items: [] };
+
+  const { count: hyroxMissingQr, error: hyroxError } = await supabase
+    .from("events")
+    .select("id", { count: "exact", head: true })
+    .eq("series", "hyrox")
+    .eq("status", "published")
+    .is("payment_qr_path", null);
+
+  const items: AdminDecisionItem[] = [];
+
+  if (progress.ok) {
+    if (progress.publishState === "draft") {
+      items.push({
+        key: "month-draft",
+        text: `${progress.monthText}班表還是草稿，會員看不到本月課表`,
+        href: "/admin/schedule",
+        tone: "warn",
+      });
+    } else if (progress.publishState === "missing") {
+      items.push({
+        key: "month-missing",
+        text: `${progress.monthText}班表還沒建立`,
+        href: "/admin/schedule",
+        tone: "warn",
+      });
+    }
+
+    if (progress.nextState === "missing") {
+      items.push({
+        key: "next-missing",
+        text: `${progress.nextMonthText}班表還沒建立，月底前要排好並發布`,
+        href: "/admin/schedule",
+        tone: "warn",
+      });
+    } else if (progress.nextState === "draft") {
+      items.push({
+        key: "next-draft",
+        text: `${progress.nextMonthText}班表還是草稿，尚未發布`,
+        href: "/admin/schedule",
+        tone: "warn",
+      });
+    }
+  }
+
+  if (!hyroxError && (hyroxMissingQr ?? 0) > 0) {
+    items.push({
+      key: "hyrox-qr",
+      text: `${hyroxMissingQr} 場 HYROX 場次未上傳收款碼，會員無法付款`,
+      href: "/admin/hyrox",
+      tone: "warn",
+    });
+  }
+
+  // 「需要你決定」是行動清單：班表狀態讀不到時整區塊顯示「暫時無法判斷」，
+  // 而不是把「讀不到」演成「沒事」。HYROX 那條失敗不影響班表那幾條。
+  return { ok: progress.ok && !hyroxError, items };
+}
+
+/** 首頁區塊 5 的單筆稽核列 */
+export interface AdminRecentAuditRow {
+  id: string;
+  created_at: string;
+  module: string;
+  action: string;
+  summary: string;
+  profile: { id: string; display_name: string | null } | null;
+}
+
+/**
+ * 首頁區塊 5「最近操作」：admin_audit_log 最近 N 筆。
+ *
+ * module / action 一律顯示**原始字串**，不在此改名：
+ * 稽核日誌是「誰在何時改了什麼」的唯一憑證，歷史紀錄的語意靠這些字串，
+ * 改名等於改寫歷史（見 docs/後台資訊架構重整方案 §5 不要動清單 1、2）。
+ */
+export async function getRecentAuditLog(
+  limit = 5
+): Promise<{ ok: boolean; rows: AdminRecentAuditRow[] }> {
+  const supabase = await createClient();
+  if (!supabase) return { ok: false, rows: [] };
+
+  const { data, error } = await supabase
+    .from("admin_audit_log")
+    .select("id, created_at, module, action, summary, profile:profiles(id, display_name)")
+    .order("created_at", { ascending: false })
+    .limit(limit);
+
+  if (error || !data) {
+    if (process.env.NODE_ENV !== "production") {
+      console.error("[admin-workbench] audit failed:", error?.message);
+    }
+    return { ok: false, rows: [] };
+  }
+
+  return { ok: true, rows: data as unknown as AdminRecentAuditRow[] };
+}
+
+/**
+ * 首頁底部的兩顆虛榮數字（累積里程、會員數）。
+ *
+ * 為什麼不沿用 `getSiteStats()` + `getAdminCounts()`：
+ * 那兩支在查詢失敗時回 `EMPTY_STATS` / `{ members: 0 }`——失敗被畫成 0，
+ * 而 0 公里、0 位會員在畫面上讀起來像「資料被清空」或「還沒有人用」，
+ * 都不是事實。這裡改成 `number | null`，失敗顯示「—」。
+ */
+export async function getAdminQuickStats(): Promise<{
+  totalKm: number | null;
+  members: number | null;
+}> {
+  const supabase = await createClient();
+  if (!supabase) return { totalKm: null, members: null };
+
+  const [statsResult, membersResult] = await Promise.all([
+    supabase.from("site_stats").select("total_km").maybeSingle(),
+    supabase.from("profiles").select("id", { count: "exact", head: true }),
+  ]);
+
+  const totalKm =
+    statsResult.error || statsResult.data?.total_km == null
+      ? null
+      : Number(statsResult.data.total_km);
+
+  return { totalKm, members: countOrNull(membersResult) };
 }

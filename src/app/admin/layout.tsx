@@ -45,16 +45,19 @@ where id = (select id from auth.users where email = 'you@example.com');`}
   }
 
   return (
-    <section className="pt-20 pb-20 md:pt-28">
+    <section className="pt-20 pb-20 md:pt-[5.5rem]">
       <div className="container-msw">
-        {/* <768px 時由 AdminNav 的 56px 抽屜列帶「後台」標題，這裡不重複佔高度 */}
-        <div className="mb-8 hidden md:block">
-          <h1 className="mt-2 text-2xl font-black">MSW 後台管理</h1>
-        </div>
+        {/*
+         * h1 只留給螢幕閱讀器：桌面先前那行「MSW 後台管理」佔掉 60px，
+         * 是 20 項側欄在 900px 高視窗被截斷的最後一根稻草。
+         * 視覺上的「你在後台」由 <768px 的 56px 列與 ≥768px 的分組側欄承擔。
+         */}
+        <h1 className="sr-only">MSW 後台管理</h1>
 
         <div className="grid gap-6 md:grid-cols-[220px_1fr] md:gap-8">
-          <aside className="min-w-0 md:sticky md:top-24 md:self-start">
-            <div className="card-dark overflow-hidden p-0 md:p-3 md:max-h-[calc(100vh-7.5rem)] md:overflow-y-auto md:overscroll-contain">
+          <aside className="min-w-0 md:sticky md:top-[5.5rem] md:self-start">
+            {/* overflow-y-auto 只在視窗高度 < 760px 時當保險；1440×900 不得觸發 */}
+            <div className="card-dark overflow-hidden p-0 md:max-h-[calc(100dvh-5rem)] md:overflow-y-auto md:overscroll-contain md:p-2">
               <AdminNav />
             </div>
           </aside>
