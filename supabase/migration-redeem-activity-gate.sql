@@ -311,6 +311,20 @@ create policy "settings_select_admin" on public.app_settings
 
 do $$ begin raise notice 'A 段 OK — redeem_reward 已加入運動紀錄門檻；B 段 OK — app_settings anon 收權'; end $$;
 
+-- -------------------------------------------------------------
+-- （可選）讓 DB 內的函式註解也反映新閘
+--
+-- 上面的 comment on function 刻意與歷史檔逐字相同（保證 diff 只有插入段）。
+-- 若希望 \df+ public.redeem_reward 也能看到新門檻，另外單獨執行這一行：
+--
+--   comment on function public.redeem_reward(uuid, text) is
+--     '兌換禮品（會員，限本人）：單一交易完成扣分（credit_points, ref_type=reward）、扣庫存、'
+--     '產生 12 位取貨碼；冪等鍵 (user_id, idempotency_key) 重打回原結果；'
+--     '需至少一筆已核可運動紀錄（run_submissions 或 training_checkins，status=approved），'
+--     '否則回 NO_ACTIVITY（2026-11-15 止血，見 migration-redeem-activity-gate.sql）；'
+--     '新會員（profiles.created_at 未滿 7 日）→ pending_approval（分照扣，券未生效）。';
+-- -------------------------------------------------------------
+
 -- =============================================================
 -- 站主執行後驗證（Dashboard → SQL Editor，逐條貼上執行）
 -- =============================================================
