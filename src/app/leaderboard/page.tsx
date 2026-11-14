@@ -66,7 +66,7 @@ export default async function LeaderboardPage({
         <div className="noise-overlay" />
 
         <div className="container-msw relative z-10">
-          <div className="relative pb-14 pt-28 md:pt-36 lg:pb-16">
+          <div className="relative pb-8 pt-20 md:pb-14 md:pt-36 lg:pb-16">
             <div className="lg:pl-14">
               <span className="eyebrow">Leaderboard</span>
 
@@ -84,7 +84,7 @@ export default async function LeaderboardPage({
                 </span>
               </h1>
 
-              <div className="mt-10 grid gap-10 lg:grid-cols-12 lg:gap-8">
+              <div className="mt-6 grid gap-6 md:mt-10 md:gap-10 lg:grid-cols-12 lg:gap-8">
                 <p className="text-base leading-relaxed text-white/70 lg:col-span-6">
                   月度榜以當月經後台確認的跑步里程排序；總榜則是會員累積的總里程與積分。
                   提交紀錄經後台確認後才會計入排名。
@@ -111,7 +111,7 @@ export default async function LeaderboardPage({
                     </div>
                   )}
                   <div className="mt-5 h-px w-16 bg-white/20" />
-                  <p className="mt-5 text-sm leading-relaxed text-white/65">
+                  <p className="mt-3 text-sm leading-relaxed text-white/65 md:mt-5">
                     {monthly.length
                       ? `本月已有 ${monthly.length} 位會員上榜，目標 ${RULES.MONTHLY_GOAL_KM} 公里。`
                       : t.empty_month}
@@ -125,7 +125,7 @@ export default async function LeaderboardPage({
         {/* 大數字三聯 */}
         <div className="relative z-10 border-t border-white/10">
           <div className="container-msw">
-            <div className="grid grid-cols-1 divide-y divide-white/10 sm:grid-cols-3 sm:divide-x sm:divide-y-0">
+            <div className="grid grid-cols-3 divide-x divide-white/10">
               {[
                 {
                   value: String(monthly.length).padStart(2, "0"),
@@ -146,20 +146,20 @@ export default async function LeaderboardPage({
                   accent: true,
                 },
               ].map((f) => (
-                <div key={f.label} className="py-8 sm:px-8 sm:first:pl-0">
-                  <div className="flex items-start gap-2">
+                <div key={f.label} className="py-4 pl-3 pr-2 first:pl-0 md:py-8 sm:px-8 sm:first:pl-0">
+                  <div className="flex flex-wrap items-start gap-x-2 gap-y-0.5">
                     <span
-                      className={`stat-figure text-5xl leading-none md:text-6xl ${
+                      className={`stat-figure text-3xl leading-none sm:text-5xl md:text-6xl ${
                         f.accent ? "text-vital-bright" : "text-white"
                       }`}
                     >
                       {f.value}
                     </span>
-                    <span className="text-accent-blue mt-2 text-[11px] font-semibold uppercase tracking-[0.22em]">
+                    <span className="text-accent-blue mt-1 text-[11px] font-semibold uppercase tracking-[0.22em] sm:mt-2">
                       {f.unit}
                     </span>
                   </div>
-                  <div className="mt-4 text-[11px] font-semibold uppercase tracking-[0.22em] text-white/55">
+                  <div className="mt-2 text-[11px] font-semibold uppercase tracking-[0.22em] text-white/55 md:mt-4">
                     {f.label}
                   </div>
                 </div>

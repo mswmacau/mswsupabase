@@ -1,6 +1,6 @@
 "use client";
 
-import { useId, useMemo, useState } from "react";
+import { useEffect, useId, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import {
   ArrowRight,
@@ -102,6 +102,19 @@ export function LeaderboardSearch({
   const searchId = useId();
   const q = query.trim().toLowerCase();
 
+  /* 390 寬時月份 chips 要橫向捲動才放得下 6 個月，
+   * 捲動起點在 1 月會令當前月份藏在畫面外——掛載／換月時把作用中的 chip 置中。
+   * 只改水平捲動量，不用 scrollIntoView（會連頁面一起捲）。 */
+  const chipWrapRef = useRef<HTMLDivElement>(null);
+  const activeChipRef = useRef<HTMLAnchorElement>(null);
+
+  useEffect(() => {
+    const wrap = chipWrapRef.current;
+    const chip = activeChipRef.current;
+    if (!wrap || !chip) return;
+    wrap.scrollLeft = chip.offsetLeft - (wrap.clientWidth - chip.offsetWidth) / 2;
+  }, [activeMonth]);
+
   const monthlyRanked = useMemo<RankedRow[]>(
     () => monthly.map((row, i) => ({ row, rank: i + 1 })),
     [monthly]
@@ -124,20 +137,25 @@ export function LeaderboardSearch({
     <>
       {/* ============ 月份切換 + 搜尋（sticky 層疊） ============ */}
       <div className="sticky top-16 z-30 border-b border-white/10 glass md:top-20">
-        <div className="container-msw flex items-center gap-4 overflow-x-auto py-3">
+        <div className="container-msw flex items-center gap-2 py-0.5 md:gap-4 md:py-3">
           <span className="hidden shrink-0 items-center gap-1.5 text-[11px] font-semibold uppercase tracking-[0.22em] text-white/50 sm:flex">
             <CalendarDays size={14} />
             月份
           </span>
-          <div className="flex shrink-0 gap-2">
+          {/* 手機：chips 自己捲（保留搜尋框留在畫面上）；桌面：不捲，靠搜尋框的 ml-auto 靠右 */}
+          <div
+            ref={chipWrapRef}
+            className="flex min-w-0 flex-1 gap-2 overflow-x-auto md:flex-none md:overflow-visible"
+          >
             {months.map((mm) => {
               const active = mm === activeMonth;
               return (
                 <Link
                   key={mm}
                   href={`/leaderboard?m=${mm}`}
+                  ref={active ? activeChipRef : undefined}
                   aria-current={active ? "page" : undefined}
-                  className={`stat-figure inline-flex min-h-11 items-center px-4 text-sm transition ${
+                  className={`stat-figure inline-flex min-h-11 shrink-0 items-center px-3 text-sm transition md:px-4 ${
                     active
                       ? "slab bg-vital text-white"
                       : "text-white/60 hover:text-white"
@@ -157,7 +175,7 @@ export function LeaderboardSearch({
             <Search
               size={14}
               aria-hidden
-              className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-white/50"
+              className="pointer-events-none absolute left-2 top-1/2 -translate-y-1/2 text-white/50 sm:left-3"
             />
             <input
               id={searchId}
@@ -165,7 +183,7 @@ export function LeaderboardSearch({
               value={query}
               onChange={(e) => setQuery(e.target.value)}
               placeholder="搜尋會員"
-              className="field w-32 py-2 pl-9 pr-3 text-sm sm:w-44 lg:w-56"
+              className="field w-28 py-2 pl-8 pr-2 text-xs sm:w-44 sm:pl-9 sm:pr-3 sm:text-sm lg:w-56"
             />
           </div>
         </div>

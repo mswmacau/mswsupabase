@@ -107,7 +107,7 @@ export default async function DashboardPage() {
           {/* 會員卡：積分超大數字（跨 2 列 2 行） */}
           <div
             style={CUT_MD}
-            className="clip-notch-br relative overflow-hidden border border-[var(--line-fine)] bg-gradient-to-br from-cobalt/30 via-ink-soft to-ink-soft p-7 md:p-8 lg:col-span-5 lg:row-span-2"
+            className="clip-notch-br relative order-2 overflow-hidden border border-[var(--line-fine)] bg-gradient-to-br from-cobalt/30 via-ink-soft to-ink-soft p-7 md:p-8 lg:order-1 lg:col-span-5 lg:row-span-2"
           >
             <div className="hero-grid absolute inset-0 opacity-30" />
             <div className="noise-overlay" />
@@ -183,7 +183,7 @@ export default async function DashboardPage() {
           </div>
 
           {/* 總里程 */}
-          <div className="clip-notch card-dark z-raise flex flex-col justify-between p-6 lg:col-span-4">
+          <div className="clip-notch card-dark z-raise order-3 flex flex-col justify-between p-6 lg:order-2 lg:col-span-4">
             <div className="flex items-center gap-2 text-[11px] uppercase tracking-[0.22em] text-white/55">
               <Route size={14} /> Total Distance
             </div>
@@ -203,7 +203,7 @@ export default async function DashboardPage() {
           {/* 優惠券 */}
           <Link
             href="/dashboard/coupons"
-            className="clip-notch card-dark z-raise flex flex-col justify-between p-6 transition hover:border-vital/50 lg:col-span-3"
+            className="clip-notch card-dark z-raise order-4 flex flex-col justify-between p-6 transition hover:border-vital/50 lg:order-3 lg:col-span-3"
           >
             <div className="flex items-center gap-2 text-[11px] uppercase tracking-[0.22em] text-white/55">
               <Ticket size={14} /> Coupons
@@ -221,14 +221,14 @@ export default async function DashboardPage() {
             </div>
           </Link>
 
-          {/* 本月進度 */}
-          <div className="clip-notch-br card-dark z-raise p-6 lg:col-span-7">
+          {/* 本月進度：手機排第一（主動作要在首屏），桌面維持第四格 lg:order-4 */}
+          <div className="clip-notch-br card-dark z-raise order-1 p-4 md:p-6 lg:order-4 lg:col-span-7">
             <div className="flex flex-wrap items-end justify-between gap-4">
               <div className="min-w-0">
                 <div className="text-[11px] uppercase tracking-[0.22em] text-white/55">
                   {monthLabel(month)} 跑步進度
                 </div>
-                <div className="mt-2 flex flex-wrap items-baseline gap-2">
+                <div className="mt-1.5 flex flex-wrap items-baseline gap-2 md:mt-2">
                   <span className="stat-figure text-4xl text-accent-blue md:text-5xl">
                     {formatKm(monthKm.km)}
                   </span>
@@ -245,11 +245,11 @@ export default async function DashboardPage() {
               </span>
             </div>
 
-            <div className="mt-5">
+            <div className="mt-3 md:mt-5">
               <ProgressBar value={monthKm.km} max={goal} />
             </div>
 
-            <p className="mt-4 text-xs leading-relaxed text-white/60">
+            <p className="mt-2 text-xs leading-relaxed text-white/60 md:mt-4">
               {monthKm.km >= goal
                 ? "已達標！月底結算後會自動發放優惠券。"
                 : `還差 ${formatKm(goal - monthKm.km)} 公里達標。`}
@@ -262,7 +262,7 @@ export default async function DashboardPage() {
 
             <Link
               href="/run"
-              className="btn-base btn-vital btn-slab mt-6 min-h-11 w-full text-sm"
+              className="btn-base btn-vital btn-slab mt-3 min-h-11 w-full text-sm md:mt-6"
             >
               上傳跑步紀錄 <ArrowRight size={16} />
             </Link>

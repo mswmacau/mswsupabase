@@ -113,7 +113,8 @@ function SessionRow({
           )}
         </div>
 
-        <div className="ml-auto flex shrink-0 basis-full items-center justify-end gap-1 sm:basis-auto sm:justify-start">
+        {/* 手機：兩顆並排的 44px 觸控目標；≥768px 還原原本的 28px 小按鈕 */}
+        <div className="ml-auto flex shrink-0 basis-full items-center justify-end gap-2 sm:basis-auto sm:justify-start md:gap-1">
           <button
             type="button"
             onClick={() => onEdit(session)}
@@ -121,7 +122,7 @@ function SessionRow({
               session.start_time,
               session.end_time
             )} 的 ${name}`}
-            className="inline-flex items-center gap-1 rounded-lg px-2.5 py-1.5 text-xs font-semibold text-white/70 transition hover:bg-white/10 hover:text-white"
+            className="inline-flex min-h-11 items-center gap-1 rounded-lg px-3 text-sm font-semibold text-white/70 transition hover:bg-white/10 hover:text-white md:min-h-0 md:px-2.5 md:py-1.5 md:text-xs"
           >
             <Pencil size={13} />
             編輯
@@ -133,7 +134,7 @@ function SessionRow({
               session.start_time,
               session.end_time
             )} 的 ${name}`}
-            className="inline-flex items-center gap-1 rounded-lg px-2.5 py-1.5 text-xs font-semibold text-red-300/80 transition hover:bg-red-500/15 hover:text-red-200"
+            className="inline-flex min-h-11 items-center gap-1 rounded-lg px-3 text-sm font-semibold text-red-300/80 transition hover:bg-red-500/15 hover:text-red-200 md:min-h-0 md:px-2.5 md:py-1.5 md:text-xs"
           >
             <Trash2 size={13} />
             刪除

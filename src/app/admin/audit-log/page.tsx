@@ -1,5 +1,6 @@
 import { createClient } from "@/lib/supabase/server";
 import { isSupabaseConfigured } from "@/lib/supabase/env";
+import { AuditLogCards } from "./AuditLogCards";
 
 export const metadata = { title: "操作紀錄" };
 export const dynamic = "force-dynamic";
@@ -139,7 +140,24 @@ export default async function AdminAuditLogPage() {
           尚無操作紀錄
         </div>
       ) : (
-        <div className="overflow-x-auto rounded-xl border border-ink-line">
+        <>
+          {/* ===== 手機（<768px）：卡片列表，避免 720px 表格塞進 348px 容器 =====
+              稽核紀錄是唯讀的，卡片只用「展開」看完整摘要，沒有任何寫入入口。 */}
+          <AuditLogCards
+            rows={rows.map((r) => ({
+              id: r.id,
+              time: formatMacauDateTime(r.created_at),
+              actor: r.profile
+                ? r.profile.display_name ?? "未具名會員"
+                : "已刪除的會員",
+              module: moduleLabel(r.module),
+              action: actionLabel(r.action),
+              summary: r.summary,
+            }))}
+          />
+
+          {/* ===== 桌面（≥768px）：原本的表格，markup 與改動前一致 ===== */}
+          <div className="hidden overflow-x-auto rounded-xl border border-ink-line md:block">
           <table className="w-full min-w-[720px] text-sm">
             <caption className="sr-only">
               管理員操作紀錄（最近 100 筆，依時間倒序）
@@ -173,7 +191,8 @@ export default async function AdminAuditLogPage() {
               ))}
             </tbody>
           </table>
-        </div>
+          </div>
+        </>
       )}
 
       <p className="text-xs leading-relaxed text-white/60">
