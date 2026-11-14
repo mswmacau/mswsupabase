@@ -21,6 +21,21 @@
  * 待辦：若日後允許改 upload.ts，應把 "home" 併回 UploadKind 並刪掉這裡的重複。
  *
  * 邊界（三項都必須有）：載入中（3 秒後補文字）、空清單（文案）、失敗（可重讀／重試）。
+ *
+ * 【手機列式版型（<768px）】
+ * 改動前手機與桌面共用同一份 grid 卡片：每張 = 16:9 預覽圖（390px 寬下約 201px
+ * 高）+ 兩個輸入框 + 一整排 44px 操作鈕，四張就把頁面撐到 9.2 屏。手機的主因
+ * 不是資料多，而是「每張卡都把表單攤開」。
+ * 現在手機改成每張一列（48×48 縮圖 + 標題 + 序號 + 狀態），點一下才展開編輯面板，
+ * 收合狀態每列約 62px。桌面完全維持原本的 grid 卡片（≥768px 才顯示）。
+ *
+ * 【高度預算（390×844 實測後回推）】
+ * 整頁 2,500px 的目標扣掉全站外殼（header 65 + footer 757 + section 上下留白）
+ * 約 1,000px，內容區只剩 1,481px；再扣頁首說明 103、張數卡 110、上傳鈕 104
+ * 與三個 20px 間距，列表只剩約 1,080px → 16 張 × 58 + 15 × 4 = 988px。
+ * 這就是縮圖取 48×48 而不是 64×64 的原因：16 張時 64px 縮圖單是列表就要
+ * 1,280px，目標在數學上不可能達成。48×48 在手機上仍足以辨識是哪一張圖，
+ * 點開後面板裡也有完整 alt 文字可確認。
  */
 
 import { useCallback, useEffect, useRef, useState } from "react";
@@ -33,6 +48,7 @@ import {
   ArrowDown,
   ArrowUp,
   CheckCircle2,
+  ChevronDown,
   ImagePlus,
   Loader2,
   RefreshCw,
@@ -108,6 +124,10 @@ export function SlidesManager({ initialSlides }: { initialSlides: HomeSlide[] })
   );
   const [busyId, setBusyId] = useState<string | null>(null);
   const [reordering, setReordering] = useState(false);
+
+  // 手機列式清單：哪幾張是展開的（各自獨立，允許同時展開多張）。
+  // 桌面卡片是「全部欄位攤開」，不需要這個狀態。
+  const [openIds, setOpenIds] = useState<Record<string, boolean>>({});
 
   // 每列的 alt / link_url 草稿（以 id 為 key）
   const [drafts, setDrafts] = useState<
@@ -345,7 +365,7 @@ export function SlidesManager({ initialSlides }: { initialSlides: HomeSlide[] })
   return (
     <div className="min-w-0 space-y-5">
       {/* ===== 數量與規格 ===== */}
-      <div className="card-dark min-w-0 p-4">
+      <div className="card-dark min-w-0 p-3 md:p-4">
         <div className="flex flex-wrap items-baseline justify-between gap-2">
           <p className="text-sm font-semibold text-white/85">
             目前 {slides.length} / {MAX_SLIDES} 張
@@ -388,7 +408,7 @@ export function SlidesManager({ initialSlides }: { initialSlides: HomeSlide[] })
         type="button"
         disabled={busy || full}
         onClick={() => fileRef.current?.click()}
-        className="flex w-full flex-col items-center gap-2 rounded-xl border border-dashed border-white/25 bg-black/20 px-4 py-6 text-center transition hover:border-cobalt-bright hover:bg-black/40 disabled:opacity-50"
+        className="flex w-full flex-col items-center gap-2 rounded-xl border border-dashed border-white/25 bg-black/20 px-4 py-5 text-center transition hover:border-cobalt-bright hover:bg-black/40 disabled:opacity-50 md:py-6"
       >
         {uploading ? (
           <>
@@ -450,9 +470,220 @@ export function SlidesManager({ initialSlides }: { initialSlides: HomeSlide[] })
         </p>
       )}
 
-      {/* ===== 清單 ===== */}
+      {/* ===== 清單 =====
+          手機（<768px）與桌面（≥768px）是兩份 DOM，但**共用同一組 handler 與 state**
+          （move / toggleActive / saveDraft / removeSlide、drafts、busyId 都只有一份）。
+          刻意不抽成「同一個元件＋參數」：手機是收合列、桌面是攤平的表單卡，
+          兩邊的 markup 幾乎沒有交集，硬抽反而讓桌面版型被捲進改動風險。
+          這裡重複的只有 JSX 呈現，寫入邏輯沒有第二套。 */}
+
+      {/* --- 手機：每張投影片一列（縮圖 64×64 + 標題 + 狀態），點開才展開編輯 --- */}
       {slides.length > 0 && (
-        <ul className="grid min-w-0 grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3">
+        <ul className="min-w-0 space-y-1 md:hidden">
+          {slides.map((slide, index) => {
+            const url = publicAssetUrl(slide.path);
+            const draft = drafts[slide.id] ?? {
+              alt: slide.alt,
+              link_url: slide.link_url ?? "",
+            };
+            const rowBusy = busyId === slide.id;
+            const disabled = busy || rowBusy;
+            const dirty =
+              draft.alt !== slide.alt ||
+              draft.link_url !== (slide.link_url ?? "");
+            const expanded = openIds[slide.id] === true;
+            const panelId = `slide-panel-${slide.id}`;
+
+            return (
+              <li
+                key={slide.id}
+                className="min-w-0 overflow-hidden rounded-xl border border-ink-line bg-black/25"
+              >
+                <button
+                  type="button"
+                  aria-expanded={expanded}
+                  aria-controls={panelId}
+                  onClick={() =>
+                    setOpenIds((prev) => ({
+                      ...prev,
+                      [slide.id]: !prev[slide.id],
+                    }))
+                  }
+                  className="flex w-full items-center gap-2.5 px-2.5 py-1 text-left transition hover:bg-white/5"
+                >
+                  {/* 縮圖：在按鈕內屬裝飾，用 alt=""（按鈕本身已有文字標籤，
+                      再念一次 alt 對讀屏是重複噪音）。
+                      48×48 而非 64×64：見檔頭「高度預算」——16 張時 64px 縮圖
+                      光列表就要 1,280px，扣掉外殼與頁首後數學上到不了 2,500px。 */}
+                  <span className="relative block h-12 w-12 shrink-0 overflow-hidden rounded-lg bg-black/40">
+                    {url ? (
+                      /* eslint-disable-next-line @next/next/no-img-element */
+                      <img
+                        src={url}
+                        alt=""
+                        loading="lazy"
+                        decoding="async"
+                        className="h-full w-full object-cover"
+                      />
+                    ) : (
+                      <span className="flex h-full items-center justify-center px-1 text-center text-[9px] leading-tight text-white/40">
+                        無圖
+                      </span>
+                    )}
+                    <span className="absolute left-0 top-0 rounded-br-md bg-black/75 px-1 text-[10px] font-semibold leading-4 text-white/85">
+                      {index + 1}
+                    </span>
+                  </span>
+
+                  <span className="min-w-0 flex-1">
+                    <span className="block truncate text-[13px] font-semibold text-white/85">
+                      {draft.alt.trim() === "" ? "（未填替代文字）" : draft.alt}
+                    </span>
+                    <span className="mt-0.5 flex items-center gap-1.5">
+                      <span className="text-[11px] leading-4 text-white/55">
+                        第 {index + 1} 張
+                      </span>
+                      <span
+                        className={`rounded border px-1 text-[10px] font-semibold leading-4 ${
+                          slide.is_active
+                            ? "border-emerald-500/50 text-emerald-300"
+                            : "border-amber-500/50 text-amber-300"
+                        }`}
+                      >
+                        {slide.is_active ? "啟用中" : "已停用"}
+                      </span>
+                      {dirty && (
+                        <span className="text-[10px] leading-4 text-white/45">
+                          未儲存
+                        </span>
+                      )}
+                    </span>
+                  </span>
+
+                  <ChevronDown
+                    size={16}
+                    aria-hidden
+                    className={`shrink-0 text-white/45 transition-transform ${
+                      expanded ? "rotate-180" : ""
+                    }`}
+                  />
+                </button>
+
+                {expanded && (
+                  <div
+                    id={panelId}
+                    className="min-w-0 space-y-2.5 border-t border-ink-line p-3"
+                  >
+                    <label className="block min-w-0">
+                      <span className="mb-1 block text-[11px] font-semibold text-white/60">
+                        替代文字（必填）
+                      </span>
+                      <input
+                        value={draft.alt}
+                        maxLength={120}
+                        disabled={disabled}
+                        onChange={(e) =>
+                          setDrafts((prev) => ({
+                            ...prev,
+                            [slide.id]: { ...draft, alt: e.target.value },
+                          }))
+                        }
+                        placeholder="例如：會員在館內進行街頭健身訓練"
+                        className="field min-w-0 px-2.5 py-1.5 text-xs"
+                      />
+                    </label>
+
+                    <label className="block min-w-0">
+                      <span className="mb-1 block text-[11px] font-semibold text-white/60">
+                        連結（選填，只接受 / 開頭）
+                      </span>
+                      <input
+                        value={draft.link_url}
+                        maxLength={300}
+                        disabled={disabled}
+                        onChange={(e) =>
+                          setDrafts((prev) => ({
+                            ...prev,
+                            [slide.id]: { ...draft, link_url: e.target.value },
+                          }))
+                        }
+                        placeholder="/events"
+                        className="field min-w-0 px-2.5 py-1.5 text-xs"
+                      />
+                    </label>
+
+                    <div className="flex flex-wrap items-center gap-1.5">
+                      <button
+                        type="button"
+                        disabled={disabled || index === 0}
+                        onClick={() => void move(index, -1)}
+                        aria-label={`把第 ${index + 1} 張往上移`}
+                        className="inline-flex min-h-11 min-w-11 items-center justify-center rounded-lg border border-white/25 text-white/80 transition hover:border-white/60 disabled:opacity-35"
+                      >
+                        <ArrowUp size={15} />
+                      </button>
+                      <button
+                        type="button"
+                        disabled={disabled || index === slides.length - 1}
+                        onClick={() => void move(index, 1)}
+                        aria-label={`把第 ${index + 1} 張往下移`}
+                        className="inline-flex min-h-11 min-w-11 items-center justify-center rounded-lg border border-white/25 text-white/80 transition hover:border-white/60 disabled:opacity-35"
+                      >
+                        <ArrowDown size={15} />
+                      </button>
+
+                      <button
+                        type="button"
+                        role="switch"
+                        aria-checked={slide.is_active}
+                        aria-label={`第 ${index + 1} 張是否啟用`}
+                        disabled={disabled}
+                        onClick={() => void toggleActive(slide)}
+                        className={`inline-flex min-h-11 items-center rounded-lg border px-2.5 text-[11px] font-semibold transition disabled:opacity-45 ${
+                          slide.is_active
+                            ? "border-emerald-500/50 text-emerald-300 hover:bg-emerald-500/15"
+                            : "border-white/25 text-white/60 hover:bg-white/5"
+                        }`}
+                      >
+                        {slide.is_active ? "啟用中" : "已停用"}
+                      </button>
+
+                      <button
+                        type="button"
+                        disabled={disabled || !dirty}
+                        onClick={() => void saveDraft(slide)}
+                        className="btn-base btn-ghost min-h-11 px-2.5 py-1.5 text-[11px] disabled:opacity-45"
+                      >
+                        {rowBusy ? (
+                          <Loader2 size={13} className="animate-spin" />
+                        ) : (
+                          <>
+                            <Save size={13} /> 儲存
+                          </>
+                        )}
+                      </button>
+
+                      <button
+                        type="button"
+                        disabled={disabled}
+                        onClick={() => void removeSlide(slide)}
+                        aria-label={`刪除第 ${index + 1} 張輪播圖`}
+                        className="ml-auto inline-flex min-h-11 min-w-11 items-center justify-center rounded-lg border border-red-500/45 text-red-300 transition hover:bg-red-500/15 disabled:opacity-45"
+                      >
+                        <Trash2 size={15} />
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </li>
+            );
+          })}
+        </ul>
+      )}
+
+      {/* --- 桌面（≥768px）：原本的 grid 卡片，markup 與改動前一致 --- */}
+      {slides.length > 0 && (
+        <ul className="hidden min-w-0 grid-cols-1 gap-3 sm:grid-cols-2 md:grid xl:grid-cols-3">
           {slides.map((slide, index) => {
             const url = publicAssetUrl(slide.path);
             const draft = drafts[slide.id] ?? {
