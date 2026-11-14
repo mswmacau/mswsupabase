@@ -1,6 +1,7 @@
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { isSupabaseConfigured } from "@/lib/supabase/env";
+import { writeAuditLog } from "@/lib/audit";
 import {
   isUuid,
   jsonBadJson,
@@ -163,7 +164,9 @@ function mapWriteError(where: string, error: unknown, classBound: boolean): Resp
 }
 
 /** 權限：未設定 400 → 未登入 401 → 非管理員 403 */
-async function requireAdmin(): Promise<{ supabase: Supabase } | { res: Response }> {
+async function requireAdmin(): Promise<
+  { supabase: Supabase; actorId: string } | { res: Response }
+> {
   if (!isSupabaseConfigured) return { res: jsonNotConfigured() };
 
   const supabase = await createClient();
@@ -181,7 +184,8 @@ async function requireAdmin(): Promise<{ supabase: Supabase } | { res: Response 
     .maybeSingle();
   if (profile?.role !== "admin") return { res: jsonForbidden() };
 
-  return { supabase };
+  // actorId 給 admin_audit_log 用（場次變動會直接影響公開的 /schedule）
+  return { supabase, actorId: user.id };
 }
 
 /** capacity：未提供／空字串／null → 30；否則必須是 1–999 的有限數字 */
@@ -214,7 +218,7 @@ export async function POST(request: Request) {
   try {
     const auth = await requireAdmin();
     if ("res" in auth) return auth.res;
-    const { supabase } = auth;
+    const { supabase, actorId } = auth;
 
     const body = await readJson(request);
     if (!body) return jsonBadJson();
@@ -236,10 +240,20 @@ export async function POST(request: Request) {
       return jsonValidation({}, "不支援的操作，action 必須是 create 或 update。");
     }
 
-    if (id || action === "update") {
-      return updateSession(supabase, id as string, body);
+    // 兩條路徑都回 Response：只在 2xx 時補一筆稽核（best-effort，失敗不影響回應）
+    const res = id || action === "update"
+      ? await updateSession(supabase, id as string, body)
+      : await createSession(supabase, body);
+    if (res.ok) {
+      await writeAuditLog(
+        supabase,
+        actorId,
+        "sessions",
+        id ? "update" : "create",
+        id ? `更新訓練場次 ${id}` : "新增訓練場次"
+      );
     }
-    return createSession(supabase, body);
+    return res;
   } catch (err) {
     return jsonDbError("POST /api/admin/sessions", err);
   }
@@ -250,7 +264,7 @@ export async function PATCH(request: Request) {
   try {
     const auth = await requireAdmin();
     if ("res" in auth) return auth.res;
-    const { supabase } = auth;
+    const { supabase, actorId } = auth;
 
     const body = await readJson(request);
     if (!body) return jsonBadJson();
@@ -258,7 +272,11 @@ export async function PATCH(request: Request) {
     const id = isUuid(body.id) ? text(body.id) : null;
     if (!id) return jsonValidation({ id: "缺少有效的場次 id。" }, "請檢查表單內容。");
 
-    return updateSession(supabase, id, body);
+    const res = await updateSession(supabase, id, body);
+    if (res.ok) {
+      await writeAuditLog(supabase, actorId, "sessions", "update", `更新訓練場次 ${id}`);
+    }
+    return res;
   } catch (err) {
     return jsonDbError("PATCH /api/admin/sessions", err);
   }

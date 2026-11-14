@@ -107,6 +107,7 @@ export function Modal({
   children,
   footer,
   width = "max-w-lg",
+  testId,
 }: {
   title: string;
   description?: ReactNode;
@@ -114,6 +115,8 @@ export function Modal({
   children: ReactNode;
   footer?: ReactNode;
   width?: string;
+  /** 給驗收腳本用的固定錨點（選填，不影響樣式與行為） */
+  testId?: string;
 }) {
   const panelRef = useRef<HTMLDivElement>(null);
   const titleId = useId();
@@ -135,6 +138,7 @@ export function Modal({
         aria-labelledby={titleId}
         aria-describedby={description ? descId : undefined}
         tabIndex={-1}
+        data-testid={testId}
         className={`max-h-[92vh] w-full ${width} overflow-y-auto rounded-t-2xl border border-ink-line bg-ink-soft p-5 sm:rounded-xl sm:p-6`}
       >
         <div className="flex items-start justify-between gap-4">

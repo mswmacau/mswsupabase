@@ -278,7 +278,7 @@ export function CoachManager({ coaches }: { coaches: Coach[] }) {
                     type="button"
                     onClick={() => startEdit(c)}
                     disabled={pending}
-                    className="btn-base btn-ghost !px-3 !py-1.5 text-xs"
+                    className="btn-base btn-ghost min-h-11 !px-3 !py-1.5 text-xs md:min-h-0"
                   >
                     編輯
                   </button>
@@ -286,7 +286,7 @@ export function CoachManager({ coaches }: { coaches: Coach[] }) {
                     type="button"
                     onClick={() => remove(c.id, c.name)}
                     disabled={pending}
-                    className="btn-base btn-ghost !px-3 !py-1.5 text-xs !text-red-300"
+                    className="btn-base btn-ghost min-h-11 !px-3 !py-1.5 text-xs !text-red-300 md:min-h-0"
                   >
                     <Trash2 size={14} /> 刪除
                   </button>

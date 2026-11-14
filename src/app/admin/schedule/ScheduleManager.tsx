@@ -355,7 +355,7 @@ export function ScheduleManager({
           <button
             type="button"
             onClick={refreshAll}
-            className="mt-4 inline-flex items-center gap-1.5 rounded-full border border-amber-400/50 px-4 py-1.5 text-xs font-semibold text-amber-100 transition hover:border-amber-300 hover:text-white"
+            className="mt-4 inline-flex min-h-11 items-center gap-1.5 rounded-full border border-amber-400/50 px-4 py-1.5 text-xs font-semibold text-amber-100 transition hover:border-amber-300 hover:text-white md:min-h-0"
           >
             <RotateCw size={13} />
             重新檢查
@@ -444,7 +444,7 @@ export function ScheduleManager({
           }}
           disabled={classes.length === 0}
           title={classes.length === 0 ? "課程主檔還是空的，暫時無法排班" : undefined}
-          className="inline-flex shrink-0 items-center gap-1.5 rounded-full bg-vital px-4 py-2 text-sm font-semibold text-white transition hover:bg-vital-bright disabled:cursor-not-allowed disabled:opacity-55"
+          className="inline-flex min-h-11 shrink-0 items-center gap-1.5 rounded-full bg-vital px-4 py-2 text-sm font-semibold text-white transition hover:bg-vital-bright disabled:cursor-not-allowed disabled:opacity-55 md:min-h-0"
         >
           <CalendarPlus size={15} />
           新增場次

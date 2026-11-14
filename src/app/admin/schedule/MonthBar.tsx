@@ -20,7 +20,7 @@ import { macauMonthDay } from "./format";
 type PendingAction = "publish" | "unpublish" | "copy" | null;
 
 const PILL_BASE =
-  "inline-flex items-center gap-1.5 rounded-full px-3.5 py-1.5 text-xs font-semibold transition disabled:cursor-not-allowed disabled:opacity-60";
+  "inline-flex min-h-11 items-center gap-1.5 rounded-full px-3.5 py-1.5 text-xs font-semibold transition disabled:cursor-not-allowed disabled:opacity-60 md:min-h-0";
 
 const PILL_PRIMARY = `${PILL_BASE} bg-vital text-white hover:bg-vital-bright`;
 const PILL_GHOST = `${PILL_BASE} border border-white/20 text-white/80 hover:border-white/45 hover:text-white`;
@@ -92,7 +92,7 @@ export function MonthBar({
             onClick={onPrev}
             disabled={disabled || busy}
             aria-label="上一個月"
-            className="shrink-0 rounded-lg p-2 text-white/70 transition hover:bg-white/10 hover:text-white disabled:cursor-not-allowed disabled:opacity-40"
+            className="inline-flex min-h-11 min-w-11 shrink-0 items-center justify-center rounded-lg p-2 text-white/70 transition hover:bg-white/10 hover:text-white disabled:cursor-not-allowed disabled:opacity-40 md:min-h-0 md:min-w-0"
           >
             <ChevronLeft size={18} />
           </button>
@@ -107,7 +107,7 @@ export function MonthBar({
             onClick={onNext}
             disabled={disabled || busy}
             aria-label="下一個月"
-            className="shrink-0 rounded-lg p-2 text-white/70 transition hover:bg-white/10 hover:text-white disabled:cursor-not-allowed disabled:opacity-40"
+            className="inline-flex min-h-11 min-w-11 shrink-0 items-center justify-center rounded-lg p-2 text-white/70 transition hover:bg-white/10 hover:text-white disabled:cursor-not-allowed disabled:opacity-40 md:min-h-0 md:min-w-0"
           >
             <ChevronRight size={18} />
           </button>

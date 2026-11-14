@@ -1,6 +1,7 @@
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { isSupabaseConfigured } from "@/lib/supabase/env";
+import { writeAuditLog } from "@/lib/audit";
 import {
   jsonBadJson,
   jsonDbError,
@@ -60,7 +61,8 @@ async function requireAdmin() {
     .maybeSingle();
   if (profile?.role !== "admin") return { error: jsonForbidden() as Response } as const;
 
-  return { supabase } as const;
+  // actorId 給 admin_audit_log 用：教練資料直接顯示在公開的 /coaches 與 /about
+  return { supabase, actorId: user.id } as const;
 }
 
 function revalidateCoachPages() {
@@ -73,7 +75,7 @@ export async function POST(request: Request) {
   try {
     const guard = await requireAdmin();
     if (guard.error) return guard.error;
-    const supabase = guard.supabase;
+    const { supabase, actorId } = guard;
 
     const body = await readJson(request);
     if (!body) return jsonBadJson();
@@ -101,6 +103,7 @@ export async function POST(request: Request) {
         .eq("id", id);
       if (error) return jsonDbError("POST /api/admin/coaches update", error);
       revalidateCoachPages();
+      await writeAuditLog(supabase, actorId, "coaches", "update", `更新教練「${name}」`);
       return jsonOk({ message: "教練資料已更新。", id });
     }
 
@@ -112,6 +115,7 @@ export async function POST(request: Request) {
       .maybeSingle();
     if (error) return jsonDbError("POST /api/admin/coaches insert", error);
     revalidateCoachPages();
+    await writeAuditLog(supabase, actorId, "coaches", "create", `新增教練「${name}」`);
     return jsonOk({ message: "教練已新增。", id: data?.id ?? null });
   } catch {
     return jsonErr("伺服器錯誤，請稍後再試。", "INTERNAL", 500);
@@ -122,7 +126,7 @@ export async function DELETE(request: Request) {
   try {
     const guard = await requireAdmin();
     if (guard.error) return guard.error;
-    const supabase = guard.supabase;
+    const { supabase, actorId } = guard;
 
     const id = new URL(request.url).searchParams.get("id") ?? "";
     if (!id) return jsonValidation({}, "缺少教練 id。");
@@ -131,6 +135,8 @@ export async function DELETE(request: Request) {
     if (error) return jsonDbError("DELETE /api/admin/coaches delete", error);
 
     revalidateCoachPages();
+    // 摘要只留 id：刪除後已查不到姓名，硬查一次反而多一次失敗點
+    await writeAuditLog(supabase, actorId, "coaches", "delete", `刪除教練 id=${id}`);
     return jsonOk({ message: "教練已刪除。" });
   } catch {
     return jsonErr("伺服器錯誤，請稍後再試。", "INTERNAL", 500);

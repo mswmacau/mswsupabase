@@ -1,4 +1,5 @@
-import { ExternalLink } from "lucide-react";
+import Link from "next/link";
+import { ExternalLink, Ruler } from "lucide-react";
 import { RunReviewActions } from "@/components/ReviewActions";
 import { formatDateTime, formatKm } from "@/lib/utils";
 import type { RunSubmission } from "@/lib/types";
@@ -12,10 +13,22 @@ import type { RunSubmission } from "@/lib/types";
  *  - 截圖可點開原圖（無圖時整塊不可點，但仍顯示「圖片無法載入」）
  *  - 只在 status === "pending" 時渲染審核動作（通過／駁回由 ReviewActions 負責）
  *
+ * P1-1：
+ *  - 待審核卡片的「通過」現在要先過二次確認，確認框要講清楚會加多少 km 與多少分，
+ *    所以 cards 需要 pointsPerKm（由 server 端讀 app_settings 傳下來）。
+ *  - 已核准的卡片多一顆「更正里程」——核准後里程已寫進 profiles.total_km，
+ *    誤按時只能從會員管理把它改回去（見 supabase/migration-member-km-correction.sql）。
+ *
  * 390：截圖 `h-40 w-full`（整寬）→ sm 以上才變 160px 正方形縮圖。
  * 資訊欄 `min-w-[200px] flex-1`：flex 子元素需要 min-w 才能正常換行／省略。
  */
-export function RunReviewCard({ submission: s }: { submission: RunSubmission }) {
+export function RunReviewCard({
+  submission: s,
+  pointsPerKm = 1,
+}: {
+  submission: RunSubmission;
+  pointsPerKm?: number;
+}) {
   return (
     <div className="card-dark p-5">
       <div className="flex flex-wrap gap-5">
@@ -80,7 +93,27 @@ export function RunReviewCard({ submission: s }: { submission: RunSubmission }) 
             <p className="mt-2 text-xs text-amber-300">管理員備註：{s.admin_note}</p>
           )}
 
-          {s.status === "pending" && <RunReviewActions submissionId={s.id} />}
+          {s.status === "pending" && (
+            <RunReviewActions
+              submissionId={s.id}
+              km={s.km}
+              pointsPerKm={pointsPerKm}
+            />
+          )}
+
+          {/* 已核准：里程已經加進會員的 total_km，誤按時只能從會員管理更正。
+              掛一顆直達連結，省掉「記住名字 → 去會員頁 → 搜尋 → 開抽屜」四步。 */}
+          {s.status === "approved" && (
+            <div className="mt-3">
+              <Link
+                href={`/admin/members?member=${s.user_id}&action=correct-km`}
+                data-testid="correct-km-link"
+                className="inline-flex min-h-11 items-center gap-1.5 rounded-lg border border-white/20 px-3 text-xs font-semibold text-white/80 transition hover:border-white/45 hover:text-white md:min-h-0 md:py-1.5"
+              >
+                <Ruler size={13} /> 更正里程
+              </Link>
+            </div>
+          )}
         </div>
       </div>
     </div>

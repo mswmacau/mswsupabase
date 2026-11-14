@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { getSubmissionsByStatus } from "@/lib/queries";
+import { getPointsPerKm, getSubmissionsByStatus } from "@/lib/queries";
 import { RunReviewCard } from "../_components/RunReviewCard";
 import { MovedNotice } from "../_components/MovedNotice";
 
@@ -34,7 +34,11 @@ export default async function AdminRunsPage({
     ? status
     : "pending") as "pending" | "approved" | "rejected";
 
-  const items = await getSubmissionsByStatus(active, 100);
+  // pointsPerKm 只給「通過」的二次確認用（確認框要寫出會加幾分）
+  const [items, pointsPerKm] = await Promise.all([
+    getSubmissionsByStatus(active, 100),
+    getPointsPerKm(),
+  ]);
 
   return (
     <div>
@@ -75,7 +79,13 @@ export default async function AdminRunsPage({
 
       <div className="mt-6 space-y-4">
         {items.length ? (
-          items.map((s) => <RunReviewCard key={s.id} submission={s} />)
+          items.map((s) => (
+            <RunReviewCard
+              key={s.id}
+              submission={s}
+              pointsPerKm={pointsPerKm}
+            />
+          ))
         ) : (
           <div className="rounded-xl border border-dashed border-white/15 px-4 py-14 text-center text-sm text-white/70">
             沒有{active === "pending" ? "待確認" : active === "approved" ? "已確認" : "已駁回"}的提交。

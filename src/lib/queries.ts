@@ -1449,6 +1449,39 @@ export async function getSubmissionsByStatus(
   return await attachImageUrls((data as unknown as RunSubmission[]) ?? []);
 }
 
+/**
+ * 每公里積分（app_settings.points_per_km；DB 內建預設 1）。
+ *
+ * 為什麼需要：核准跑步提交的二次確認必須對管理員講清楚「會加幾分」
+ * （P1-1 防誤按）。這個值後台可調（見 migration-points-r1-2-earn.sql 的
+ * setting_num('points_per_km', 1)），所以不能在前端寫死 1，
+ * 否則二次確認顯示的數字與實際加分不一致 —— 「按之前知道後果」正是它的意義。
+ *
+ * 讀不到（未設定／查詢失敗／未配置 Supabase）一律回 1：與 DB 預設值一致，
+ * 寧可保守也不謊報。刻意不加 unstable_cache：admin 頁面是 force-dynamic，
+ * 而且管理員剛改完規則就該看到新值。
+ */
+export async function getPointsPerKm(): Promise<number> {
+  try {
+    const supabase = await createClient();
+    if (!supabase) return 1;
+
+    const { data, error } = await supabase
+      .from("app_settings")
+      .select("value")
+      .eq("key", "points_per_km")
+      .maybeSingle();
+
+    if (error || !data) return 1;
+
+    const raw = (data as { value: unknown }).value;
+    const n = typeof raw === "number" ? raw : Number(raw);
+    return Number.isFinite(n) && n >= 0 ? n : 1;
+  } catch {
+    return 1;
+  }
+}
+
 export async function getPendingCheckins(): Promise<TrainingCheckin[]> {
   const supabase = await createClient();
   if (!supabase) return [];

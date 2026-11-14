@@ -275,7 +275,7 @@ export function EventManager({ events }: { events: Event[] }) {
           >
             <Plus size={16} /> 新增活動
           </button>
-          <label className="flex cursor-pointer items-center gap-2 text-sm text-white/70">
+          <label className="flex min-h-11 cursor-pointer items-center gap-2 text-sm text-white/70 md:min-h-0">
             <input
               type="checkbox"
               checked={showArchived}
@@ -320,7 +320,7 @@ export function EventManager({ events }: { events: Event[] }) {
           <button
             type="button"
             onClick={() => void loadRegCounts()}
-            className="inline-flex items-center gap-1.5 rounded-lg border border-amber-500/50 px-3 py-1.5 text-xs font-semibold text-amber-200 transition hover:bg-amber-500/10"
+            className="inline-flex min-h-11 items-center gap-1.5 rounded-lg border border-amber-500/50 px-3 py-1.5 text-xs font-semibold text-amber-200 transition hover:bg-amber-500/10 md:min-h-0"
           >
             重試
           </button>
@@ -364,7 +364,7 @@ export function EventManager({ events }: { events: Event[] }) {
                 <button
                   type="button"
                   onClick={() => setFormOpen(false)}
-                  className="rounded-lg border border-white/20 px-3 py-1.5 text-sm text-white/70 transition hover:border-white/40"
+                  className="min-h-11 rounded-lg border border-white/20 px-3 py-1.5 text-sm text-white/70 transition hover:border-white/40 md:min-h-0"
                 >
                   關閉
                 </button>
@@ -694,7 +694,7 @@ function EventRow({
                 type="button"
                 aria-expanded={rosterOpen}
                 onClick={() => setRosterOpen((o) => !o)}
-                className="inline-flex items-center gap-1.5 rounded-lg border border-cobalt/40 bg-cobalt/10 px-2.5 py-1 text-xs font-semibold text-blue-200 transition hover:bg-cobalt/20"
+                className="inline-flex min-h-11 items-center gap-1.5 rounded-lg border border-cobalt/40 bg-cobalt/10 px-2.5 py-1 text-xs font-semibold text-blue-200 transition hover:bg-cobalt/20 md:min-h-0"
               >
                 <Users size={13} />
                 站內報名：{registeredCount} 人
@@ -724,7 +724,7 @@ function EventRow({
                   "toggle"
                 )
               }
-              className="inline-flex items-center gap-1.5 rounded-lg border border-white/20 px-3 py-1.5 text-xs font-semibold text-white/80 transition hover:border-white/40 disabled:opacity-50"
+              className="inline-flex min-h-11 items-center gap-1.5 rounded-lg border border-white/20 px-3 py-1.5 text-xs font-semibold text-white/80 transition hover:border-white/40 disabled:opacity-50 md:min-h-0"
             >
               {pending === "toggle" ? (
                 <Loader2 size={14} className="animate-spin" />
@@ -743,7 +743,7 @@ function EventRow({
               type="button"
               disabled={pending !== null}
               onClick={onEdit}
-              className="inline-flex items-center gap-1.5 rounded-lg border border-white/20 px-3 py-1.5 text-xs font-semibold text-white/80 transition hover:border-white/40 disabled:opacity-50"
+              className="inline-flex min-h-11 items-center gap-1.5 rounded-lg border border-white/20 px-3 py-1.5 text-xs font-semibold text-white/80 transition hover:border-white/40 disabled:opacity-50 md:min-h-0"
             >
               <Pencil size={14} /> 編輯
             </button>
@@ -765,7 +765,7 @@ function EventRow({
                 "recover"
               )
             }
-            className="inline-flex items-center gap-1.5 rounded-lg border border-emerald-500/40 px-3 py-1.5 text-xs font-semibold text-emerald-300 transition hover:bg-emerald-500/10 disabled:opacity-50"
+            className="inline-flex min-h-11 items-center gap-1.5 rounded-lg border border-emerald-500/40 px-3 py-1.5 text-xs font-semibold text-emerald-300 transition hover:bg-emerald-500/10 disabled:opacity-50 md:min-h-0"
           >
             {pending === "recover" ? (
               <Loader2 size={14} className="animate-spin" />
@@ -789,7 +789,7 @@ function EventRow({
                 "del"
               )
             }
-            className="inline-flex items-center gap-1.5 rounded-lg border border-red-500/40 px-3 py-1.5 text-xs font-semibold text-red-300 transition hover:bg-red-500/10 disabled:opacity-50"
+            className="inline-flex min-h-11 items-center gap-1.5 rounded-lg border border-red-500/40 px-3 py-1.5 text-xs font-semibold text-red-300 transition hover:bg-red-500/10 disabled:opacity-50 md:min-h-0"
           >
             {pending === "del" ? (
               <Loader2 size={14} className="animate-spin" />
@@ -803,7 +803,7 @@ function EventRow({
       </div>
 
       {ev.status !== "archived" && (
-        <label className="flex w-full items-center gap-2 text-xs text-white/70 sm:w-auto">
+        <label className="flex min-h-11 w-full items-center gap-2 text-xs text-white/70 sm:w-auto md:min-h-0">
           <input
             type="checkbox"
             checked={confirm}
@@ -880,7 +880,7 @@ function EventRoster({ eventId }: { eventId: string }) {
           <button
             type="button"
             onClick={() => void load()}
-            className="rounded-lg border border-white/20 px-2.5 py-1 font-semibold text-white/80 transition hover:border-white/40"
+            className="min-h-11 rounded-lg border border-white/20 px-2.5 py-1 font-semibold text-white/80 transition hover:border-white/40 md:min-h-0"
           >
             重試
           </button>

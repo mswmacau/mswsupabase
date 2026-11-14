@@ -71,7 +71,14 @@ function StatCard({
 }
 
 /**
- * 區塊外殼見 ./Section.tsx（<768px 可折疊、預設收起；≥768px 原標題不變）。
+ * 區塊外殼見 ./Section.tsx（兩個寬度都可折疊：手機預設全收；
+ * 桌面預設只展開「會員增長」一組）。
+ *
+ * 為什麼桌面只留一組：實測 1440 寬初始高度，「訓練場次出席」那一組的內容
+ * 本身就有 ~2,100px（本月場次全部列出），讓它預設展開會直接把頁面推到
+ * 3,906px，超過「桌面初始 ≤3,500」的目標。會員增長只有 +388px，
+ * 留它當起點（管理員最常看的是「社群脹定縮」），其餘點標題展開。
+ *
  * 這裡原本的 Section 已搬去該檔，因為折疊需要 client state，而本檔維持
  * server component（一次取數、同一份資料渲染，不因為改版而多取一次）。
  */
@@ -226,7 +233,12 @@ function NumberCards({ data }: { data: AnalyticsPayload }) {
 function MemberGrowthSection({ data }: { data: MemberGrowthData | null }) {
   if (!data) {
     return (
-      <Section title="會員增長（近 12 個月）" desc="每月有幾多人加入。" summary="讀不到">
+      <Section
+        title="會員增長（近 12 個月）"
+        desc="每月有幾多人加入。"
+        summary="讀不到"
+        defaultOpenDesktop
+      >
         <FailedNote />
       </Section>
     );
@@ -241,6 +253,7 @@ function MemberGrowthSection({ data }: { data: MemberGrowthData | null }) {
       title="會員增長（近 12 個月）"
       desc="每一個月新加入的會員人數，連同累計會員數一睇就知個社群係脹定縮。"
       summary={months.length === 0 ? "無資料" : `本月新增 ${last.new_members} 人`}
+      defaultOpenDesktop
     >
       {months.length === 0 ? (
         <EmptyNote>尚未有會員註冊記錄。</EmptyNote>
@@ -504,7 +517,11 @@ function SessionAttendanceSection({
 }) {
   if (!data) {
     return (
-      <Section title="訓練場次出席" desc="邊場最多人報名、出席率有幾高。" summary="讀不到">
+      <Section
+        title="訓練場次出席"
+        desc="邊場最多人報名、出席率有幾高。"
+        summary="讀不到"
+      >
         <FailedNote />
       </Section>
     );

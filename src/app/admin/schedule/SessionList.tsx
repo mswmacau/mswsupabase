@@ -205,7 +205,7 @@ export function SessionList({
         <button
           type="button"
           onClick={onRetry}
-          className="mt-4 inline-flex items-center gap-1.5 rounded-full border border-white/25 px-4 py-1.5 text-xs font-semibold text-white/85 transition hover:border-white/50 hover:text-white"
+          className="mt-4 inline-flex min-h-11 items-center gap-1.5 rounded-full border border-white/25 px-4 py-1.5 text-xs font-semibold text-white/85 transition hover:border-white/50 hover:text-white md:min-h-0"
         >
           <RotateCw size={13} />
           重試
@@ -237,7 +237,7 @@ export function SessionList({
         <button
           type="button"
           onClick={onCreate}
-          className="mt-4 inline-flex items-center gap-1.5 rounded-full bg-vital px-4 py-2 text-sm font-semibold text-white transition hover:bg-vital-bright"
+          className="mt-4 inline-flex min-h-11 items-center gap-1.5 rounded-full bg-vital px-4 py-2 text-sm font-semibold text-white transition hover:bg-vital-bright md:min-h-0"
         >
           <CalendarPlus size={15} />
           新增一場

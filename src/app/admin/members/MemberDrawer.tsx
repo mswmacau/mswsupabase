@@ -11,6 +11,7 @@ import {
   MapPin,
   Pencil,
   RefreshCw,
+  Ruler,
   Ticket,
   X,
 } from "lucide-react";
@@ -92,12 +93,15 @@ export function MemberDrawer({
   onClose,
   onEdit,
   onAdjustPoints,
+  onCorrectKm,
   onResetPassword,
 }: {
   member: MemberRow;
   onClose: () => void;
   onEdit: (member: MemberRow & { phone?: string | null }) => void;
   onAdjustPoints: (member: MemberRow) => void;
+  /** P1-1：核准跑步提交誤按後，唯一能把 total_km 改回去的入口 */
+  onCorrectKm: (member: MemberRow) => void;
   onResetPassword: (member: MemberRow) => void;
 }) {
   const panelRef = useRef<HTMLDivElement>(null);
@@ -348,7 +352,7 @@ export function MemberDrawer({
                 onClick={() => setReloadKey((k) => k + 1)}
                 disabled={loading}
                 aria-label="重新載入會員詳情"
-                className="btn-base btn-ghost px-3 py-2 text-xs"
+                className="btn-base btn-ghost min-h-11 px-3 py-2 text-xs md:min-h-0"
               >
                 {loading ? (
                   <Loader2 size={14} className="animate-spin" />
@@ -361,15 +365,26 @@ export function MemberDrawer({
                 type="button"
                 onClick={() => onAdjustPoints(detail?.member ?? member)}
                 aria-label="調整積分"
-                className="btn-base btn-ghost px-3 py-2 text-xs"
+                className="btn-base btn-ghost min-h-11 px-3 py-2 text-xs md:min-h-0"
               >
                 <Diff size={14} /> 調整積分
+              </button>
+              {/* P1-1：里程更正。放在積分旁邊，因為誤按核准的情境下管理員
+                  下一個念頭就是「把里程改回去」 */}
+              <button
+                type="button"
+                onClick={() => onCorrectKm(detail?.member ?? member)}
+                aria-label="更正總里程"
+                data-testid="member-km-correct"
+                className="btn-base btn-ghost min-h-11 px-3 py-2 text-xs md:min-h-0"
+              >
+                <Ruler size={14} /> 更正總里程
               </button>
               <button
                 type="button"
                 onClick={() => onResetPassword(detail?.member ?? member)}
                 aria-label="重設密碼"
-                className="btn-base btn-ghost px-3 py-2 text-xs"
+                className="btn-base btn-ghost min-h-11 px-3 py-2 text-xs md:min-h-0"
               >
                 <KeyRound size={14} /> 重設密碼
               </button>
@@ -377,7 +392,7 @@ export function MemberDrawer({
             <button
               type="button"
               onClick={() => onEdit(detail?.member ?? member)}
-              className="btn-base btn-cobalt px-4 py-2 text-xs"
+              className="btn-base btn-cobalt min-h-11 px-4 py-2 text-xs md:min-h-0"
             >
               <Pencil size={14} /> 編輯會員
             </button>

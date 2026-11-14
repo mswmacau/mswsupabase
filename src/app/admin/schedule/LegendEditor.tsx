@@ -275,7 +275,7 @@ export function LegendEditor() {
               <button
                 type="button"
                 onClick={reload}
-                className="mt-4 inline-flex items-center gap-1.5 rounded-full border border-amber-400/50 px-4 py-1.5 text-xs font-semibold text-amber-100 transition hover:border-amber-300 hover:text-white"
+                className="mt-4 inline-flex min-h-11 items-center gap-1.5 rounded-full border border-amber-400/50 px-4 py-1.5 text-xs font-semibold text-amber-100 transition hover:border-amber-300 hover:text-white md:min-h-0"
               >
                 <RotateCw size={13} />
                 重新檢查
@@ -294,7 +294,7 @@ export function LegendEditor() {
               <button
                 type="button"
                 onClick={reload}
-                className="mt-4 inline-flex items-center gap-1.5 rounded-full border border-white/25 px-4 py-1.5 text-xs font-semibold text-white/85 transition hover:border-white/50 hover:text-white"
+                className="mt-4 inline-flex min-h-11 items-center gap-1.5 rounded-full border border-white/25 px-4 py-1.5 text-xs font-semibold text-white/85 transition hover:border-white/50 hover:text-white md:min-h-0"
               >
                 <RotateCw size={13} />
                 重試
@@ -351,7 +351,7 @@ export function LegendEditor() {
                         aria-label={`${item.color_key} 的圖例名稱`}
                         aria-invalid={invalid}
                         onChange={(e) => patchItem(item.color_key, { label: e.target.value })}
-                        className={`min-w-0 flex-1 basis-[140px] rounded-lg border bg-ink/60 px-2.5 py-1.5 text-sm text-white outline-none transition focus:border-vital-bright/70 ${
+                        className={`min-h-11 min-w-0 flex-1 basis-[140px] rounded-lg border bg-ink/60 px-2.5 py-1.5 text-sm text-white outline-none transition focus:border-vital-bright/70 md:min-h-0 ${
                           invalid ? "border-red-500/60" : "border-white/15"
                         }`}
                       />
@@ -359,7 +359,7 @@ export function LegendEditor() {
                       {/* 啟用 + 上下移綁成同一組：390 寬時整組一起換行，
                           不會出現「開關留在上一行、箭頭掉到下一行右邊」的空洞 */}
                       <div className="ml-auto flex shrink-0 items-center gap-2">
-                        <label className="inline-flex cursor-pointer items-center gap-1.5 text-xs text-white/70">
+                        <label className="inline-flex min-h-11 cursor-pointer items-center gap-1.5 text-xs text-white/70 md:min-h-0">
                           <input
                             type="checkbox"
                             checked={item.is_active}
@@ -377,7 +377,7 @@ export function LegendEditor() {
                             onClick={() => move(index, -1)}
                             disabled={index === 0}
                             aria-label={`上移 ${item.label || item.color_key}`}
-                            className="inline-flex h-8 w-8 items-center justify-center rounded-lg text-white/60 transition hover:bg-white/10 hover:text-white disabled:cursor-not-allowed disabled:opacity-30"
+                            className="inline-flex h-11 w-11 items-center justify-center rounded-lg text-white/60 transition hover:bg-white/10 hover:text-white disabled:cursor-not-allowed disabled:opacity-30 md:h-8 md:w-8"
                           >
                             <ChevronUp size={14} />
                           </button>
@@ -386,7 +386,7 @@ export function LegendEditor() {
                             onClick={() => move(index, 1)}
                             disabled={index === items.length - 1}
                             aria-label={`下移 ${item.label || item.color_key}`}
-                            className="inline-flex h-8 w-8 items-center justify-center rounded-lg text-white/60 transition hover:bg-white/10 hover:text-white disabled:cursor-not-allowed disabled:opacity-30"
+                            className="inline-flex h-11 w-11 items-center justify-center rounded-lg text-white/60 transition hover:bg-white/10 hover:text-white disabled:cursor-not-allowed disabled:opacity-30 md:h-8 md:w-8"
                           >
                             <ChevronDown size={14} />
                           </button>
@@ -409,7 +409,7 @@ export function LegendEditor() {
                   type="button"
                   onClick={handleSave}
                   disabled={pending || labelInvalid}
-                  className="inline-flex items-center gap-1.5 rounded-full bg-vital px-4 py-2 text-sm font-semibold text-white transition hover:bg-vital-bright disabled:cursor-not-allowed disabled:opacity-55"
+                  className="inline-flex min-h-11 items-center gap-1.5 rounded-full bg-vital px-4 py-2 text-sm font-semibold text-white transition hover:bg-vital-bright disabled:cursor-not-allowed disabled:opacity-55 md:min-h-0"
                 >
                   {pending ? (
                     <Loader2 size={15} className="animate-spin" />
@@ -423,7 +423,7 @@ export function LegendEditor() {
                   type="button"
                   onClick={() => setResetOpen(true)}
                   disabled={pending}
-                  className="inline-flex items-center gap-1.5 rounded-full border border-white/20 px-4 py-2 text-sm font-semibold text-white/80 transition hover:border-white/40 hover:text-white disabled:cursor-not-allowed disabled:opacity-55"
+                  className="inline-flex min-h-11 items-center gap-1.5 rounded-full border border-white/20 px-4 py-2 text-sm font-semibold text-white/80 transition hover:border-white/40 hover:text-white disabled:cursor-not-allowed disabled:opacity-55 md:min-h-0"
                 >
                   <RotateCw size={14} />
                   還原預設

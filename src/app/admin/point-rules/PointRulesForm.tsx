@@ -231,7 +231,7 @@ export function PointRulesForm({
               已發出的電子券仍可正常核銷。懷疑被濫用時可即時關掉。
             </p>
           </div>
-          <label className="flex shrink-0 items-center gap-2 text-sm font-semibold">
+          <label className="flex min-h-11 shrink-0 items-center gap-2 text-sm font-semibold md:min-h-0">
             <input
               type="checkbox"
               className="h-4 w-4"
@@ -276,7 +276,7 @@ function SaveRow({
         type="button"
         onClick={onSave}
         disabled={pending}
-        className="btn-base btn-cobalt px-4 py-2 text-sm"
+        className="btn-base btn-cobalt min-h-11 px-4 py-2 text-sm md:min-h-0"
       >
         {pending ? (
           <>
@@ -512,7 +512,7 @@ function ManualAward({
               setError(null);
               setConfirmOpen(true);
             }}
-            className="btn-base btn-ghost px-4 py-2 text-sm"
+            className="btn-base btn-ghost min-h-11 px-4 py-2 text-sm md:min-h-0"
           >
             <Award size={16} /> 補發…
           </button>
@@ -644,7 +644,7 @@ function MemberPicker({
               onChange(null);
               setQuery("");
             }}
-            className="shrink-0 text-xs font-semibold text-white/60 underline-offset-2 hover:text-white hover:underline"
+            className="inline-flex min-h-11 shrink-0 items-center text-xs font-semibold text-white/60 underline-offset-2 hover:text-white hover:underline md:min-h-0"
           >
             重選
           </button>
@@ -691,7 +691,7 @@ function MemberPicker({
                           onChange(m);
                           setOpen(false);
                         }}
-                        className="flex w-full items-center justify-between gap-2 rounded-md px-3 py-2 text-left text-sm transition hover:bg-white/8"
+                        className="flex min-h-11 w-full items-center justify-between gap-2 rounded-md px-3 py-2 text-left text-sm transition hover:bg-white/8 md:min-h-0"
                       >
                         <span className="min-w-0 truncate">
                           {m.display_name?.trim() || "（未具名會員）"}

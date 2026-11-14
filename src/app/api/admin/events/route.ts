@@ -15,6 +15,7 @@
 import { revalidatePath, revalidateTag } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { isSupabaseConfigured } from "@/lib/supabase/env";
+import { writeAuditLog } from "@/lib/audit";
 import { PUBLISHED_EVENTS_TAG } from "@/lib/queries";
 import {
   jsonBadJson,
@@ -326,6 +327,15 @@ export async function POST(request: Request) {
     revalidatePath("/admin/events");
     revalidatePath("/");
 
+    // 活動新增會直接出現在公開頁（/events、首頁近期活動），屬對外可見的寫入
+    await writeAuditLog(
+      supabase,
+      admin.id,
+      "events",
+      "create",
+      `新增活動「${title}」（${value.event_date}，狀態 ${insertPayload.status}）`
+    );
+
     return jsonOk(
       { data: data as Event, message: `已建立活動「${title}」。` },
       201
@@ -384,6 +394,15 @@ export async function PATCH(request: Request) {
 
       const message =
         status === "published" ? "已上架。" : status === "archived" ? "已下架。" : "已下架。";
+
+      // 上下架決定活動是否出現在公開頁，是對外可見的狀態變更
+      await writeAuditLog(
+        supabase,
+        auth.admin.id,
+        "events",
+        "status",
+        `活動「${old.title}」狀態 ${old.status} → ${status}`
+      );
 
       return jsonOk({ data: data as Event, message });
     }
@@ -496,6 +515,15 @@ export async function PATCH(request: Request) {
     revalidatePath("/admin/events");
     revalidatePath("/");
 
+    // 只記「改了哪幾個欄位」，不把封面路徑等長字串塞進摘要（≤500 字上限）
+    await writeAuditLog(
+      supabase,
+      auth.admin.id,
+      "events",
+      "update",
+      `更新活動「${updated.title}」：${Object.keys(patch).join("、") || "無欄位變更"}`
+    );
+
     return jsonOk({ data: updated, message: `已更新活動「${updated.title}」。` });
   } catch (err) {
     return jsonInternal("PATCH /api/admin/events", err);
@@ -544,6 +572,15 @@ export async function DELETE(request: Request) {
     revalidateTag(PUBLISHED_EVENTS_TAG, { expire: 60 });
     revalidatePath("/admin/events");
     revalidatePath("/");
+
+    // 下架＝從公開頁移除，是可復原但仍屬對外可見的變更
+    await writeAuditLog(
+      supabase,
+      auth.admin.id,
+      "events",
+      "archive",
+      `下架活動 ${id}（status → archived，可復原）`
+    );
 
     return jsonOk({ message: "活動已下架，可在「已下架」清單復原。" });
   } catch (err) {

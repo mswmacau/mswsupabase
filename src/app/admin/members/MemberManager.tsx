@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState, type ReactNode } from "react";
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import {
   ChevronDown,
   ChevronLeft,
@@ -26,6 +26,7 @@ import { MemberCreateDialog } from "./MemberCreateDialog";
 import { MemberDeleteDialog } from "./MemberDeleteDialog";
 import { MemberDrawer } from "./MemberDrawer";
 import { MemberEditDialog } from "./MemberEditDialog";
+import { MemberKmDialog } from "./MemberKmDialog";
 import { MemberPasswordDialog } from "./MemberPasswordDialog";
 import { MemberPointsDialog } from "./MemberPointsDialog";
 import { MemberVerificationDialog } from "./MemberVerificationDialog";
@@ -46,8 +47,15 @@ import {
  *  - 列表：GET ?q=&role=&status=&page=&limit=20
  *  - 詳情：抽屜自己打 GET /api/admin/members/[id]
  *  - 編輯：PATCH /api/admin/members
+ *  - 更正總里程：PATCH /api/admin/members { total_km, km_reason }（P1-1）
  *  - 新增：POST /api/admin/members（無 service key 時後端回 501 SERVICE_ROLE_REQUIRED）
  *  - 刪除：DELETE /api/admin/members?userId=（無 service key 時為軟刪除＝停用）
+ *
+ * 深連結（P1-1）：`/admin/members?member=<uuid>&action=correct-km`
+ *   從審核頁「更正里程」點進來時，直接打開該會員的抽屜＋更正對話框，
+ *   不必先搜尋、再點開、再找按鈕 —— 誤按核准的人當下只想做一件事。
+ *   參數由 server 端 page.tsx 讀 searchParams 傳進來（不用 useSearchParams，
+ *   避免 client 元件為了讀 URL 而需要 Suspense 邊界）。
  *
  * 設計取捨：
  *  - 搜尋 debounce 300ms，切換條件時 AbortController 中止舊請求，避免舊結果覆蓋新結果
@@ -73,7 +81,15 @@ function memberName(member: MemberRow): string {
   return member.display_name?.trim() || member.email || "（未具名會員）";
 }
 
-export function MemberManager() {
+export function MemberManager({
+  initialMemberId = null,
+  initialAction = null,
+}: {
+  /** 深連結：進來就要打開的會員（來自 /admin/review 的「更正里程」） */
+  initialMemberId?: string | null;
+  /** 深連結：`"correct-km"` 時連更正對話框一起開 */
+  initialAction?: "correct-km" | null;
+} = {}) {
   const [query, setQuery] = useState("");
   const [search, setSearch] = useState("");
   const [roleFilter, setRoleFilter] = useState<RoleFilter>("all");
@@ -96,6 +112,7 @@ export function MemberManager() {
   const [editMember, setEditMember] = useState<(MemberRow & { phone?: string | null }) | null>(null);
   const [deleteMember, setDeleteMember] = useState<MemberRow | null>(null);
   const [pointsMember, setPointsMember] = useState<MemberRow | null>(null);
+  const [kmMember, setKmMember] = useState<MemberRow | null>(null);
   const [passwordMember, setPasswordMember] = useState<MemberRow | null>(null);
   const [verifyMember, setVerifyMember] = useState<MemberRow | null>(null);
   const [createOpen, setCreateOpen] = useState(false);
@@ -163,6 +180,48 @@ export function MemberManager() {
     void load();
     return () => controller.abort();
   }, [search, roleFilter, statusFilter, page, reloadKey]);
+
+  /* ---------- 深連結：從審核頁「更正里程」直接進到對應會員 ----------
+   * 只跑一次（useRef 防重入）：後續使用者自己關掉對話框，不該被 effect 再打開。
+   * action=correct-km 時只開更正對話框、不疊抽屜（兩層 overlay 會讓 Esc 一次關兩層）。
+   * 會員可能不在當前這一頁的清單裡，所以直接打詳情端點拿完整那一列。
+   */
+  const deepLinkHandled = useRef(false);
+  useEffect(() => {
+    if (deepLinkHandled.current || !initialMemberId) return;
+    deepLinkHandled.current = true;
+    const controller = new AbortController();
+    const memberId = initialMemberId;
+
+    async function openFromDeepLink() {
+      try {
+        const res = await fetch(
+          `/api/admin/members/${encodeURIComponent(memberId)}`,
+          { cache: "no-store", signal: controller.signal }
+        );
+        const body: unknown = await res.json();
+        if (controller.signal.aborted) return;
+
+        if (!res.ok || !isOkEnvelope<{ member: MemberRow }>(body)) {
+          setError(parseError(body, "讀取會員詳情失敗。").error);
+          return;
+        }
+        const member = body.data.member;
+        if (!member) {
+          setError("找不到這位會員。");
+          return;
+        }
+        if (initialAction === "correct-km") setKmMember(member);
+        else setDrawerMember(member);
+      } catch (err) {
+        if ((err as { name?: string }).name === "AbortError") return;
+        setError("網路錯誤，請稍後再試。");
+      }
+    }
+
+    void openFromDeepLink();
+    return () => controller.abort();
+  }, [initialMemberId, initialAction]);
 
   /* ---------- 啟用／停用快捷鍵 ---------- */
   async function toggleStatus(member: MemberRow) {
@@ -800,9 +859,39 @@ export function MemberManager() {
             setDrawerMember(null);
             setPointsMember(member);
           }}
+          onCorrectKm={(member) => {
+            setDrawerMember(null);
+            setKmMember(member);
+          }}
           onResetPassword={(member) => {
             setDrawerMember(null);
             setPasswordMember(member);
+          }}
+        />
+      )}
+
+      {kmMember && (
+        <MemberKmDialog
+          member={kmMember}
+          onClose={() => setKmMember(null)}
+          onUpdated={(updated, totalKm) => {
+            const patched = { ...updated, total_km: totalKm };
+            setMembers((prev) =>
+              prev.map((row) =>
+                row.member_id === updated.member_id
+                  ? { ...row, ...patched }
+                  : row
+              )
+            );
+            // 抽屜若還開著（從抽屜進來的情況）也要同步，否則會顯示舊里程
+            setDrawerMember((current) =>
+              current && current.member_id === updated.member_id
+                ? { ...current, ...patched }
+                : current
+            );
+            setNotice(
+              `已更正「${memberName(updated)}」總里程為 ${formatKm(totalKm)} km。`
+            );
           }}
         />
       )}

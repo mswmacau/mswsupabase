@@ -11,6 +11,12 @@
  *        → RPC admin_adjust_points（有 points_delta 時；非零整數且 |delta| ≤ 10000）
  *        → RPC admin_set_member_test（有 is_test 時；true = 不計入公開排行榜）
  *        三段一律依序執行，任一段失敗回 400 並標明是哪一段。
+ * PATCH  { userId, total_km, km_reason }（P1-1 更正總里程，只能單獨送出）
+ *        → RPC admin_correct_member_km（見 supabase/migration-member-km-correction.sql）
+ *        → { ok:true, data:{ member, total_km }, message:"已更正總里程：原 0.5 km → 新 0 km。" }
+ *        誤按核准跑步提交後，這是唯一能把 profiles.total_km 改回去的入口：
+ *        會員自己改會被 guard 觸發器還原、admin_update_member 沒有這個參數、
+ *        profiles 的 RLS 也只允許本人更新。所以「更正」必須走 security definer RPC。
  * DELETE ?userId=  → 有 service_role：auth.admin.deleteUser + admin_delete_member
  *                    沒有：RPC admin_purge_member（SECURITY DEFINER，自己刪
  *                          auth.users，見 supabase/migration-member-purge.sql）；
@@ -28,7 +34,7 @@
  *               RPC 不存在（尚未跑 migration-member-purge.sql）時才降級為
  *               status='disabled' 軟刪除，並在回應的 note 說明要跑哪支 SQL
  *  - 成功後寫一筆 admin_audit_log（module=members，
- *    action=create/update/adjust_points/set_test/delete/soft_delete；
+ *    action=create/update/adjust_points/set_test/correct-km/delete/soft_delete；
  *    best-effort，見 src/lib/audit.ts）
  *
  * H6：全部包 try/catch，任何情況都回 JSON，不讓例外裸奔成 HTML 500。
@@ -228,6 +234,15 @@ function optionalText(raw: unknown, max = 80): string | null {
 function textOrNull(raw: unknown, max = 80): string | null {
   if (typeof raw !== "string") return null;
   return raw.trim().slice(0, max);
+}
+
+/**
+ * 里程數字轉文字：0 → "0"、0.5 → "0.5"（最多一位小數，不帶多餘的 .0）
+ * 稽核摘要與回應訊息都用它，避免出現「原 0.50 km → 新 0.00 km」這種難讀的字串。
+ */
+function kmText(value: number): string {
+  const n = Math.round((Number.isFinite(value) ? value : 0) * 10) / 10;
+  return `${n}`;
 }
 
 /**
@@ -515,11 +530,51 @@ export async function PATCH(request: Request) {
       role !== null ||
       status !== null ||
       statusReason !== null;
-    // 只送積分／只切換測試旗標時不必再跑一次 admin_update_member
+
+    /* ---------- 總里程更正（P1-1）：只能單獨送出 ----------
+     * 為什麼不允許和其他欄位一起送：
+     *  - 這支 RPC 只改 total_km、刻意不碰 points（見 migration 檔頭），
+     *    若同一請求又帶 points_delta，管理員會誤以為「里程與積分一起回退了」。
+     *  - 稽核摘要要保持一句話講一件事，事後追查才不會混淆。
+     * 前端（MemberKmDialog）就是單獨送這三個欄位。
+     */
+    const hasKmRaw = body.total_km !== undefined && body.total_km !== null;
+    let totalKm: number | null = null;
+    let kmReason: string | null = null;
+    if (hasKmRaw) {
+      const raw = body.total_km;
+      const reasonRaw =
+        typeof body.km_reason === "string" ? body.km_reason.trim() : "";
+
+      if (hasPointsDelta || hasTestChange || hasProfileChanges) {
+        fields.total_km = "總里程更正需單獨送出，請分開操作。";
+      } else if (typeof raw !== "number" || !Number.isFinite(raw)) {
+        fields.total_km = "總里程必須是數字。";
+      } else if (raw < 0 || raw > 10000) {
+        fields.total_km = "總里程必須介於 0 到 10000 公里之間。";
+      } else if (Math.abs(Math.round(raw * 10) / 10 - raw) > 1e-9) {
+        fields.total_km = "總里程最多一位小數。";
+      } else {
+        totalKm = Math.round(raw * 10) / 10;
+      }
+
+      if (reasonRaw.length < 4) {
+        fields.km_reason = "請填寫更正原因（至少 4 個字）。";
+      } else if (reasonRaw.length > 200) {
+        fields.km_reason = "更正原因不可超過 200 個字。";
+      } else {
+        kmReason = reasonRaw;
+      }
+    }
+    if (Object.keys(fields).length > 0) return jsonValidation(fields);
+
+    const hasKmCorrection = totalKm !== null;
+    // 只送積分／只切換測試旗標／只更正里程時不必再跑一次 admin_update_member
     //（避免無謂的 RPC 與一筆「什麼都沒改」的稽核）；
     // 其餘情況（含空 body）維持原行為，一律先更新 profile。
     const shouldUpdateProfile =
-      hasProfileChanges || (!hasPointsDelta && !hasTestChange);
+      hasProfileChanges ||
+      (!hasPointsDelta && !hasTestChange && !hasKmCorrection);
 
     /* ---------- 第一段：會員資料 / 角色 / 狀態 ---------- */
     if (shouldUpdateProfile) {
@@ -588,6 +643,40 @@ export async function PATCH(request: Request) {
       testFlagSaved = saved.is_test === true;
     }
 
+    /* ---------- 第四段：總里程更正（前幾段都成功後才執行） ----------
+     * 走 security definer RPC，因為 RLS 不允許管理員直接 update 他人的
+     * profiles 列（只有 profiles_update_own）。before/after 取 RPC 回傳值，
+     * 稽核摘要才能寫出「原 0.5 km → 新 0 km」這種可核對的字句。
+     */
+    let kmCorrection: { before: number; after: number } | null = null;
+    if (totalKm !== null) {
+      const { data: corrected, error } = await supabase.rpc(
+        "admin_correct_member_km",
+        { p_id: userId, p_km: totalKm }
+      );
+      if (error) {
+        if (
+          error.code === "PGRST202" ||
+          /could not find the function/i.test(error.message ?? "")
+        ) {
+          return jsonErr(
+            "資料庫尚未建立總里程更正函式。請到 Supabase → SQL Editor 執行 supabase/migration-member-km-correction.sql，完成後重新整理本頁。",
+            "SCHEMA_OUTDATED",
+            503
+          );
+        }
+        return rpcFailure("PATCH /api/admin/members correct_km", error);
+      }
+      const result = (corrected ?? {}) as {
+        before_km?: number | string | null;
+        after_km?: number | string | null;
+      };
+      kmCorrection = {
+        before: Number(result.before_km ?? 0),
+        after: Number(result.after_km ?? totalKm),
+      };
+    }
+
     // 回傳「列表列」形狀（含三個計數與 email），前端才能直接覆蓋原本那一列。
     // admin_get_member 失敗時退回 null，由前端用本地狀態補上，不讓更新變失敗。
     const { data: detail, error: detailError } = await supabase.rpc(
@@ -601,6 +690,8 @@ export async function PATCH(request: Request) {
     // admin_get_member 不含 is_test（那支 RPC 沒改），以剛剛 toggle 的結果補上，
     // 讓前端可以就地覆蓋那一列，不必再打一次列表 API。
     if (member && testFlagSaved !== null) member.is_test = testFlagSaved;
+    // 里程同理：以更正 RPC 的回傳值為準，避免快取或讀寫時序讓畫面停在舊值
+    if (member && kmCorrection !== null) member.total_km = kmCorrection.after;
     const memberName = member?.display_name || member?.email || userId;
 
     if (shouldUpdateProfile) {
@@ -647,8 +738,26 @@ export async function PATCH(request: Request) {
       );
     }
 
+    // 更正總里程是「改動對外可見數字」（排行榜、300km 達標基準），
+    // 而且正是為了收拾誤按核准而存在 —— 摘要必須留下 原值 → 新值 → 原因。
+    if (kmCorrection !== null) {
+      await writeAuditLog(
+        supabase,
+        actorId,
+        "members",
+        "correct-km",
+        `更正 ${memberName} 總里程：原 ${kmText(kmCorrection.before)} → 新 ${kmText(
+          kmCorrection.after
+        )}（原因：${kmReason ?? "未填"}）`
+      );
+    }
+
     let message: string;
-    if (hasPointsDelta && hasProfileChanges) {
+    if (kmCorrection !== null) {
+      message = `已更正總里程：原 ${kmText(kmCorrection.before)} km → 新 ${kmText(
+        kmCorrection.after
+      )} km。`;
+    } else if (hasPointsDelta && hasProfileChanges) {
       message = "已更新會員資料並調整積分。";
     } else if (hasPointsDelta) {
       message = "已調整會員積分。";
@@ -676,6 +785,10 @@ export async function PATCH(request: Request) {
         // member 為 null（admin_get_member 失敗）時仍要把新旗標帶回去，
         // 否則前端無從得知這次切換到底成不成功。
         is_test: testFlagSaved ?? member?.is_test ?? null,
+        // 里程同理：前端據此就地覆蓋那一列，不必重整頁面
+        total_km:
+          kmCorrection?.after ??
+          (member ? Number(member.total_km ?? 0) : null),
       },
       message,
     });

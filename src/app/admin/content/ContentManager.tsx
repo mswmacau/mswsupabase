@@ -26,10 +26,23 @@
  * 與儲存的最小單位，不另立分組：
  *   · <768px：每區一塊 accordion，預設全部收起，只露組名＋欄位數；
  *     展開後欄位照舊單欄堆疊，底部有一條 sticky 儲存條（改完不必滑回去找儲存）。
- *   · ≥768px：完全不變——標題／說明在左、儲存／回復在右、body 永遠展開。
+ *   · ≥768px：標題／說明在左、儲存／回復在右，body 當時是永遠展開（第二輪已改，
+ *     見下方「桌面同步折疊」）。
  *     只多一行「共 N 個欄位」的細字（幅度刻意壓到最小）。
  *   · 頂部加組別 chips，點一下展開並捲到該區（手機 sticky 貼在全站 64px
  *     header 之下，z-30 低於 Nav 的 z-50）。
+ *
+ * ── 桌面同步折疊（2026-11-14 第二輪，站主鐵律：電腦與手機同步優化）──
+ * 改前桌面把六區全部平鋪＝10,998px（≈12 屏），跟手機一樣滑不完。既然標準是
+ * 「兩邊一致」，桌面也吃同一套折疊：
+ *   · ≥768px 也可折疊，標題本身是折疊鈕（箭頭跟在標題後，與 /admin/analytics 同款）。
+ *   · 預設全部收起（實測：全收起 2,631px；任開一組最少 +670px 就破 3,000，
+ *     見 DEFAULT_OPEN_DESKTOP 的數字表）。六個標題＋「共 N 個欄位」讓管理員
+ *     一眼看到有哪些區、點一下就展開。
+ *   · 桌面標題列右側的儲存／回復維持原位（收起來也存得到）。
+ *   · 狀態只有一份：未操作前跟斷點預設值；操作後完全依使用者選擇，寬度切換不會錯亂。
+ *   · 六區改成各自獨立開合（原本手機是手風琴、一次只開一組）：與 /admin/analytics
+ *     的九個區塊行為一致，也才做得到「全展開」的驗收。
  * 紅線：欄位 id／API／資料流／文案內容一律不動，這次只改呈現。
  */
 
@@ -60,6 +73,7 @@ import {
 } from "@/lib/content";
 import { deleteJson, FetchError, postJson, requestJson } from "@/lib/fetch-json";
 import type { SiteSeo } from "@/lib/seo";
+import { useIsDesktop } from "../_components/useIsDesktop";
 
 /* =============================================================
  * 常數：欄位中文說明與字數提示（顯示用；以後台 normalize* 為準）
@@ -286,6 +300,21 @@ const GROUPS: { key: GroupKey; short: string; label: string }[] = [
   { key: "seo", short: "SEO", label: "SEO 設定" },
 ];
 
+/**
+ * 桌面（≥768px）預設展開哪一組：**全部收起**。
+ *
+ * 為什麼不是「預設展開第一組」——實測數字決定（1440 寬，scrollHeight）：
+ *   全收起            2,631  ← 唯一能滿足「桌面初始 ≤3,000」的選項
+ *   只展開「頁尾聯絡」 3,303
+ *   只展開「SEO 設定」 3,301
+ *   只展開「導覽選單」 3,671
+ *   只展開「首頁文案」 6,890（改前六區全開是 10,998）
+ * 最矮的一組也要 +670px，任何一組預設展開都會超過 3,000。
+ * 因此桌面與手機一致：全部收起，靠每區標題上的箭頭展開。
+ * 好處是兩個寬度行為完全相同（站主鐵律），也不必為斷點準備兩套預設值。
+ */
+const DEFAULT_OPEN_DESKTOP: GroupKey | null = null;
+
 /* =============================================================
  * 共用：分區儲存狀態（复刻 SettingsForm 的 save/reset 流程）
  * ============================================================= */
@@ -435,7 +464,7 @@ function SectionShell<T>({
   groupKey: GroupKey;
   /** 該組可編輯控件數（由各分區依實際資料即時算，不硬編碼） */
   fieldCount: number;
-  /** 手機折疊狀態；桌面一律展開，不看這個值 */
+  /** 是否展開（兩個寬度共用同一份狀態；預設值由 ContentManager 依斷點決定） */
   expanded: boolean;
   onToggle: () => void;
   title: string;
@@ -489,18 +518,32 @@ function SectionShell<T>({
           />
         </button>
 
-        {/* ===== 桌面：維持原版型（說明在左、儲存／回復在右） =====
-            欄位數改成標題行的行內細字，不另佔一行（桌面高度零增量） */}
+        {/* ===== 桌面：說明在左、儲存／回復在右；標題本身是折疊鈕 =====
+            欄位數改成標題行的行內細字，不另佔一行。
+            <button> 只能放 phrasing content，所以標題在 <h3> 內、按鈕包住
+            <span>——與 /admin/analytics 的 Section 同一個寫法（兩頁行為一致）。 */}
         <div className="hidden md:flex md:flex-wrap md:items-end md:justify-between md:gap-4">
           <div className="min-w-0">
-            {/* 欄位數用 flex + items-baseline 與標題同高。
-                不要用 align-middle：inline 的 vertical-align 會把 h3 的行盒撐高，
-                每區多 20px，六區就白胖 120px。 */}
-            <h3 className="flex flex-wrap items-baseline gap-x-2 text-lg font-bold">
-              <span>{title}</span>
-              <span className="text-xs font-normal text-white/45">
-                共 {fieldCount} 個欄位
-              </span>
+            <h3 className="text-lg font-bold">
+              <button
+                type="button"
+                aria-expanded={expanded}
+                aria-controls={bodyId}
+                onClick={onToggle}
+                className="flex min-h-11 items-center gap-2 text-left transition"
+              >
+                <span>{title}</span>
+                <span className="text-xs font-normal text-white/45">
+                  共 {fieldCount} 個欄位
+                </span>
+                <ChevronDown
+                  size={18}
+                  aria-hidden
+                  className={`shrink-0 text-white/50 transition-transform ${
+                    expanded ? "rotate-180" : ""
+                  }`}
+                />
+              </button>
             </h3>
             <p className="mt-1 max-w-2xl text-sm leading-relaxed text-white/70">
               {desc}
@@ -536,8 +579,9 @@ function SectionShell<T>({
       </div>
 
       {/*
-       * 同一份 DOM 兼顧兩個寬度：手機收起時 hidden，≥768px 一律 block。
-       * 這樣桌面永遠看得到所有欄位，也不必為了手機再渲染一份（否則 id 會重複）。
+       * 同一份 DOM 兼顧兩個寬度：收起＝hidden，展開＝block（兩個寬度規則相同）。
+       * 這樣桌面也收得起來，且不必為了不同寬度再渲染一份（否則 id 會重複）。
+       * 預設展開哪一組由 ContentManager 依斷點算好後用 expanded 傳進來。
        *
        * inner 那層才是 space-y 容器：sticky 條刻意放在它外面。
        * 原因：Tailwind 的 space-y 是 `> :not(:last-child) { margin-block-end }`，
@@ -546,7 +590,7 @@ function SectionShell<T>({
        */}
       <div
         id={bodyId}
-        className={expanded ? "" : "hidden md:block"}
+        className={expanded ? "" : "hidden"}
       >
         <div className="space-y-4 md:space-y-5">
           {saveDisabled && disabledReason && (
@@ -2124,18 +2168,32 @@ export function ContentManager({
   };
 
   /**
-   * 手機折疊狀態：預設全部收起（改前 20 屏就是因為全平鋪）。
-   * 桌面不看這個值——SectionShell 在 ≥768px 一律顯示 body。
+   * 折疊狀態（兩個寬度共用同一份）。
+   * undefined＝使用者還沒動過這一組 → 跟預設值（桌面與手機皆為「全收起」，
+   * 見 DEFAULT_OPEN_DESKTOP 的實測理由）。
+   * 一旦使用者點過，就完全依他的選擇——所以「手機展開第 3 組 → 轉桌面」不會被
+   * 預設值蓋回去，兩個寬度也不會各記一份而互相錯亂。
+   * 六區各自獨立開合（原本手機是手風琴），與 /admin/analytics 的九個區塊一致。
    */
-  const [openGroup, setOpenGroup] = useState<GroupKey | null>(null);
+  const [openGroups, setOpenGroups] = useState<Partial<Record<GroupKey, boolean>>>(
+    {}
+  );
+  const isDesktop = useIsDesktop();
+
+  function isGroupOpen(key: GroupKey) {
+    return (
+      openGroups[key] ??
+      (isDesktop && DEFAULT_OPEN_DESKTOP !== null && key === DEFAULT_OPEN_DESKTOP)
+    );
+  }
 
   function toggleGroup(key: GroupKey) {
-    setOpenGroup((cur) => (cur === key ? null : key));
+    setOpenGroups((prev) => ({ ...prev, [key]: !isGroupOpen(key) }));
   }
 
   /** chips 點擊：先展開，再等 DOM 更新後捲到該區（scroll-mt 由 section 自己處理） */
   function jumpTo(key: GroupKey) {
-    setOpenGroup(key);
+    setOpenGroups((prev) => ({ ...prev, [key]: true }));
     requestAnimationFrame(() => {
       document
         .getElementById(`group-${key}`)
@@ -2158,7 +2216,7 @@ export function ContentManager({
       >
         <div className="flex gap-1.5 overflow-x-auto">
           {GROUPS.map((g) => {
-            const active = openGroup === g.key;
+            const active = isGroupOpen(g.key);
             return (
               <button
                 key={g.key}
@@ -2186,32 +2244,32 @@ export function ContentManager({
       />
       <ContentSection
         api={contentApi}
-        expanded={openGroup === "content"}
+        expanded={isGroupOpen("content")}
         onToggle={() => toggleGroup("content")}
       />
       <NavSection
         api={navApi}
-        expanded={openGroup === "nav"}
+        expanded={isGroupOpen("nav")}
         onToggle={() => toggleGroup("nav")}
       />
       <ContactSection
         api={contactApi}
-        expanded={openGroup === "contact"}
+        expanded={isGroupOpen("contact")}
         onToggle={() => toggleGroup("contact")}
       />
       <PagesSection
         api={pagesApi}
-        expanded={openGroup === "pages"}
+        expanded={isGroupOpen("pages")}
         onToggle={() => toggleGroup("pages")}
       />
       <BlocksSection
         api={blocksApi}
-        expanded={openGroup === "blocks"}
+        expanded={isGroupOpen("blocks")}
         onToggle={() => toggleGroup("blocks")}
       />
       <SeoSection
         api={seoApi}
-        expanded={openGroup === "seo"}
+        expanded={isGroupOpen("seo")}
         onToggle={() => toggleGroup("seo")}
       />
     </div>

@@ -407,6 +407,14 @@ export async function POST(request: Request) {
       // 這裡統一經 unknown 轉成領域型別（與既有 admin/events 路由同做法）
       const created = data as unknown as HyroxEvent;
 
+      await writeAuditLog(
+        supabase,
+        actorId,
+        "hyrox",
+        "event-create",
+        `新增 HYROX 場次「${created.title}」（狀態 ${insertPayload.status}）`
+      );
+
       return jsonOk(
         {
           event: created,
@@ -474,6 +482,14 @@ export async function POST(request: Request) {
     revalidateHyrox();
 
     const updated = data as unknown as HyroxEvent;
+
+    await writeAuditLog(
+      supabase,
+      actorId,
+      "hyrox",
+      "event-update",
+      `更新 HYROX 場次「${updated.title}」：${Object.keys(patch).join("、") || "無欄位變更"}`
+    );
 
     return jsonOk({
       event: updated,

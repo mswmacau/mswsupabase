@@ -12,8 +12,23 @@ export const dynamic = "force-dynamic";
  * 所有資料操作都在 MemberManager（client）內打 /api/admin/members，
  * 不在 Server Component 直接查：改角色／狀態需要 security definer RPC，
  * 統一走 API 才能對齊錯誤訊息與稽核紀錄。
+ *
+ * P1-1 深連結：`?member=<uuid>&action=correct-km`
+ * 由 /admin/review 與 /admin/runs 的「更正里程」帶進來。
+ * 在 server 端讀 searchParams 再以 props 傳給 client，比讓 client 用
+ * useSearchParams 好：不必為了一個查詢參數加 Suspense 邊界，
+ * 也不會有「先渲染列表、再跳開抽屜」的閃動。
  */
-export default function AdminMembersPage() {
+export default async function AdminMembersPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ member?: string; action?: string }>;
+}) {
+  const params = await searchParams;
+  const memberId = (params.member ?? "").trim();
+  // 只認得一個動作；其他值一律當「只開抽屜」，不猜使用者意思
+  const action = params.action === "correct-km" ? "correct-km" : null;
+
   return (
     <div className="min-w-0 space-y-6">
       <div>
@@ -24,7 +39,7 @@ export default function AdminMembersPage() {
         </p>
       </div>
 
-      <MemberManager />
+      <MemberManager initialMemberId={memberId || null} initialAction={action} />
     </div>
   );
 }
