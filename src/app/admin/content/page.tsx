@@ -35,8 +35,8 @@ export default async function AdminContentPage() {
       <div>
         <h2 className="text-2xl font-bold">網站內容</h2>
         <p className="mt-2 text-sm leading-relaxed text-white/75">
-          管理首頁文案、導覽選單、頁尾聯絡資訊、各頁面文案、首頁區塊排序與全站
-          SEO 設定。所有修改會即時套用至前台，訪客最遲 60 秒後看到；也可隨時「回復原廠」。
+          管理全站文案與 SEO。
+          所有修改會即時套用至前台，訪客最遲 60 秒後看到；也可隨時「回復原廠」。
         </p>
       </div>
 

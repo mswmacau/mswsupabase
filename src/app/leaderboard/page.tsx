@@ -87,7 +87,6 @@ export default async function LeaderboardPage({
               <div className="mt-6 grid gap-6 md:mt-10 md:gap-10 lg:grid-cols-12 lg:gap-8">
                 <p className="text-base leading-relaxed text-white/70 lg:col-span-6">
                   月度榜以當月經後台確認的跑步里程排序；總榜則是會員累積的總里程與積分。
-                  提交紀錄經後台確認後才會計入排名。
                 </p>
 
                 {/* 榜首大數字：整頁的主角 */}

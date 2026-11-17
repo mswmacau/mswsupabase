@@ -254,6 +254,31 @@ const PAGE_FIELD_HINTS: Partial<Record<keyof SitePages, Record<string, string>>>
   },
 };
 
+/**
+ * 前台已無渲染點的欄位 → 後台不再提供編輯輸入框（2026-11 站主決定下架）。
+ *
+ * 目前兩項：
+ *   · `training.intro`        — 訓練頁 intro，`/training` 已不再渲染
+ *   · `training.slots_label`  — 場次單位（原「場可報名」），`/training` 已不再渲染
+ * 管理員改了看不到效果，只會誤以為前台壞了。
+ *
+ * ⚠️ 只隱藏**輸入框**，不動 `form` 內的鍵。
+ * 理由：儲存時整包 `SitePages` 原樣 POST，而 `/api/admin/site-pages` 的
+ * `normalizePages(body, DEFAULT_PAGES)` 對「缺少的鍵」是回落 `DEFAULT_PAGES`
+ * 而不是回落到 DB 既有值——所以一旦把鍵從 `form` 拿掉，管理員先前存過的文案
+ * 會在下次儲存任何其他欄位時被覆寫成原廠預設。鍵留在 `form` 內、值原樣送回，
+ * 既有值才不會被清空。
+ * DB 欄位與已存資料一律保留（不刪欄位、不刪資料）。
+ */
+const HIDDEN_PAGE_FIELDS: Partial<Record<keyof SitePages, readonly string[]>> = {
+  training: ["intro", "slots_label"],
+};
+
+/** 某頁被下架的欄位數（「N 個欄位」計數要扣掉，避免數字與畫面不符） */
+function hiddenFieldCount(page: keyof SitePages): number {
+  return HIDDEN_PAGE_FIELDS[page]?.length ?? 0;
+}
+
 /** 欄位標籤查詢：頁面分流 → 共用 → 鍵名 */
 function pageFieldLabel(page: keyof SitePages, field: string): string {
   return (
@@ -1501,11 +1526,17 @@ function PagesSection({
 }) {
   const [active, setActive] = useState<keyof SitePages>("login");
   const page = api.form[active];
-  const fieldKeys = Object.keys(page) as (keyof typeof page)[];
+  const hidden = HIDDEN_PAGE_FIELDS[active] ?? [];
+  const fieldKeys = (Object.keys(page) as (keyof typeof page)[]).filter(
+    (k) => !hidden.includes(String(k))
+  );
 
-  /** 九個頁面全部欄位之和（同時只渲染當前 tab，但目錄要報全集） */
+  /** 九個頁面全部欄位之和（同時只渲染當前 tab，但目錄要報全集；扣掉已下架欄位） */
   const fieldCount = Object.values(api.form).reduce(
     (n, p) => n + Object.keys(p).length,
+    0
+  ) - (Object.keys(HIDDEN_PAGE_FIELDS) as (keyof SitePages)[]).reduce(
+    (n, k) => n + hiddenFieldCount(k),
     0
   );
 

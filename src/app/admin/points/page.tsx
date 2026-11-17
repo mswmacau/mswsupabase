@@ -51,10 +51,8 @@ export default async function AdminPointsPage({
     <div className="min-w-0 space-y-5">
       <div>
         <h2 className="text-xl font-bold">積分與發券</h2>
-        <p className="mt-2 text-sm leading-relaxed text-white/70">
-          分數怎麼發、券怎麼發，四個分頁講同一件事：規則數值、單筆補發、
-          月度達標補發、優惠券核銷。
-        </p>
+        {/* 2026-11 文案精簡：原導言（「分數怎麼發、券怎麼發，四個分頁講同一件事……」）
+            只是複述下方四個分頁標籤，已整段刪除。 */}
       </div>
 
       <SectionTabNav

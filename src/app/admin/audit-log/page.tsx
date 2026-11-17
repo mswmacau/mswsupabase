@@ -275,7 +275,6 @@ function PageIntro() {
     <div>
       <h2 className="text-2xl font-bold">操作紀錄</h2>
       <p className="mt-2 text-sm leading-relaxed text-white/75">
-        後台誰在何時改了什麼，這裏依時間倒序記錄網站內容與草稿的儲存、回復與發佈操作。
         只有管理員能看到。
       </p>
     </div>

@@ -404,10 +404,8 @@ export default async function EventsPage({
               </h1>
 
               <div className="mt-6 grid gap-6 lg:mt-10 lg:grid-cols-12 lg:gap-8">
-                <p className="text-base leading-relaxed text-white/70 lg:col-span-6">
-                  三條路線、一份月曆。HYROX 付費場次、每週定期訓練、月度跑步累積
-                  —— 想練的、想報的、想累積的，都在這一頁排好時間。
-                </p>
+                {/* 2026-11 文案精簡：hero 導言整段刪除（原「三條路線、一份月曆……」）。
+                    下方三聯已逐條列出同樣三條線，導言只是複述。 */}
 
                 {/* Hero 右欄：只講「下一場」。
                     這裡以前也掛「班表日曆」標題 + 本月場次總數，跟下方日曆區
@@ -660,7 +658,7 @@ export default async function EventsPage({
               <h2 className="display-xl mt-5">近期活動</h2>
             </div>
             <p className="max-w-md text-sm leading-relaxed text-white/65">
-              已開放報名的一般活動。日期、地點、費用與名額都在卡片上。
+              已開放報名
             </p>
           </div>
 

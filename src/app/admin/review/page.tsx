@@ -69,8 +69,7 @@ export default async function AdminReviewPage({
           </p>
         </div>
         <p className="mt-2 text-sm leading-relaxed text-white/70">
-          跑步、簽到、兌換、HYROX 付款四個入口合成一頁。分頁標籤旁的數字是真實待處理筆數，
-          按完就會更新。
+          分頁標籤旁的數字是真實待處理筆數，按完就會更新。
         </p>
       </div>
 

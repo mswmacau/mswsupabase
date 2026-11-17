@@ -83,7 +83,6 @@ function Shell({ children }: { children: React.ReactNode }) {
       <div>
         <h2 className="text-xl font-bold">禮品管理</h2>
         <p className="mt-2 text-sm leading-relaxed text-white/70">
-          管理會員可用積分換領的禮品：積分價、庫存、每人上限、核銷商戶與上下架。
           已有人兌換的禮品不提供刪除，只能下架。
         </p>
       </div>
