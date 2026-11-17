@@ -486,6 +486,133 @@ export const getScheduleLegend = unstable_cache(
   { tags: [TRAINING_SCHEDULE_TAG], revalidate: 60 }
 );
 
+/**
+ * 日期頁（`/training/[date]`）用的一場：月曆列 + 座位用量。
+ *
+ * `taken` / `remaining` 為 null 代表「讀不到報名數」（migration-session-seats.sql
+ * 還沒執行、或查詢失敗）。前台據此降級成只顯示總名額，**不顯示 0**——
+ * 把「不知道」畫成「0 人已報名」就是假資料。
+ */
+export interface DatedSessionRow extends TrainingSessionRow {
+  /** 已報名人數（不含 rejected）；null = 讀不到 */
+  taken: number | null;
+  /** 剩餘名額；null = 讀不到（或 capacity 為 null） */
+  remaining: number | null;
+}
+
+/** `YYYY-MM-DD` 且必須是真實存在的日期（擋掉 2026-13-32、2026-02-30） */
+export function isRealISODate(value: string): boolean {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) return false;
+  const year = Number(value.slice(0, 4));
+  const month = Number(value.slice(5, 7));
+  const day = Number(value.slice(8, 10));
+  if (year < 2024 || year > 2100) return false;
+  if (month < 1 || month > 12) return false;
+  if (day < 1 || day > 31) return false;
+  // Date.UTC(year, month, 0) = 該月最後一天；逐段比對，不靠 Date 自動進位
+  const lastDay = new Date(Date.UTC(year, month, 0)).getUTCDate();
+  return day <= lastDay;
+}
+
+/**
+ * 日期加減天數（純字串進、純字串出，不經本地時區）。
+ * 檔尾另有一個同名私有版本（後台月份進度用），行為等價；
+ * 這一個導出給前台日期頁的前後日導覽用。
+ */
+export function shiftISODate(iso: string, days: number): string {
+  const d = new Date(`${iso}T00:00:00Z`);
+  if (Number.isNaN(d.getTime())) return iso;
+  d.setUTCDate(d.getUTCDate() + days);
+  return d.toISOString().slice(0, 10);
+}
+
+/**
+ * 某一天的已發布場次（`/training/[date]` 日期頁）。
+ *
+ * 「只有已發布月份看得到」由 RLS 的 `sessions_select_visible` +
+ * `is_month_visible()` 保證（anonClient 讀不到未發布／未到生效時間的月份），
+ * 所以這裡不 join `training_months` 自己再判斷一次——重寫規則只會多一份會走鐘的邏輯。
+ *
+ * 過濾條件刻意與 `/training` 一致（見 `src/app/training/page.tsx` 的
+ * `upcoming`）：`status !== "cancelled"`。已取消的場次不進日期頁，
+ * 否則會出現「有一場但按不到報名」的卡片；取消資訊仍在 /events 月曆上標示。
+ *
+ * 排序與 `getMonthSchedule` 相同（時間升冪 → id 穩定），
+ * 讓月曆 pill 順序與日期頁卡片順序一致。
+ *
+ * 座位用量：另查 `session_seats` 檢視（只有彙總數字，不含任何會員資料）。
+ * 檢視不存在時（migration-session-seats.sql 未執行）該查詢失敗，
+ * `taken` / `remaining` 一律留 null，前台降級顯示「名額 N 人」。
+ */
+export const getSessionsByDate = unstable_cache(
+  cache(async (date: string): Promise<DatedSessionRow[]> => {
+    if (!isRealISODate(date)) return [];
+
+    const supabase = anonClient();
+    if (!supabase) return [];
+
+    const { data, error } = await supabase
+      .from("training_sessions")
+      .select(MONTH_SELECT)
+      .eq("session_date", date)
+      .neq("status", "cancelled")
+      .order("start_time", { ascending: true, nullsFirst: true })
+      .order("id", { ascending: true });
+
+    if (error || !data) return [];
+
+    const sessions: TrainingSessionRow[] = (data as unknown as MonthRow[]).map((row) => ({
+      id: row.id,
+      session_date: row.session_date,
+      start_time: row.start_time,
+      end_time: row.end_time,
+      class_id: row.class_id,
+      title: row.title,
+      location: row.location,
+      location_override: row.location_override,
+      coach_name: row.coach_name,
+      capacity: row.capacity,
+      status: row.status,
+      note: row.note,
+      class_name: row.class?.name ?? null,
+      class_color_key: row.class?.color_key ?? null,
+      class_category: row.class?.category ?? null,
+    }));
+
+    if (sessions.length === 0) return [];
+
+    // 座位用量（可選）。失敗不外拋，整批當作「讀不到」。
+    const takenBySession = new Map<string, number>();
+    const { data: seatRows, error: seatError } = await supabase
+      .from("session_seats")
+      .select("session_id, taken")
+      .in(
+        "session_id",
+        sessions.map((s) => s.id)
+      );
+    if (!seatError && seatRows) {
+      for (const row of seatRows as { session_id: string; taken: number | string }[]) {
+        takenBySession.set(row.session_id, Number(row.taken ?? 0));
+      }
+    }
+
+    return sessions.map((session) => {
+      const taken = takenBySession.get(session.id) ?? null;
+      const capacity = Number.isFinite(session.capacity) ? session.capacity : null;
+      return {
+        ...session,
+        taken,
+        remaining:
+          taken !== null && capacity !== null
+            ? Math.max(capacity - taken, 0)
+            : null,
+      };
+    });
+  }),
+  ["training-sessions-by-date"],
+  { tags: [TRAINING_SCHEDULE_TAG], revalidate: 60 }
+);
+
 /** getClassNamesByColor() 的分組結果：色票鍵 → 課程名（去重、已排序） */
 export type ClassNamesByColor = Record<string, string[]>;
 
@@ -1748,13 +1875,6 @@ function countOrNull(result: {
     return null;
   }
   return result.count ?? null;
-}
-
-/** ISO 日期（yyyy-mm-dd）加減天數：一律用 UTC 運算，不受執行環境時區影響 */
-function shiftISODate(iso: string, days: number): string {
-  const [y, m, d] = iso.split("-").map(Number);
-  const t = Date.UTC(y, m - 1, d) + days * 86_400_000;
-  return new Date(t).toISOString().slice(0, 10);
 }
 
 /** 'YYYY-MM' → { year, month }；格式不對回 null */

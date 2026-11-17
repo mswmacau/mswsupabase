@@ -1,6 +1,7 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useState } from "react";
+import Link from "next/link";
 import { SessionDetailPanel } from "./SessionDetailPanel";
 import { ScheduleLegend } from "./ScheduleLegend";
 import {
@@ -64,31 +65,16 @@ export function ScheduleCalendar({
   /** Asia/Macau 的今天（server 算好傳入），詳情面板據此判斷已結束／今天／可報名 */
   todayISO: string;
 }) {
-  /** 手機第一層：哪一天被打開 */
-  const [dayKey, setDayKey] = useState<string | null>(null);
-  /** 第二層：哪一場被打開（有值時蓋過 dayKey） */
+  /** 第二層：哪一場被打開（有值時開單場詳情面板） */
   const [selected, setSelected] = useState<ScheduleSessionView | null>(null);
-
-  const activeDay = useMemo(
-    () => (dayKey ? days.find((day) => day.date === dayKey) ?? null : null),
-    [dayKey, days]
-  );
 
   const hasAnySession = days.some((day) => day.inMonth && day.sessions.length > 0);
 
-  function openDay(day: ScheduleDay) {
-    if (!day.inMonth || day.sessions.length === 0) return;
-    setDayKey(day.date);
-    setSelected(null);
-  }
-
   function openSession(session: ScheduleSessionView) {
-    setDayKey(null);
     setSelected(session);
   }
 
   function closePanel() {
-    setDayKey(null);
     setSelected(null);
   }
 
@@ -150,7 +136,6 @@ export function ScheduleCalendar({
           ))}
 
           {days.map((day) => {
-            const interactive = day.inMonth && day.sessions.length > 0;
             const extraBars = Math.max(day.sessions.length - MAX_BARS_MOBILE, 0);
 
             return (
@@ -164,18 +149,22 @@ export function ScheduleCalendar({
                       : "bg-transparent"
                 }`}
               >
-                {/* 整格是點擊區，**所有斷點都掛**（原本只有 md:hidden，導致
-                    768–1023px 既吃不到手機點擊層、pill 又被 container 擋住，
-                    第 3 堂之後完全點不開）。手機靠它開當日清單；平板／桌面
-                    點 pill 以外的地方（含 +N、日期數字、空白）也走這裡。 */}
-                {interactive && (
-                  <button
-                    type="button"
-                    onClick={() => openDay(day)}
-                    aria-label={`${formatDayShort(day.date)}，${
-                      day.sessions.length
-                    } 個場次，點擊查看當日場次`}
-                    className="absolute inset-0 z-10 cursor-pointer"
+                {/* 整格是連到當日頁的連結（**所有斷點都掛**）。
+                    2026-11「日曆太難找、點日期不能進去看當日內容」的修正：
+                    原本點格子是開一個彈出面板，面板關掉就什麼都不留、也不能分享；
+                    現在每個本月格子都是 `/training/YYYY-MM-DD` 的連結，
+                    日期頁有完整場次、名額與報名入口，而且可以加書籤／分享。
+                    沒有場次的日子**也連**：日期頁會顯示「當日無場次」＋前後日導覽，
+                    比「點了沒反應」清楚。 */}
+                {day.inMonth && (
+                  <Link
+                    href={`/training/${day.date}`}
+                    aria-label={
+                      day.sessions.length > 0
+                        ? `${formatDayShort(day.date)}，${day.sessions.length} 個場次，點擊看當日場次`
+                        : `${formatDayShort(day.date)}，當日無場次，點擊查看`
+                    }
+                    className="absolute inset-0 z-10 cursor-pointer transition-colors hover:bg-white/[0.04] focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-vital-bright"
                   />
                 )}
 
@@ -227,16 +216,15 @@ export function ScheduleCalendar({
                     />
                   ))}
                   {day.sessions.length > MAX_PILLS_TABLET && (
-                    <button
-                      type="button"
-                      onClick={() => openDay(day)}
+                    <Link
+                      href={`/training/${day.date}`}
                       aria-label={`還有 ${
                         day.sessions.length - MAX_PILLS_TABLET
                       } 個場次，點擊看當日全部場次`}
                       className="pointer-events-auto block w-full cursor-pointer pl-1 text-left text-[10px] font-semibold text-white/45 transition hover:text-white"
                     >
                       +{day.sessions.length - MAX_PILLS_TABLET}
-                    </button>
+                    </Link>
                   )}
                 </div>
 
@@ -250,16 +238,15 @@ export function ScheduleCalendar({
                     />
                   ))}
                   {day.sessions.length > MAX_PILLS_DESKTOP && (
-                    <button
-                      type="button"
-                      onClick={() => openDay(day)}
+                    <Link
+                      href={`/training/${day.date}`}
                       aria-label={`還有 ${
                         day.sessions.length - MAX_PILLS_DESKTOP
                       } 個場次，點擊看當日全部場次`}
                       className="pointer-events-auto block w-full cursor-pointer pl-1.5 text-left text-[10px] font-semibold text-white/45 transition hover:text-white"
                     >
                       +{day.sessions.length - MAX_PILLS_DESKTOP}
-                    </button>
+                    </Link>
                   )}
                 </div>
               </div>
@@ -268,8 +255,10 @@ export function ScheduleCalendar({
         </div>
       </div>
 
+      {/* 面板只剩「單場詳情」一種模式：當日清單已由 `/training/[date]` 承接，
+          點格子是換頁而不是開面板（面板關掉後什麼都不留，也不能分享）。 */}
       <SessionDetailPanel
-        day={activeDay}
+        day={null}
         session={selected}
         todayISO={todayISO}
         onSelectSession={setSelected}
