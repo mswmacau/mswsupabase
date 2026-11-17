@@ -486,6 +486,65 @@ export const getScheduleLegend = unstable_cache(
   { tags: [TRAINING_SCHEDULE_TAG], revalidate: 60 }
 );
 
+/** getClassNamesByColor() 的分組結果：色票鍵 → 課程名（去重、已排序） */
+export type ClassNamesByColor = Record<string, string[]>;
+
+/**
+ * 色票鍵 → 課程名清單（前台日曆圖例用）。
+ *
+ * 為什麼圖例以「課程名」為準，而不是後台手填的 label：
+ *   站主反應「圖例顯示跑步／力量，看不出實際上是哪一堂課」。後台的
+ *   `schedule_legend.label` 是一組顏色給一個通稱（例如 amber =「HYROX 專項」），
+ *   但同一種顏色底下其實有 Hyrox (Foundation)／Hyrox (Power)／Hyrox (Engine)
+ *   三個課程，通稱等於沒解釋到顏色。所以改成以 `training_classes.name` 為準。
+ *
+ * `label` 仍然有用：某個顏色在 `training_classes` 找不到任何課程時（後台只建了
+ * 圖例、還沒建課程，或該色課程全被停用），前台退回落標籤，避免出現「有顏色、
+ * 沒有字」的空白項——這條降級路徑就是後台 `LegendEditor` 不用改的原因。
+ *
+ * 分組規則：
+ *   - 只收 `is_active = true` 且 `color_key` 非 null 的課程（停用課程不該出現在圖例）
+ *   - key 一律 trim + toLowerCase，與前台 `colorHex()` 的容錯一致
+ *   - 同名去重（同一顏色可能有兩筆同名的課程資料）
+ *   - 值以 localeCompare(zh-Hant) 排序，輸出穩定，不會每次 render 換順序
+ *
+ * 讀不到（migration 未執行 / Supabase 未設定 / 網路錯誤）一律回空物件，
+ * **不 throw** —— 理由同 getScheduleLegend：少一張圖例不能讓 /events 掛掉，
+ * 呼叫端拿到空物件就走 `label` 降級路徑。
+ */
+export const getClassNamesByColor = unstable_cache(
+  cache(async (): Promise<ClassNamesByColor> => {
+    const supabase = anonClient();
+    if (!supabase) return {};
+
+    const { data, error } = await supabase
+      .from("training_classes")
+      .select("name, color_key")
+      .eq("is_active", true)
+      .not("color_key", "is", null)
+      .order("name", { ascending: true });
+
+    if (error || !data) return {};
+
+    const byColor: ClassNamesByColor = {};
+    for (const row of data as { name: string | null; color_key: string | null }[]) {
+      const key = (row.color_key ?? "").trim().toLowerCase();
+      const name = (row.name ?? "").trim();
+      if (!key || !name) continue;
+      const bucket = byColor[key] ?? (byColor[key] = []);
+      if (!bucket.includes(name)) bucket.push(name);
+    }
+
+    for (const key of Object.keys(byColor)) {
+      byColor[key].sort((a, b) => a.localeCompare(b, "zh-Hant"));
+    }
+
+    return byColor;
+  }),
+  ["training-class-names-by-color"],
+  { tags: [TRAINING_SCHEDULE_TAG], revalidate: 60 }
+);
+
 /** getSiteTheme() 的 cache tag；revalidateTag 必須用同一個字串（see api/admin/site-settings） */
 export const SITE_THEME_TAG = "site-theme";
 /* ── 站點內容五鍵（T-3；播種見 supabase/migration-site-content.sql）──

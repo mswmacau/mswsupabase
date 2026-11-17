@@ -51,6 +51,7 @@ export function ScheduleCalendar({
   month,
   days,
   legend,
+  classesByColor,
   todayISO,
 }: {
   year: number;
@@ -58,6 +59,8 @@ export function ScheduleCalendar({
   days: ScheduleDay[];
   /** 顏色圖例（後台可編輯）；空陣列 = 整段不顯示 */
   legend: ScheduleLegendItem[];
+  /** 色票鍵 → 課程名（getClassNamesByColor）；圖例文字以課程名為準，缺色才退 label */
+  classesByColor?: Record<string, string[]>;
   /** Asia/Macau 的今天（server 算好傳入），詳情面板據此判斷已結束／今天／可報名 */
   todayISO: string;
 }) {
@@ -117,7 +120,7 @@ export function ScheduleCalendar({
           legend 為空（migration 未執行）時整段不 render，不留空行。 */}
       {legend.length > 0 && (
         <div className="mt-4">
-          <ScheduleLegend items={legend} />
+          <ScheduleLegend items={legend} classesByColor={classesByColor} />
         </div>
       )}
 

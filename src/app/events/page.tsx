@@ -13,6 +13,7 @@ import {
   getCachedPublishedEvents,
   getHyroxEvents,
   getMyEventRegistrations,
+  getClassNamesByColor,
   getScheduleLegend,
   getScheduleMonth,
   getSitePages,
@@ -204,17 +205,20 @@ export default async function EventsPage({
 }) {
   const params = await searchParams;
 
-  const [months, hyroxAll, profile, legend, upcomingEvents] = await Promise.all([
-    getAvailableMonths(),
-    // 前台要看到「已結束（archived）」的付費場次，否則 11/11 那場在日曆上會消失。
-    // includeArchived 會回 draft —— draft 一律在下面過濾掉，不能外洩。
-    getHyroxEvents({ includeArchived: true }),
-    getCurrentProfile(),
-    // 顏色圖例（後台可編輯）。表未建時回 [] → 圖例整段不顯示，日曆照常。
-    getScheduleLegend(),
-    // 已發布、未過期的一般活動（已排除 HYROX）。空陣列 → 「近期活動」整段不渲染。
-    getCachedPublishedEvents(),
-  ]);
+  const [months, hyroxAll, profile, legend, upcomingEvents, classesByColor] =
+    await Promise.all([
+      getAvailableMonths(),
+      // 前台要看到「已結束（archived）」的付費場次，否則 11/11 那場在日曆上會消失。
+      // includeArchived 會回 draft —— draft 一律在下面過濾掉，不能外洩。
+      getHyroxEvents({ includeArchived: true }),
+      getCurrentProfile(),
+      // 顏色圖例（後台可編輯）。表未建時回 [] → 圖例整段不顯示，日曆照常。
+      getScheduleLegend(),
+      // 已發布、未過期的一般活動（已排除 HYROX）。空陣列 → 「近期活動」整段不渲染。
+      getCachedPublishedEvents(),
+      // 色票鍵 → 課程名：圖例文字以課程名為準（通稱「跑步／力量」看不出是哪一堂）
+      getClassNamesByColor(),
+    ]);
 
   // 會員已報名的 activity id（未登入不查）。查詢失敗回 [] → 全部顯示「站內報名」。
   const registeredIds = profile
@@ -475,15 +479,14 @@ export default async function EventsPage({
       >
         <div className="noise-overlay" />
         <div className="container-msw section-pad relative">
-          <div className="flex flex-wrap items-end justify-between gap-6">
-            <div>
-              <span className="eyebrow">Schedule</span>
-              <h2 className="display-xl mt-5">班表日曆</h2>
-            </div>
-            <p className="max-w-md text-sm leading-relaxed text-white/65">
-              週一起算。手機與桌面都是整月月曆，點日期看當日場次、教練、場地與報名方式。
-            </p>
-          </div>
+          {/* 站主要求取消「班表日曆」這組大標／kicker 字眼：
+              上方「2026 年 11 月」月份切換器本身已經說明這是什麼，
+              再放一個 h2 只是重複。原本 h2 撐出的垂直間距改由 section-pad
+              與下方切換器的 mt-6 承擔，刻意不留空標題元素（空 h2 會被
+              螢幕閱讀器念出來，也讓 outline 多一層沒有內容的節點）。 */}
+          <p className="max-w-xl text-sm leading-relaxed text-white/65">
+            週一起算。手機與桌面都是整月月曆，點日期看當日場次、教練、場地與報名方式。
+          </p>
 
           {/* 月份切換：只能走「已發布且已生效」的月份（getAvailableMonths）。
               不可切時渲染 disabled 的 <button>，不要用 <span>——span 看起來像按鈕
@@ -491,7 +494,7 @@ export default async function EventsPage({
           <div
             role="group"
             aria-label="切換班表月份"
-            className="mt-8 flex flex-wrap items-center gap-x-4 gap-y-3 border-y border-white/10 py-3"
+            className="mt-6 flex flex-wrap items-center gap-x-4 gap-y-3 border-y border-white/10 py-3"
           >
             {prevMonth ? (
               <Link
@@ -592,6 +595,7 @@ export default async function EventsPage({
                 month={display.month}
                 days={days}
                 legend={legend}
+                classesByColor={classesByColor}
                 todayISO={todayISO}
               />
             </div>
