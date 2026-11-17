@@ -65,12 +65,13 @@ const HERO_FACTS = [
  * 最肥的一塊，而且它講的是「三條路線／月目標／獎分」，跟日曆的關聯
  * 沒有強到必須擋在日曆前面。
  *
- * 做法：同一份 markup 抽成元件、渲染兩次，用斷點各顯示一份——
- *   lg+（含桌面）：留在 hero 原位，與改版前完全一致
- *   <lg（手機／平板）：移到日曆區塊之後，讓日曆直接接在 hero 標題下
+ * 站主後續同意「桌面也比照辦理」：三聯**全斷點只渲染一份，位置固定在
+ * 日曆之後**（見 #schedule 之後的呼叫點）。桌面 1440 原本第一格日期格
+ * 落在 y=1128，視窗只有 900，搬走後才進得了首屏。
  *
- * 兩份是 `display:none` 互斥，不會同時出現在無障礙樹或 innerText 裡，
- * 文案也沒有任何一份被刪掉。
+ * 注意：不要再放回 hero，也不要再加第二份用 `hidden lg:block` 互斥——
+ * 兩份寫法在無障礙樹上是安全的，但 DOM 裡就是兩份，維護時很容易改到
+ * 其中一份而漏掉另一份。
  */
 function HeroFacts({ className = "" }: { className?: string }) {
   return (
@@ -378,7 +379,11 @@ export default async function EventsPage({
         <div className="noise-overlay" />
 
         <div className="container-msw relative z-10">
-          <div className="relative pb-8 pt-20 md:pt-36 lg:pb-16">
+          {/* 三聯全斷點搬到日曆之後，hero 桌面高度由 792 降到 592：
+              三聯本身佔 152px，另外把上留白 md:pt-36→md:pt-28（-32px）、
+              桌面下留白 lg:pb-16→lg:pb-12（-16px），才讓 1440×900 首屏
+              進得了日曆第一行。手機 pb-8／pt-20 完全沒動。 */}
+          <div className="relative pb-8 pt-20 md:pt-28 lg:pb-12">
             <div className="lg:pl-14">
               <span className="eyebrow">Events</span>
 
@@ -449,8 +454,7 @@ export default async function EventsPage({
           </div>
         </div>
 
-        {/* 大數字三聯（桌面留在 hero 原位；手機版在日曆之後，見下方 #schedule 後） */}
-        <HeroFacts className="hidden border-t border-white/10 lg:block" />
+        {/* 三聯已全斷點搬到日曆之後（唯一一份），hero 內不再有。 */}
       </section>
 
       {/* ================= 1. 當月班表日曆（第一段內容：站主反映原本排在第三段＝很難找） ================= */}
@@ -459,10 +463,11 @@ export default async function EventsPage({
         className="relative border-y border-ink-line bg-ink-soft"
       >
         <div className="noise-overlay" />
-        {/* 手機把上留白收窄：hero 已經有 pb-8 與 border-b 收邊，
-            日曆是這一頁的主角，不需要再隔 80px 才開始。
-            lg+ 仍沿用後台可調的 --space-section（SPEC §3.4），桌面節奏不變。 */}
-        <div className="container-msw section-pad relative pt-10 lg:pt-[var(--space-section,80px)]">
+        {/* 上留白：hero 已經有 pb 與 border-b 收邊，日曆是這一頁的主角，
+            不需要再隔一整個 section 節奏才開始。手機 pt-10；桌面取後台
+            --space-section 的一半（預設 40px）——站主要求 1440×900 首屏
+            看得到日曆第一行，這裡是最不傷版面的一塊餘裕。 */}
+        <div className="container-msw section-pad relative pt-10 lg:pt-[calc(var(--space-section,80px)/2)]">
           {/* 站主要求取消「班表日曆」這組大標／kicker 字眼：
               上方「2026 年 11 月」月份切換器本身已經說明這是什麼，
               再放一個 h2 只是重複。原本 h2 撐出的垂直間距改由 section-pad
@@ -615,10 +620,11 @@ export default async function EventsPage({
         </div>
       </section>
 
-      {/* 大數字三聯（手機／平板版）：日曆之後才出現。
-          手機把「這一頁有什麼數字」往後放，換到「日曆就在標題下一格」。
-          桌面由 hero 內那份負責（lg 以上），這裡 lg 起隱藏。 */}
-      <HeroFacts className="border-b border-ink-line lg:hidden" />
+      {/* 大數字三聯：全斷點唯一一份，位置固定在日曆之後。
+          上方接 #schedule（它自己有 border-y border-ink-line），下方接
+          「三種參與方式」，所以這裡只需要一條底線收邊，不要再加 border-t
+          ——加了會和 #schedule 的底線疊成雙線。 */}
+      <HeroFacts className="border-b border-ink-line" />
 
       {/* ================= 2. 三張分類卡（常駐，無活動時也顯示） ================= */}
       <section className="container-msw section-pad">
