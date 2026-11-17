@@ -56,16 +56,6 @@ const PURPOSES: { data: string; purpose: string }[] = [
   { data: "報名與簽到紀錄", purpose: "確認出席、計算參與場次。" },
 ];
 
-/** 受託服務供應商（第 4 節） */
-const PROCESSORS: { name: string; desc: string }[] = [
-  { name: "Supabase", desc: "資料庫與檔案儲存，伺服器位於新加坡區域。" },
-  { name: "Vercel", desc: "網站託管，負責把頁面送到你的瀏覽器。" },
-  {
-    name: "Google",
-    desc: "只在你選擇以 Google 帳號登入時使用，提供你的姓名與電郵地址。",
-  },
-];
-
 /** 保存期限（第 5 節） */
 const RETENTION: { label: string; period: string }[] = [
   {
@@ -166,15 +156,6 @@ export default function PrivacyPage() {
                   </span>
                 </span>
               </h1>
-
-              <p className="mt-10 max-w-3xl text-base leading-relaxed text-white/70 sm:text-lg">
-                這頁講清楚 MSW
-                街健館（下稱「本會」）在營運網站與活動時收集哪些個人資料、每一項為甚麼要收、誰看得到，以及你可以怎樣處理自己的資料。我們盡量寫得具體，不用「改善服務」這類空話帶過。
-              </p>
-
-              <p className="mt-4 text-xs font-semibold uppercase tracking-[0.22em] text-white/45">
-                最後更新：2026-11-12
-              </p>
             </div>
           </div>
         </div>
@@ -228,18 +209,11 @@ export default function PrivacyPage() {
           </Chapter>
 
           <Chapter no="04" title="存放位置與受託方">
-            <p>資料主要存在以下服務，我們不自行架設伺服器。</p>
-            <div className="grid gap-3 sm:grid-cols-3">
-              {PROCESSORS.map((p) => (
-                <div key={p.name} className="card-dark min-w-0 p-5">
-                  <div className="text-sm font-bold text-white">{p.name}</div>
-                  <div className="mt-2 break-words text-sm leading-relaxed">
-                    {p.desc}
-                  </div>
-                </div>
-              ))}
-            </div>
-            <p>這些服務供應商只在提供服務所需的範圍內接觸資料。</p>
+            <p>
+              資料存放於
+              Supabase（新加坡區域）與 Vercel；使用 Google
+              帳號登入時另由 Google 提供姓名與電郵。這些供應商只在提供服務所需範圍內接觸資料。
+            </p>
           </Chapter>
 
           <Chapter no="05" title="保存期限">
@@ -276,9 +250,7 @@ export default function PrivacyPage() {
 
           {/* ===== 結尾：更新日期 + 管轄法律 ===== */}
           <section className="card-dark min-w-0 p-6 sm:p-8">
-            <p className="text-sm font-semibold text-white">
-              最後更新：2026-11-12
-            </p>
+            <p className="text-[11px] text-white/40">最後更新：2026-11-12</p>
             <p className="mt-2 break-words text-sm leading-relaxed text-[var(--text-muted)]">
               本政策受澳門特別行政區法律管轄。
             </p>

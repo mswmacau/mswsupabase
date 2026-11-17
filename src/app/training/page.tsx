@@ -12,7 +12,7 @@ import {
 import { SessionAction } from "@/components/SessionAction";
 import { NextSessionCard } from "@/components/fx/NextSessionCard";
 import { SessionFilter } from "@/components/fx/SessionFilter";
-import { BRAND, RULES } from "@/lib/config";
+import { RULES } from "@/lib/config";
 import type { SitePageTraining } from "@/lib/content";
 import { formatDate, formatTimeRange, weekdayLabel } from "@/lib/utils";
 import type { TrainingSession } from "@/lib/types";
@@ -24,25 +24,6 @@ export async function generateMetadata(): Promise<Metadata> {
 }
 
 export const dynamic = "force-dynamic";
-
-/** Hero 數字三聯：大數字主導，不用小圖標堆砌（「簽到一次入帳」讀 site_pages.training） */
-function heroFacts(t: SitePageTraining) {
-  return [
-    { value: "01", unit: "Program", label: "每週定期訓練", accent: false },
-    {
-      value: "多時段",
-      unit: "Per Week",
-      label: "每週場次，時間見班表",
-      accent: false,
-    },
-    {
-      value: `+${RULES.CHECKIN_POINTS}`,
-      unit: "Points",
-      label: t.fact_checkin_label,
-      accent: true,
-    },
-  ];
-}
 
 export default async function TrainingPage() {
   // FE-17：profile 與 sessions 平行發出，wall-clock 由加總變最大值
@@ -58,10 +39,7 @@ export default async function TrainingPage() {
   ]);
   const checkins = profile ? await getUserCheckins(profile.id, 60) : [];
 
-  // T-4：品牌中文名改讀 site_theme.brand_name（回落 BRAND.name）
-  const brandName = theme.brand_name;
   const t = pages.training;
-  const HERO_FACTS = heroFacts(t);
 
   const myMap = new Map(checkins.map((c) => [c.session_id, c.status]));
 
@@ -109,74 +87,16 @@ export default async function TrainingPage() {
                   </span>
                 </span>
               </h1>
-
-              <div className="mt-6 grid gap-6 md:mt-10 md:gap-10 lg:grid-cols-12 lg:gap-8">
-                <p className="text-base leading-relaxed text-white/70 lg:col-span-6">
-                  每週多堂，時間與教練
-                  <span className="font-semibold text-white">見班表</span>
-                  ，於 {BRAND.location}
-                  {brandName} 進行團體街頭健身訓練。現場簽到並經後台確認後，每次可獲得{" "}
-                  <span className="font-semibold text-white">
-                    {RULES.CHECKIN_POINTS} 積分
-                  </span>
-                  。
-                </p>
-
-                <div className="lg:col-span-5 lg:col-start-8 lg:border-l lg:border-white/10 lg:pl-8">
-                  <div className="text-[11px] font-semibold uppercase tracking-[0.22em] text-white/55">
-                    場次節奏
-                  </div>
-                  <div className="mt-2 flex flex-wrap items-end gap-x-4 gap-y-1 md:mt-4">
-                    <span className="stat-figure text-5xl leading-none text-white md:text-6xl">
-                      每週
-                    </span>
-                    <span className="stat-figure text-outline text-4xl leading-none md:text-5xl">
-                      多時段
-                    </span>
-                  </div>
-                  <div className="mt-3 h-px w-16 bg-white/20 md:mt-5" />
-                  <p className="mt-3 text-sm leading-relaxed text-white/65 md:mt-5">
-                    每週固定多個時段，實際上課時間與教練見班表。教練現場依程度分組調整動作難度。
-                  </p>
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        {/* 大數字三聯：去卡片化，只靠髮絲線分隔 */}
-        <div className="relative z-10 border-t border-white/10">
-          <div className="container-msw">
-            <div className="grid grid-cols-1 divide-y divide-white/10 sm:grid-cols-3 sm:divide-x sm:divide-y-0">
-              {HERO_FACTS.map((f) => (
-                <div
-                  key={f.label}
-                  className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1 py-3 sm:block sm:px-8 sm:py-8 sm:first:pl-0"
-                >
-                  <div className="flex items-start gap-2">
-                    <span
-                      className={`stat-figure text-3xl leading-none sm:text-5xl md:text-6xl ${
-                        f.accent ? "text-vital-bright" : "text-white"
-                      }`}
-                    >
-                      {f.value}
-                    </span>
-                    <span className="text-accent-blue mt-1 text-[11px] font-semibold uppercase tracking-[0.22em] sm:mt-2">
-                      {f.unit}
-                    </span>
-                  </div>
-                  <div className="text-right text-[11px] font-semibold uppercase tracking-[0.22em] text-white/55 sm:mt-4 sm:text-left">
-                    {f.label}
-                  </div>
-                </div>
-              ))}
             </div>
           </div>
         </div>
       </section>
 
-      {/* ============ 近期場次：標題 sticky，內容滾動覆蓋 ============ */}
-      <section className="container-msw section-pad max-lg:pt-6 max-lg:pb-14">
+      {/* ============ 近期場次：按日期分組的清單 ============ */}
+      <section
+        aria-label="近期場次"
+        className="container-msw section-pad max-lg:pt-6 max-lg:pb-14"
+      >
         {/* F-T1 / F-T2：下場訓練倒數卡（無場次時完全唔 render）
             資料來源與首頁「下一場定期訓練」同一個 getNextSession()，
             日期、時段、課名不會兩邊各講一套。 */}
@@ -184,68 +104,43 @@ export default async function TrainingPage() {
           <NextSessionCard session={nextSession} brandNameEn={theme.brand_name_en} />
         )}
 
-        <div className="grid gap-12 lg:grid-cols-12">
-          {/* 左欄：sticky，隨右側內容滾動而停留在畫面中 */}
-          <div className="lg:col-span-4">
-            <div className="reveal-left lg:sticky lg:top-24">
-              <h2 className="display-xl mt-5">近期場次</h2>
-              <p className="mt-6 max-w-sm text-sm leading-relaxed text-white/70">
-                {t.intro}
-              </p>
-
-              <div className="mt-10 flex items-end gap-3">
-                <span className="stat-figure text-6xl leading-none text-vital-bright md:text-7xl">
-                  {String(upcoming.length).padStart(2, "0")}
-                </span>
-                <span className="text-accent-blue mb-2 text-[11px] font-semibold uppercase tracking-[0.22em]">
-                  {t.slots_label}
-                </span>
-              </div>
-              <div className="mt-6 h-px w-16 bg-white/20" />
-            </div>
+        {upcoming.length ? (
+          // SessionCard 原封不動，只係喺 client 端搬到 SessionFilter 內按日期分組 render
+          <SessionFilter
+            mobileVisible={5}
+            items={upcoming.map((s) => ({
+              id: s.id,
+              sessionDate: s.session_date,
+              card: (
+                <SessionCard
+                  key={s.id}
+                  session={s}
+                  myStatus={myMap.get(s.id) ?? null}
+                  isLoggedIn={Boolean(profile)}
+                  labels={t}
+                />
+              ),
+            }))}
+          />
+        ) : (
+          <div className="border-y border-white/10 px-6 py-16 text-center">
+            <CalendarDays size={30} className="mx-auto text-white/45" />
+            <p className="mt-4 text-sm text-white/70">
+              目前沒有已排定的場次。
+              {profile?.role === "admin" && (
+                <>
+                  {" "}
+                  <Link
+                    href="/admin/sessions"
+                    className="text-accent-blue hover:text-white"
+                  >
+                    到後台新增場次
+                  </Link>
+                </>
+              )}
+            </p>
           </div>
-
-          {/* 右欄：場次網格，錯位入場 */}
-          <div className="lg:col-span-8">
-            {upcoming.length ? (
-              // F-T3：月份篩選；SessionCard 原封不動，只係喺 client 端搬到 SessionFilter 內 render
-              <SessionFilter
-                mobileVisible={5}
-                items={upcoming.map((s) => ({
-                  id: s.id,
-                  sessionDate: s.session_date,
-                  card: (
-                    <SessionCard
-                      key={s.id}
-                      session={s}
-                      myStatus={myMap.get(s.id) ?? null}
-                      isLoggedIn={Boolean(profile)}
-                      labels={t}
-                    />
-                  ),
-                }))}
-              />
-            ) : (
-              <div className="border-y border-white/10 px-6 py-16 text-center">
-                <CalendarDays size={30} className="mx-auto text-white/45" />
-                <p className="mt-4 text-sm text-white/70">
-                  目前沒有已排定的場次。
-                  {profile?.role === "admin" && (
-                    <>
-                      {" "}
-                      <Link
-                        href="/admin/sessions"
-                        className="text-accent-blue hover:text-white"
-                      >
-                        到後台新增場次
-                      </Link>
-                    </>
-                  )}
-                </p>
-              </div>
-            )}
-          </div>
-        </div>
+        )}
       </section>
 
       {/* ============ 我的訓練紀錄：節奏式 ledger，不用預設表格樣式 ============ */}

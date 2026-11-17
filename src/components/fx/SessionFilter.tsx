@@ -1,58 +1,53 @@
 "use client";
 
 /**
- * F-T3 場次月份篩選（Brief §2.2）
+ * 場次清單：按日期分組 + 手機折疊
  *
- * page 原有嘅 `upcoming.map(<SessionCard/>)` 搬到呢度統一 render，
- * SessionCard 本身完全冇改（由 page 以已 render 嘅 element 傳入），
- * 報名邏輯（SessionAction）亦冇郁。
+ * 站主要求（文案精簡）：
+ *  - 移除「全部／本月／下月」月份篩選鈕 → 一律照日期由近到遠全部列出
+ *  - 移除左側「近期場次」標題／說明／計數 → 日期分組小標就是唯一的組織方式
  *
- * 初始 state 一定係「全部」：server 同 client 第一次 render 輸出完全一致，
- * 唔會 hydration mismatch；月份判斷只會喺使用者撳 chips（client、已 hydrate）之後發生。
+ * 因此本元件只剩兩個職責：
+ *  1. 把 items 按 sessionDate 分組，每組一個小標（例如「11/17 週二」）
+ *  2. 手機（<lg）預設只顯示前 mobileVisible 場，其餘收在「顯示全部 N 場」
  *
- * ── 階段二動效（T-7 E11 第二處，方砚）────────────────────────────────
- * 月份 chips（全部／本月／下月）高亮底塊改用 `layoutId` 滑動。
+ * 保留的既有行為：
+ *  - `#session-list` id 與 `aria-controls` 仍然對應同一個容器
+ *  - 超出 cap 的場次照樣 render（內容不減少），只是 <lg 用 CSS 收起來；
+ *    桌面（lg 起）一律全部顯示，1440 的內容與高度不受影響
+ *  - SessionCard 由 page 以已 render 好的 element 傳入，報名邏輯不變
  *
- * ⚠️ 只做 chips：第 78 行附近嘅卡片網格 `<div className="stagger grid ...">`
- *    **原封不動**（`stagger` 保留）。chips 同網格唔喺同一個容器，
- *    所以 `.stagger > *` 嘅 CSS animation 唔會同 motion 打架（R2）。
- * ⚠️ `card` 係 page 已經 render 好嘅 ReactNode，包 motion 後內容同報名邏輯
- *    完全唔會變 —— 本任務只喺 chips 上面加一塊可滑動嘅底。
+ * 分組小標用 weekdayLabelOfDate（Date.UTC 取值）而非 weekdayLabel，
+ * 純日期字串不會因執行環境時區差一日，亦不會造成 hydration mismatch。
  */
 
 import { Fragment, useMemo, useState, type ReactNode } from "react";
 import { ChevronDown } from "lucide-react";
-import { LayoutGroup, motion } from "motion/react";
-import { MotionRoot } from "@/components/motion/MotionRoot";
-import { MOTION_ENABLED, T_CHIP } from "@/components/motion/motionConfig";
+import { weekdayLabelOfDate } from "@/lib/utils";
 
 export interface SessionFilterItem {
   id: string;
-  /** 'YYYY-MM-DD'（只取前 7 碼做月份判斷） */
+  /** 'YYYY-MM-DD' */
   sessionDate: string;
   /** page 已經 render 好嘅 SessionCard element */
   card: ReactNode;
 }
 
-type FilterKey = "all" | "thisMonth" | "nextMonth";
-
-const OPTIONS: { key: FilterKey; label: string }[] = [
-  { key: "all", label: "全部" },
-  { key: "thisMonth", label: "本月" },
-  { key: "nextMonth", label: "下月" },
-];
-
-const pad2 = (n: number) => String(n).padStart(2, "0");
-
-/** 本月 / 下月嘅 'YYYY-MM' key（以本地時間計，避免 UTC parse 差一日） */
-function monthKey(offset: number): string {
-  const now = new Date();
-  const d = new Date(now.getFullYear(), now.getMonth() + offset, 1);
-  return `${d.getFullYear()}-${pad2(d.getMonth() + 1)}`;
+/** 'YYYY-MM-DD' → '11/17 週二'（日期分組小標） */
+function groupLabel(iso: string): string {
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(iso ?? "").trim());
+  if (!m) return iso;
+  const w = weekdayLabelOfDate(iso);
+  return `${m[2]}/${m[3]}${w ? ` 週${w}` : ""}`;
 }
 
-/** 高亮底塊：原本 active chip 身上嘅 `bg-vital`，抽成一塊可滑動嘅底 */
-const HIGHLIGHT_CLASS = "slab absolute inset-0 -z-10 bg-vital";
+interface Group {
+  key: string;
+  label: string;
+  items: SessionFilterItem[];
+  /** 該組第一場在整份清單的索引（判斷手機 cap 用） */
+  start: number;
+}
 
 export function SessionFilter({
   items,
@@ -62,102 +57,95 @@ export function SessionFilter({
   /** 手機（<lg）預設只顯示的場次數；桌面一律全部顯示。0 / 未傳 = 不折疊 */
   mobileVisible?: number;
 }) {
-  const [filter, setFilter] = useState<FilterKey>("all");
   const [expanded, setExpanded] = useState(false);
 
-  const visible = useMemo(() => {
-    if (filter === "all") return items;
-    const target = monthKey(filter === "nextMonth" ? 1 : 0);
-    return items.filter((item) => item.sessionDate.slice(0, 7) === target);
-  }, [items, filter]);
+  const groups = useMemo<Group[]>(() => {
+    const map = new Map<string, SessionFilterItem[]>();
+    for (const item of items) {
+      const bucket = map.get(item.sessionDate);
+      if (bucket) bucket.push(item);
+      else map.set(item.sessionDate, [item]);
+    }
+    // items 已由 page 升冪排序；Map 保留插入順序，這裡再明確排序一次
+    const keys = [...map.keys()].sort();
+    const lengths = keys.map((key) => (map.get(key) as SessionFilterItem[]).length);
+    // 每組第一場在整份清單的索引（不用可變游標，避免 render 期間的賦值）
+    const starts = keys.map((_, i) =>
+      lengths.slice(0, i).reduce((sum, n) => sum + n, 0)
+    );
+    return keys.map((key, i) => ({
+      key,
+      label: groupLabel(key),
+      items: map.get(key) as SessionFilterItem[],
+      start: starts[i],
+    }));
+  }, [items]);
 
   const cap = mobileVisible && mobileVisible > 0 ? mobileVisible : 0;
-  const hiddenCount = cap > 0 ? Math.max(0, visible.length - cap) : 0;
+  const hiddenCount = cap > 0 ? Math.max(0, items.length - cap) : 0;
 
   return (
-    <MotionRoot>
-      <div
-        role="group"
-        aria-label="場次月份"
-        className="mb-8 flex flex-wrap gap-2 border-b border-white/10 pb-6"
-      >
-        {/* E11：LayoutGroup 隔開呢一組 layoutId */}
-        <LayoutGroup id="session-month">
-          {OPTIONS.map((opt) => {
-            const active = opt.key === filter;
-            return (
-              <button
-                key={opt.key}
-                type="button"
-                aria-pressed={active}
-                onClick={() => setFilter(opt.key)}
-                className={`stat-figure relative isolate inline-flex min-h-11 items-center px-4 text-sm transition ${
-                  active ? "slab text-white" : "text-white/60 hover:text-white"
-                }`}
-              >
-                {active ? (
-                  MOTION_ENABLED ? (
-                    <motion.span
-                      layoutId="session-month-active"
-                      className={HIGHLIGHT_CLASS}
-                      transition={T_CHIP}
-                      aria-hidden
-                    />
-                  ) : (
-                    <span className={HIGHLIGHT_CLASS} aria-hidden />
-                  )
-                ) : null}
-                <span className="relative">{opt.label}</span>
-              </button>
-            );
-          })}
-        </LayoutGroup>
+    <>
+      <div id="session-list" className="space-y-10 lg:space-y-8">
+        {groups.map((group) => {
+          // 整組都在 cap 之後 → 手機不顯示（連小標），桌面照樣顯示
+          const wholeGroupHidden = cap > 0 && !expanded && group.start >= cap;
+
+          const heading = (
+            <h3 className="flex items-center gap-3 text-[11px] font-semibold uppercase tracking-[0.22em] text-white/55">
+              <span className="tnum flex-none text-white/80">
+                {group.label}
+              </span>
+              <span aria-hidden className="h-px min-w-4 flex-1 bg-white/15" />
+            </h3>
+          );
+
+          const grid = (
+            <div className="stagger mt-4 grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
+              {group.items.map((item, i) =>
+                cap === 0 || expanded || group.start + i < cap ? (
+                  <Fragment key={item.id}>{item.card}</Fragment>
+                ) : (
+                  // 超出 cap 的場次照樣 render，只是 <lg 收起來
+                  <div key={item.id} className="hidden lg:block">
+                    {item.card}
+                  </div>
+                )
+              )}
+            </div>
+          );
+
+          return (
+            <section
+              key={group.key}
+              data-session-group={group.key}
+              className={wholeGroupHidden ? "hidden lg:block" : undefined}
+            >
+              {heading}
+              {grid}
+            </section>
+          );
+        })}
       </div>
 
-      {/* ⚠️ 呢個網格維持原狀：`stagger` class 保留、唔加任何 motion（T-7 範圍只係 chips） */}
-      {visible.length ? (
-        <>
-          <div id="session-list" className="stagger grid gap-5 sm:grid-cols-2">
-            {visible.map((item, i) =>
-              cap === 0 || i < cap ? (
-                <Fragment key={item.id}>{item.card}</Fragment>
-              ) : (
-                // P2-1：超出 cap 的場次照樣 render（內容不減少），只是 <lg 收起來。
-                // 桌面 lg 起一律顯示，1440 的內容與高度完全不變。
-                <div
-                  key={item.id}
-                  className={expanded ? "" : "hidden lg:block"}
-                >
-                  {item.card}
-                </div>
-              )
-            )}
-          </div>
-
-          {hiddenCount > 0 && (
-            <button
-              type="button"
-              onClick={() => setExpanded((v) => !v)}
-              aria-expanded={expanded}
-              aria-controls="session-list"
-              className="btn-base btn-ghost btn-slab mt-6 min-h-11 w-full lg:hidden"
-            >
-              {expanded ? "收起" : `顯示全部 ${visible.length} 場`}
-              <ChevronDown
-                size={16}
-                aria-hidden
-                className={`transition-transform duration-200 ${
-                  expanded ? "rotate-180" : ""
-                }`}
-              />
-            </button>
-          )}
-        </>
-      ) : (
-        <p className="border-y border-white/10 px-6 py-14 text-center text-sm text-white/70">
-          目前沒有已排定的場次。
-        </p>
+      {hiddenCount > 0 && (
+        <button
+          type="button"
+          onClick={() => setExpanded((v) => !v)}
+          aria-expanded={expanded}
+          aria-controls="session-list"
+          className="btn-base btn-ghost btn-slab mt-8 min-h-11 w-full lg:hidden"
+        >
+          {expanded ? "收起" : `顯示全部 ${items.length} 場`}
+          <ChevronDown
+            size={16}
+            aria-hidden
+            className={`transition-transform duration-200 ${
+              expanded ? "rotate-180" : ""
+            }`}
+          />
+        </button>
       )}
-    </MotionRoot>
+    </>
   );
 }
