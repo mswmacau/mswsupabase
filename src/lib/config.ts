@@ -7,7 +7,7 @@ export const BRAND = {
   description:
     "MSW 街健館是澳門街頭健身社群平台。每週定期訓練、每月 300 公里跑步挑戰、積分與優惠券獎勵，讓訓練變成看得見的累積。",
   location: "澳門",
-  email: "hello@mswstreetworkout.com",
+  email: "mswmacau2026@gmail.com",
   instagram: "@msw_street_workout",
   instagramUrl: "https://www.instagram.com/msw_street_workout",
   /**
@@ -118,7 +118,6 @@ export const NAV_LINKS = [
   { href: "/training", label: "定期訓練" },
   { href: "/run", label: "月度跑步挑戰" },
   { href: "/leaderboard", label: "排行榜" },
-  { href: "/about", label: "關於我們" },
   /**
    * 「教練團隊」：新增導覽項（對應教練介紹頁 /coaches）。
    * ⚠️ 這是新增的顯示文案，請站主確認用詞。

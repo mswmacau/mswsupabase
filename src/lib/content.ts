@@ -382,7 +382,7 @@ export const DEFAULT_NAV: SiteNav = {
 
 export const DEFAULT_CONTACT: SiteContact = {
   location: "澳門",
-  email: "hello@mswstreetworkout.com",
+  email: "mswmacau2026@gmail.com",
   instagram: "@msw_street_workout",
   instagram_url: "https://www.instagram.com/msw_street_workout",
   intro: [
