@@ -424,55 +424,7 @@ export default async function EventsPage({
         </div>
       </section>
 
-      {/* ================= 1. 三張分類卡（常駐，無活動時也顯示） ================= */}
-      <section className="container-msw section-pad">
-        <div className="flex flex-wrap items-end justify-between gap-6 border-b border-white/10 pb-8">
-          <div>
-            <span className="eyebrow">Categories</span>
-            <h2 className="display-xl mt-5">三種參與方式</h2>
-          </div>
-          <p className="max-w-md text-sm leading-relaxed text-white/65">
-            每週固定練、每月一次的付費挑戰、自己安排的里程累積——三條路都算數，
-            選一條先開始就對了。
-          </p>
-        </div>
-
-        <div className="mt-10">
-          <CategoryCards />
-        </div>
-      </section>
-
-      {/* ================= 2. 近期活動（已發布的一般活動） =================
-          修復「管理員發布了但會員看不到」的斷裂：/admin/events 發布的一般活動
-          從這裡才真的有前台出口。HYROX 已在上面分類卡與 /hyrox 承接，故查詢端
-          就排除 series='hyrox'（見 getCachedPublishedEvents）。
-          空狀態刻意整段不渲染：留一個「暫無活動」的空盒子比沒有更難看。 */}
-      {upcomingEvents.length > 0 && (
-        <section className="container-msw pb-16">
-          <div className="flex flex-wrap items-end justify-between gap-6 border-b border-white/10 pb-8">
-            <div>
-              <span className="eyebrow">Upcoming</span>
-              <h2 className="display-xl mt-5">近期活動</h2>
-            </div>
-            <p className="max-w-md text-sm leading-relaxed text-white/65">
-              已開放報名的一般活動。日期、地點、費用與名額都在卡片上。
-            </p>
-          </div>
-
-          <div className="mt-10 grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
-            {upcomingEvents.map((ev) => (
-              <EventCard
-                key={ev.id}
-                event={ev}
-                isLoggedIn={isLoggedIn}
-                registered={registeredIds.has(ev.id)}
-              />
-            ))}
-          </div>
-        </section>
-      )}
-
-      {/* ================= 3. 當月班表日曆 ================= */}
+      {/* ================= 1. 當月班表日曆（第一段內容：站主反映原本排在第三段＝很難找） ================= */}
       <section
         id="schedule"
         className="relative border-y border-ink-line bg-ink-soft"
@@ -630,6 +582,54 @@ export default async function EventsPage({
           )}
         </div>
       </section>
+
+      {/* ================= 2. 三張分類卡（常駐，無活動時也顯示） ================= */}
+      <section className="container-msw section-pad">
+        <div className="flex flex-wrap items-end justify-between gap-6 border-b border-white/10 pb-8">
+          <div>
+            <span className="eyebrow">Categories</span>
+            <h2 className="display-xl mt-5">三種參與方式</h2>
+          </div>
+          <p className="max-w-md text-sm leading-relaxed text-white/65">
+            每週固定練、每月一次的付費挑戰、自己安排的里程累積——三條路都算數，
+            選一條先開始就對了。
+          </p>
+        </div>
+
+        <div className="mt-10">
+          <CategoryCards />
+        </div>
+      </section>
+
+      {/* ================= 3. 近期活動（已發布的一般活動） =================
+          修復「管理員發布了但會員看不到」的斷裂：/admin/events 發布的一般活動
+          從這裡才真的有前台出口。HYROX 已在上面分類卡與 /hyrox 承接，故查詢端
+          就排除 series='hyrox'（見 getCachedPublishedEvents）。
+          空狀態刻意整段不渲染：留一個「暫無活動」的空盒子比沒有更難看。 */}
+      {upcomingEvents.length > 0 && (
+        <section className="container-msw pb-16">
+          <div className="flex flex-wrap items-end justify-between gap-6 border-b border-white/10 pb-8">
+            <div>
+              <span className="eyebrow">Upcoming</span>
+              <h2 className="display-xl mt-5">近期活動</h2>
+            </div>
+            <p className="max-w-md text-sm leading-relaxed text-white/65">
+              已開放報名的一般活動。日期、地點、費用與名額都在卡片上。
+            </p>
+          </div>
+
+          <div className="mt-10 grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
+            {upcomingEvents.map((ev) => (
+              <EventCard
+                key={ev.id}
+                event={ev}
+                isLoggedIn={isLoggedIn}
+                registered={registeredIds.has(ev.id)}
+              />
+            ))}
+          </div>
+        </section>
+      )}
 
       {/* ================= 4. 往期班表 ================= */}
       {pastMonths.length > 0 && (
