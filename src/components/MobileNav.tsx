@@ -51,6 +51,14 @@ export function MobileNav({
 
   // 子選單 accordion：同一時間只展開一組（父項 href 作為 key）
   const [openGroup, setOpenGroup] = useState<string | null>(null);
+  /**
+   * 點導覽連結時直接關閉整個選單。
+   *
+   * 開啟狀態原本靠「開啟時的路徑 === 目前路徑」推導，換頁會自動關閉；
+   * 但如果點的目標**就是目前這一頁**（例如在 /events 點「活動」），
+   * pathname 不變 → 選單不會關，使用者會以為點了沒反應。所以在連結的
+   * onClick 明確關閉，不依賴路徑變化。
+   */
   const uid = useId().replace(/[^a-zA-Z0-9-]/g, "");
 
   /**
@@ -161,6 +169,7 @@ export function MobileNav({
                     key={l.href}
                     href={l.href}
                     aria-current={active ? "page" : undefined}
+                    onClick={() => setOpenPath(null)}
                     className={`relative flex min-h-14 items-baseline gap-4 border-b border-white/10 text-xl font-semibold transition-colors ${
                       active ? "text-vital-bright" : "text-white/90"
                     }`}
@@ -199,6 +208,7 @@ export function MobileNav({
                     <Link
                       href={l.href}
                       aria-current={active ? "page" : undefined}
+                      onClick={() => setOpenPath(null)}
                       className={`relative flex min-h-14 min-w-0 flex-1 items-center gap-4 text-xl font-semibold transition-colors ${
                         active ? "text-vital-bright" : "text-white/90"
                       }`}
@@ -250,6 +260,7 @@ export function MobileNav({
                               <Link
                                 href={c.href}
                                 aria-current={childActive ? "page" : undefined}
+                                onClick={() => setOpenPath(null)}
                                 tabIndex={expanded ? undefined : -1}
                                 className={`flex min-h-11 items-center pr-2 text-base transition-colors ${
                                   childActive
