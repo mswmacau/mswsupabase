@@ -11,7 +11,6 @@ import {
   Trophy,
 } from "lucide-react";
 import { BrandIntro } from "@/components/BrandIntro";
-import { HeroVisual } from "@/components/HeroVisual";
 /* 首頁圖片輪播：資料由後台 /admin/slides 維護（表 public.home_slides） */
 import { SlideCarousel } from "@/components/home/SlideCarousel";
 import { getActiveSlides } from "@/lib/home-slides";
@@ -88,6 +87,31 @@ const DISCIPLINE_SPANS = [
   "lg:col-span-4",
   "lg:col-span-3 lg:mt-10",
   "lg:col-span-5",
+];
+
+/**
+ * 首頁區塊的固定渲染順序（站主 2026-02 指定）。
+ *
+ * 為什麼不再用 `site_blocks.order` 排序：DB 的 order 是舊次序（about 緊隨
+ * stats、programs 在 reasons 之前），與站主要求的
+ * 「統計帶 → 本月場次 → 排行榜 → 超越界限 → 各類訓練 → 兩大核心活動 → CTA」
+ * 不一致。這裡以站主這次的指定為準，改由本常數決定順序；
+ * **後台的 visible 仍然有效**（隱藏某個區塊照樣即時消失）。
+ *
+ * 註：「本月場次」不是 BlockId（DB 沒有這個 id，加進去要改 schema），
+ * 它由下方的 scheduleAfterId 掛在統計帶之後。
+ * 註：about（BrandIntro「關於我們」）站主沒指定位置，放在「各類訓練項目」
+ * 之後、「兩大核心活動」之前——敘事段收完、行動入口接著收尾。
+ */
+const HOME_SECTION_ORDER: readonly BlockId[] = [
+  "hero",
+  "stats",
+  "ranking",
+  "reasons",
+  "disciplines",
+  "about",
+  "programs",
+  "cta",
 ];
 
 /**
@@ -229,17 +253,24 @@ export default async function HomePage() {
     desc: f.desc,
   }));
 
-  // T-20：首頁 8 個區塊依 site_blocks.home 的 visible / order 過濾與排序。
-  // 預設（全部 visible=true、order 1–8）輸出與現行順序完全一致；
-  // 後端已擋 visible<3，前端照渲染即可。
-  const orderedBlocks = [...blocks.home]
-    .sort((a, b) => a.order - b.order)
-    .filter((b) => b.visible);
+  // T-20：site_blocks.home 只決定 visible；渲染順序改由 HOME_SECTION_ORDER
+  // （站主 2026-02 指定）決定，理由見該常數的註解。
+  const orderedBlocks = blocks.home
+    .filter((b) => b.visible)
+    .sort(
+      (a, b) =>
+        HOME_SECTION_ORDER.indexOf(a.id) - HOME_SECTION_ORDER.indexOf(b.id)
+    );
 
-  /** ranking 是否還在（決定「本月場次」插在哪個區塊後面，見下方 render） */
-  const hasRankingBlock = orderedBlocks.some((b) => b.id === "ranking");
+  /** 「本月場次」緊接統計帶之後；統計帶若被後台隱藏，退回接在第一個區塊之後 */
+  const scheduleAfterId: BlockId | undefined = orderedBlocks.some(
+    (b) => b.id === "stats"
+  )
+    ? "stats"
+    : orderedBlocks[0]?.id;
 
-  /* ============ 首頁 8 個區塊（T-20：順序由 site_blocks 決定） ============ */
+  /* ============ 首頁 8 個區塊（T-20：visible 由 site_blocks 決定，
+     渲染順序由 HOME_SECTION_ORDER 決定） ============ */
 
   const heroSection = (
     <section
@@ -308,9 +339,9 @@ export default async function HomePage() {
             <span className="vlabel text-white/50">Macau · Est. 2026</span>
           </div>
 
-          {/* relative z-10：Hero 視覺（裝飾 SVG）在 DOM 中排在文字之後，
-              沒有 z-index 的話會疊在 CTA 按鈕之上（實測桌面會蓋住
-              「立即加入會員」與「查看活動」）。抬高文字層，裝飾只留在背景。 */}
+          {/* Hero 視覺（人形 + 單杠的裝飾 SVG）已於「刪裝飾視覺」一次下架：
+              它純屬 aria-hidden 裝飾，手機卻佔 144px、桌面出血到右側壓住日期卡。
+              下方背景裝飾層（光暈／網格／噪點）與輪播、h1、CTA 全部保留。 */}
           <div className="relative z-10 lg:pl-14">
             {/* h1 本身就是視覺主標：display-hero 掛在 h1 上，
                 內層 span 只負責換行與顏色（字級／字重由 h1 繼承）。
@@ -445,18 +476,6 @@ export default async function HomePage() {
               </div>
             </div>
           </div>
-
-          {/* Hero 視覺：放大並出血出邊界。
-              手機限高 h-36（144px）：原本 350 寬時 SVG 會長到 245px，白白吃掉
-              接近三分之一屏的垂直空間，而它純屬裝飾（aria-hidden）。
-              桌面再壓到 0.55：裝飾的白色人字與弧線原本直接壓在日期卡與
-              「查看活動」上（1440 實測文字與白線交疊、對比掉一大截），
-              降權重後第一眼的焦點回到 h1 與紅色主 CTA。 */}
-          <div className="pointer-events-none relative mt-6 h-36 w-full lg:absolute lg:-right-[12%] lg:top-[2%] lg:mt-0 lg:h-auto lg:w-[62%]">
-            <div className="clip-slant h-full opacity-90 lg:opacity-[0.55]">
-              <HeroVisual />
-            </div>
-          </div>
         </div>
       </div>
 
@@ -578,15 +597,6 @@ export default async function HomePage() {
               <h3 className="mt-5 text-xl font-black tracking-tight md:text-3xl">
                 定期訓練活動
               </h3>
-              <p className="mt-3 max-w-lg text-sm leading-relaxed text-white/70">
-                每週多堂，時間與教練
-                <span className="font-semibold text-white">見班表</span>
-                ，於澳門街健館進行團體街頭健身訓練。現場簽到，後台確認後即可獲得{" "}
-                <span className="font-semibold text-vital-bright">
-                  {RULES.CHECKIN_POINTS} 積分
-                </span>
-                。
-              </p>
 
               <ul className="mt-5 border-t border-white/10">
                 {TRAINING_ROWS.map((row) => (
@@ -753,7 +763,7 @@ export default async function HomePage() {
 
   const rankingSection = (
     <section
-      className="pub-shell pub-band-0 relative border-t border-ink-line"
+      className="pub-shell pub-band-1 relative border-t border-ink-line"
       data-fx-seq
     >
       <div className="container-msw pub-pad grid gap-8 lg:grid-cols-12">
@@ -826,11 +836,12 @@ export default async function HomePage() {
    * 首頁這一版走精簡密度（compact）：手機只留月曆格 + 顏色短條，
    * 圖例全文與說明留給 /events，避免首頁高度失控。
    *
-   * 位置刻意放在 ranking 之後、cta 之前：色帶節奏 0 → 1 → 2 保持交替
-   * （ranking 是 band-0、cta 是 band-2，這裡插 band-1 剛好接上）。
+   * 位置（站主 2026-02 指定）：緊接在統計帶之後、排行榜之前，
+   * 由 render 端的 scheduleAfterId 插入。色帶用 band-0：前一塊統計帶是
+   * band-1、後一塊排行榜是 band-1，夾在中間剛好深淺交替（0 → 1 → 1 會連成一片）。
    */
   const scheduleSection = (
-    <section className="pub-shell pub-band-1 pub-pad" data-fx-seq>
+    <section className="pub-shell pub-band-0 pub-pad" data-fx-seq>
       <div className="container-msw">
         <div className="pub-head">
           <h2 className="pub-head-title">本月場次</h2>
@@ -871,7 +882,7 @@ export default async function HomePage() {
 
   const ctaSection = (
     <section
-      className="pub-shell pub-band-2 relative overflow-hidden border-t border-ink-line"
+      className="pub-shell pub-band-1 relative overflow-hidden border-t border-ink-line"
       data-fx-seq
     >
       <div className="grid-lines absolute inset-0" />
@@ -968,19 +979,18 @@ export default async function HomePage() {
       <HoverFx />
       <BackToTop />
 
-      {/* T-20：依 site_blocks 的 visible / order 渲染（預設順序 = 現行版面）
+      {/* T-20：依 site_blocks 的 visible 過濾、依 HOME_SECTION_ORDER（站主
+          2026-02 指定）排序渲染。
           首頁輪播已移到 hero 區塊內、主標題之前（見 heroSection），
           所以這裡不再跟在 hero 之後插入輪播。
 
           「本月場次」不是 site_blocks 的一個區塊（DB 的 BlockId 沒有這個 id，
-          加進去就要改資料庫），所以固定插在 ranking 之後、cta 之前；
-          若 ranking 被後台隱藏，就改插在 cta 之前，確保它不會整塊消失。 */}
+          加進去就要改資料庫），所以固定插在統計帶之後（scheduleAfterId）；
+          若統計帶被後台隱藏，就改插在第一個區塊之後，確保它不會整塊消失。 */}
       {orderedBlocks.map((b) => (
         <Fragment key={b.id}>
           {sections[b.id]}
-          {b.id === "ranking" || (!hasRankingBlock && b.id === "cta")
-            ? scheduleSection
-            : null}
+          {b.id === scheduleAfterId ? scheduleSection : null}
         </Fragment>
       ))}
     </>
