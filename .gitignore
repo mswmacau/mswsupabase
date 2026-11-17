@@ -51,3 +51,4 @@ next-env.d.ts
 /_audit/
 /_incoming/
 *.log
+/supabase/.temp/
