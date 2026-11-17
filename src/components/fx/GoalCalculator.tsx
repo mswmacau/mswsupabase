@@ -121,7 +121,8 @@ export function GoalCalculator({
         </div>
       </div>
 
-      {/* accentColor 用 CSS 變數，唔 hardcode 色碼 */}
+      {/* accentColor 用 CSS 變數，唔 hardcode 色碼。
+          h-11：原生 range 只有 16px 高，觸控目標不足 44px；放大的是元素外框，軌道仍然置中 */}
       <input
         id={sliderId}
         type="range"
@@ -133,7 +134,7 @@ export function GoalCalculator({
           setPerDay(clamp(Number(e.target.value), minPerDay, maxPerDay))
         }
         style={{ accentColor: "var(--color-vital)" }}
-        className="mt-4 w-full"
+        className="mt-4 h-11 w-full"
       />
 
       <div className="mt-6 grid gap-4 sm:grid-cols-2">

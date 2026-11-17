@@ -241,7 +241,7 @@ export default function ResetPasswordPage() {
             )}
 
             {phase === "ready" && (
-              <form onSubmit={submit} className="space-y-4" noValidate>
+              <form onSubmit={submit} method="post" action="/auth/reset" className="space-y-4" noValidate>
                 {formError && (
                   <div
                     role="alert"

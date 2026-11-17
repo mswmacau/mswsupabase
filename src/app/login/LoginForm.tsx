@@ -81,7 +81,12 @@ export function LoginForm({
       {/* OAuth 走整頁導向，刻意放在 <form> 之外，不混進 submit 流程 */}
       <GoogleAuthButton next={next} />
 
-      <form onSubmit={onSubmit} className="space-y-5">
+      {/*
+        method/action 是安全屬性，不是裝飾：
+        未 hydrate（手機慢網）時按登入，瀏覽器會走原生提交，
+        沒有 method 就等於 GET → 密碼會出現在網址、歷史紀錄與 Referer。
+      */}
+      <form onSubmit={onSubmit} method="post" action="/login" className="space-y-5">
         {error && (
           <div
             role="alert"

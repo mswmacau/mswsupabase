@@ -235,6 +235,8 @@ export function RegisterWizard({ event, qrUrl, profile }: RegisterWizardProps) {
         if (step === 3) void submit();
         else handleNext();
       }}
+      method="post"
+      action="/hyrox/register"
       className="min-w-0 space-y-5"
     >
       {/*

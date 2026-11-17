@@ -158,7 +158,14 @@ export function CompleteProfileForm({
   }
 
   return (
-    <form onSubmit={onSubmit} onBlur={handleBlur} className="space-y-5" noValidate>
+    <form
+      onSubmit={onSubmit}
+      onBlur={handleBlur}
+      method="post"
+      action="/complete-profile"
+      className="space-y-5"
+      noValidate
+    >
       {error && (
         <div
           role="alert"

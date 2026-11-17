@@ -123,7 +123,7 @@ export function RunUploadForm({
   const thisMonth = currentMonth();
 
   return (
-    <form ref={formRef} onSubmit={onSubmit} className="space-y-5">
+    <form ref={formRef} onSubmit={onSubmit} method="post" action="/run" className="space-y-5">
       {/* 錯誤：斜切徽章標頭 + 訊息，層次分明 */}
       {error && (
         <div

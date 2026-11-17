@@ -148,6 +148,8 @@ export function RedemptionsView({
 
         <form
           className="flex flex-wrap items-center gap-2"
+          method="post"
+          action="/admin/redemptions"
           onSubmit={(event) => {
             event.preventDefault();
             setPending(true);

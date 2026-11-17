@@ -255,8 +255,11 @@ export default function VerifyPanel({ code }: { code: string }) {
           </div>
         </dl>
 
+        {/* 路由帶動態參數，action 留空＝明確回本頁；method 一定要 post，避免 PIN 進網址 */}
         <form
           className="mt-6"
+          method="post"
+          action=""
           onSubmit={(event) => {
             event.preventDefault();
             void submit();

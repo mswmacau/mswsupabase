@@ -262,6 +262,32 @@ html.fx-reveal-armed:not(.fx-reveal-arming) [data-fx-seq] {
   z-index: 1;
 }
 
+/* 手機（<=767px）：縮到 48×48 貼右下角，且停止捲動 2 秒後淡出。
+ * 只縮小仍會壓住正文（實測：核心訓練重疊 47×24、每公里 +1 積分 48×37），
+ * 所以再加「捲動時才出現」；桌機 58×58 常駐不變。 */
+@media (max-width: 767px) {
+  .fx-top {
+    right: 12px;
+    bottom: 12px;
+    width: 48px;
+    height: 48px;
+    font-size: 16px;
+  }
+  .fx-top svg {
+    width: 40px;
+    height: 40px;
+  }
+  .fx-top[data-fx-idle="on"] {
+    opacity: 0;
+    /* visibility 一併收掉，否則隱形後仍可用 Tab 聚焦（鍵盤會落在看不見的鈕上） */
+    visibility: hidden;
+    pointer-events: none;
+    transition:
+      opacity 0.3s ease,
+      visibility 0s linear 0.3s;
+  }
+}
+
 /* ---------------------------------------------------------------------
  * 觸控裝置：呢啲效果一律唔會啟用（JS 亦唔會 mount），CSS 再兜一層底
  * ------------------------------------------------------------------- */
@@ -273,6 +299,10 @@ html.fx-reveal-armed:not(.fx-reveal-arming) [data-fx-seq] {
     transition: none;
   }
   .fx-top {
+    transition: none;
+  }
+  /* reduced-motion 下連淡出過場都省掉，但隱藏狀態本身仍要生效 */
+  .fx-top[data-fx-idle="on"] {
     transition: none;
   }
   /* reduced-motion 下 MarqueeBoost 會直接 return（唔加 `.fx-mq-js`），

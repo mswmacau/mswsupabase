@@ -265,7 +265,7 @@ export function SessionFormDialog({
         </>
       }
     >
-      <form id={formId} onSubmit={handleSubmit} className="space-y-4">
+      <form id={formId} onSubmit={handleSubmit} method="post" action="/admin/schedule" className="space-y-4">
         {classesEmpty && (
           <AdminError message="課程主檔還是空的（training_classes 沒有資料），沒法排班。請聯絡工程師先把課程匯入，之後這張表單就能用。" />
         )}

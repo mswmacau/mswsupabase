@@ -279,7 +279,8 @@ export function SignupForm({
       {/* OAuth 走整頁導向，刻意放在 <form> 之外，不混進 submit 流程 */}
       <GoogleAuthButton next={next} emailFallbackLabel="註冊" />
 
-      <form onSubmit={onSubmit} onBlur={handleBlur} className="space-y-5">
+      {/* method/action 同登入頁：防止未 hydrate 時原生 GET 把密碼帶進網址 */}
+      <form onSubmit={onSubmit} onBlur={handleBlur} method="post" action="/signup" className="space-y-5">
         {error && (
           <div
             role="alert"

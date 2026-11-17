@@ -183,7 +183,7 @@ export function LeaderboardSearch({
               value={query}
               onChange={(e) => setQuery(e.target.value)}
               placeholder="搜尋會員"
-              className="field w-28 py-2 pl-8 pr-2 text-xs sm:w-44 sm:pl-9 sm:pr-3 sm:text-sm lg:w-56"
+              className="field w-28 py-2 pl-8 pr-2 text-xs min-h-11 sm:w-44 sm:pl-9 sm:pr-3 sm:text-sm lg:w-56"
             />
           </div>
         </div>

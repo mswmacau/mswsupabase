@@ -668,10 +668,10 @@ function EventRow({
     ev.status === "published" ? "draft" : "published";
 
   return (
-    <div className="card-dark flex flex-wrap items-center gap-4 p-4">
-      <div className="min-w-0 flex-1">
-        <div className="flex flex-wrap items-center gap-2">
-          <span className="font-semibold">{ev.title}</span>
+    <div className="card-dark flex flex-col gap-4 p-4 lg:flex-row lg:flex-wrap lg:items-center">
+      <div className="w-full min-w-0 lg:flex-1">
+        <div className="flex min-w-0 flex-wrap items-center gap-2">
+          <span className="min-w-0 font-semibold line-clamp-2 lg:line-clamp-none">{ev.title}</span>
           <span
             className={`rounded-full border px-2.5 py-0.5 text-xs font-semibold ${badge.cls}`}
           >
@@ -707,7 +707,8 @@ function EventRow({
         )}
       </div>
 
-      <div className="flex flex-wrap items-center gap-2">
+      {/* 手機：按鈕列另起一列（w-full），唔會再擠壓上面嘅文字欄 */}
+      <div className="flex w-full flex-wrap items-center gap-2 lg:w-auto">
         {ev.status !== "archived" && (
           <>
             <button
