@@ -14,6 +14,8 @@
  * 日期運算則統一用 Date.UTC + getUTC*，避免機器時區影響加減天數。
  */
 
+import type { TrainingSessionRow } from "@/lib/types";
+
 export type ScheduleKind = "class" | "hyrox";
 export type ScheduleStatus = "open" | "closed" | "cancelled";
 
@@ -258,4 +260,41 @@ export function statusBadgeClass(
   if (phase === "today") return "border-vital/50 bg-vital/15 text-vital-bright";
   if (status === "closed") return "border-amber-500/40 bg-amber-500/10 text-amber-300";
   return "border-emerald-500/40 bg-emerald-500/10 text-emerald-300";
+}
+
+/**
+ * 班表列（`training_sessions` + 課程 join）→ 日曆要的視圖。
+ *
+ * 給首頁「本月場次」用（那個區塊只需要「點下去有東西」）。
+ * `/events` 有自己的一份，因為它還要疊 HYROX 付費場次、依「已結束／未登入／
+ * 已登入」給不同 CTA；首頁不做那些分支，所以 CTA 一律指向日期頁。
+ *
+ * 課程名：`class_name ?? title` —— 舊資料（class_id 為 null）沒有課程名，
+ * 退回場次標題，不要顯示空白。
+ * 場地：`location_override ?? location` —— 管理員可以在「這一場」臨時改場地。
+ */
+export function sessionRowToView(
+  row: TrainingSessionRow,
+  todayISO: string
+): ScheduleSessionView {
+  const cancelled = row.status === "cancelled";
+  const past = sessionPhase(row.session_date, todayISO) === "past";
+  return {
+    id: row.id,
+    kind: "class",
+    title: row.class_name ?? row.title,
+    date: row.session_date,
+    startTime: row.start_time ? row.start_time.slice(0, 5) : null,
+    endTime: row.end_time ? row.end_time.slice(0, 5) : null,
+    colorKey: row.class_color_key,
+    coachName: row.coach_name,
+    location: row.location_override ?? row.location,
+    capacity: row.capacity,
+    status: row.status,
+    paid: false,
+    feeCents: null,
+    cta: cancelled
+      ? null
+      : { label: past ? "看當日場次" : "看當日場次與報名", href: `/training/${row.session_date}` },
+  };
 }

@@ -54,6 +54,7 @@ export function ScheduleCalendar({
   legend,
   classesByColor,
   todayISO,
+  compact = false,
 }: {
   year: number;
   month: number;
@@ -64,6 +65,11 @@ export function ScheduleCalendar({
   classesByColor?: Record<string, string[]>;
   /** Asia/Macau 的今天（server 算好傳入），詳情面板據此判斷已結束／今天／可報名 */
   todayISO: string;
+  /**
+   * 精簡模式（首頁「本月場次」區塊）：手機只留月曆格 + 顏色短條，
+   * 不顯示圖例全文。桌面上仍顯示完整圖例，所以同一個元件兩種密度。
+   */
+  compact?: boolean;
 }) {
   /** 第二層：哪一場被打開（有值時開單場詳情面板） */
   const [selected, setSelected] = useState<ScheduleSessionView | null>(null);
@@ -103,9 +109,11 @@ export function ScheduleCalendar({
       </div>
 
       {/* 顏色圖例：標題列下方、格子上方，手機與桌面都顯示。
-          legend 為空（migration 未執行）時整段不 render，不留空行。 */}
+          legend 為空（migration 未執行）時整段不 render，不留空行。
+          compact（首頁版）在手機隱藏圖例全文：首頁只要「看一眼有沒有課」，
+          完整的顏色對照留給 /events，避免首頁多出五、六行文字把高度撐爆。 */}
       {legend.length > 0 && (
-        <div className="mt-4">
+        <div className={`mt-4 ${compact ? "hidden md:block" : ""}`}>
           <ScheduleLegend items={legend} classesByColor={classesByColor} />
         </div>
       )}

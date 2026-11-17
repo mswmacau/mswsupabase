@@ -16,13 +16,24 @@ import { HeroVisual } from "@/components/HeroVisual";
 import { SlideCarousel } from "@/components/home/SlideCarousel";
 import { getActiveSlides } from "@/lib/home-slides";
 import {
+  getAvailableMonths,
   getCachedMonthlyLeaderboard,
   getCachedSiteStats,
+  getClassNamesByColor,
   getNextSession,
+  getScheduleLegend,
+  getScheduleMonth,
   getSiteBlocks,
   getSiteContent,
   getSiteTheme,
 } from "@/lib/queries";
+import { ScheduleCalendar } from "@/components/schedule/ScheduleCalendar";
+import {
+  buildMonthDays,
+  macauTodayISO,
+  sessionRowToView,
+  sortSessionViews,
+} from "@/components/schedule/schedule-utils";
 import { RULES } from "@/lib/config";
 import type { BlockId } from "@/lib/content";
 import { publicAssetUrl } from "@/lib/assets";
@@ -124,6 +135,45 @@ export default async function HomePage() {
       getActiveSlides(),
     ]);
 
+  /* ---------- 首頁「本月場次」日曆（B4 版本 1）----------
+   * 站主要求「主頁同活動頁都可以放」：首頁放精簡版，讓第一次進站的人不用
+   * 先找到「活動」頁才看得到班表。
+   * 資料全部走 /events 同一批 cached getter，所以兩邊的月份、圖例、顏色
+   * 不會各講一套。
+   */
+  const todayISO = macauTodayISO();
+  const [availableMonths, legend, classesByColor] = await Promise.all([
+    getAvailableMonths(),
+    getScheduleLegend(),
+    getClassNamesByColor(),
+  ]);
+
+  /** 優先顯示「含今天」的已發布月份，沒有就退回最新已發布月份 */
+  const todayYearMonth = {
+    year: Number(todayISO.slice(0, 4)),
+    month: Number(todayISO.slice(5, 7)),
+  };
+  const thisMonthPublished = availableMonths.find(
+    (m) => m.year === todayYearMonth.year && m.month === todayYearMonth.month
+  );
+  const latestPublished =
+    availableMonths.length > 0 ? availableMonths[availableMonths.length - 1] : null;
+  const scheduleMonth = thisMonthPublished ?? latestPublished;
+  const homeSchedule = scheduleMonth
+    ? await getScheduleMonth(scheduleMonth.year, scheduleMonth.month)
+    : null;
+  const homeDays =
+    scheduleMonth && homeSchedule
+      ? buildMonthDays({
+          year: scheduleMonth.year,
+          month: scheduleMonth.month,
+          sessions: sortSessionViews(
+            homeSchedule.sessions.map((row) => sessionRowToView(row, todayISO))
+          ),
+          todayISO,
+        })
+      : [];
+
   /**
    * H-09 倒數目標：澳門牆上時間（session_date + start_time）→ 帶 +08:00 偏移的
    * 絕對時刻。用絕對時刻而不是「下個週一 20:00」，倒數才會對準真正的那一場；
@@ -185,6 +235,9 @@ export default async function HomePage() {
   const orderedBlocks = [...blocks.home]
     .sort((a, b) => a.order - b.order)
     .filter((b) => b.visible);
+
+  /** ranking 是否還在（決定「本月場次」插在哪個區塊後面，見下方 render） */
+  const hasRankingBlock = orderedBlocks.some((b) => b.id === "ranking");
 
   /* ============ 首頁 8 個區塊（T-20：順序由 site_blocks 決定） ============ */
 
@@ -766,6 +819,56 @@ export default async function HomePage() {
     </section>
   );
 
+  /**
+   * 「本月場次」——首頁版日曆（B4 版本 1）。
+   *
+   * 站主原話：「主頁同活動頁面都可以放，請你兩個版本都做俾我睇」。
+   * 首頁這一版走精簡密度（compact）：手機只留月曆格 + 顏色短條，
+   * 圖例全文與說明留給 /events，避免首頁高度失控。
+   *
+   * 位置刻意放在 ranking 之後、cta 之前：色帶節奏 0 → 1 → 2 保持交替
+   * （ranking 是 band-0、cta 是 band-2，這裡插 band-1 剛好接上）。
+   */
+  const scheduleSection = (
+    <section className="pub-shell pub-band-1 pub-pad" data-fx-seq>
+      <div className="container-msw">
+        <div className="pub-head">
+          <h2 className="pub-head-title">本月場次</h2>
+        </div>
+
+        <p className="mt-3 max-w-xl text-sm leading-relaxed text-white/70">
+          點日期看當日的時間、教練、場地與名額，直接報名。
+        </p>
+
+        {scheduleMonth && homeSchedule ? (
+          <div className="mt-6">
+            <ScheduleCalendar
+              // 換月時重掛載：選中的場次不該跨月沿用
+              key={`${scheduleMonth.year}-${scheduleMonth.month}`}
+              year={scheduleMonth.year}
+              month={scheduleMonth.month}
+              days={homeDays}
+              legend={legend}
+              classesByColor={classesByColor}
+              todayISO={todayISO}
+              compact
+            />
+          </div>
+        ) : (
+          <p className="mt-6 border border-dashed border-white/15 bg-white/[0.02] px-4 py-3 text-sm text-white/65">
+            本月班表尚未公布，公布後會出現在這裡。
+          </p>
+        )}
+
+        <div className="mt-6">
+          <Link href="/events" className="btn-base btn-ghost btn-slab min-h-11">
+            看完整班表與顏色對照 <ArrowRight size={16} />
+          </Link>
+        </div>
+      </div>
+    </section>
+  );
+
   const ctaSection = (
     <section
       className="pub-shell pub-band-2 relative overflow-hidden border-t border-ink-line"
@@ -867,9 +970,18 @@ export default async function HomePage() {
 
       {/* T-20：依 site_blocks 的 visible / order 渲染（預設順序 = 現行版面）
           首頁輪播已移到 hero 區塊內、主標題之前（見 heroSection），
-          所以這裡不再跟在 hero 之後插入輪播。 */}
+          所以這裡不再跟在 hero 之後插入輪播。
+
+          「本月場次」不是 site_blocks 的一個區塊（DB 的 BlockId 沒有這個 id，
+          加進去就要改資料庫），所以固定插在 ranking 之後、cta 之前；
+          若 ranking 被後台隱藏，就改插在 cta 之前，確保它不會整塊消失。 */}
       {orderedBlocks.map((b) => (
-        <Fragment key={b.id}>{sections[b.id]}</Fragment>
+        <Fragment key={b.id}>
+          {sections[b.id]}
+          {b.id === "ranking" || (!hasRankingBlock && b.id === "cta")
+            ? scheduleSection
+            : null}
+        </Fragment>
       ))}
     </>
   );
