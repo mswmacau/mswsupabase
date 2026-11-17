@@ -775,7 +775,7 @@ export default async function HomePage() {
             <span className="block">排行榜</span>
           </h2>
           <p className="mt-4 max-w-sm text-sm leading-relaxed text-white/70">
-            依當月已確認的跑步里程排序。提交紀錄經後台確認後才會計入排名。
+            依當月已確認的跑步里程排序。
           </p>
           <Link
             href="/leaderboard"
