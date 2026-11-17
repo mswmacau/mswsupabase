@@ -6,7 +6,6 @@ import { createPortal } from "react-dom";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
-  ArrowUpRight,
   ChevronDown,
   Gift,
   Menu,
@@ -142,10 +141,10 @@ export function MobileNav({
           <nav className="relative flex flex-col px-5 pt-4">
             {/*
               2026 導覽收斂：5 項，其中「活動」帶 3 個子項。
-              有子項的項目＝一層 accordion 就地展開（不開二級抽屜、不跳新頁）。
-              父列本身是展開控制（所以「點活動」＝展開），
-              右側另留一個獨立的 icon 連到父頁（/events），
-              否則父頁就從手機選單失去入口。圖示不帶可見文案。
+              有子項的項目＝「文字連到父頁 + chevron 獨立展開」（規則見下面分支）。
+              原本「父列是展開控制、另一個小圖示才連父頁」的做法已移除：
+              站主反映「導覽『活動』點不動」，因為點文字只會展開子選單，
+              沒有任何可見提示說那個小圖示才是入口。
             */}
             {links.map((l, i) => {
               const active =
@@ -184,13 +183,23 @@ export function MobileNav({
               const panelId = `mnav-${uid}-${i}`;
               return (
                 <div key={l.href} className="border-b border-white/10">
+                  {/*
+                    有子項的項目＝兩顆各自獨立的控制項（站主反映「點活動點不動」）：
+
+                      [ 01  活動         ]  ← 左：Link，點文字＝直接進總覽 /events
+                      [              ⌄  ]  ← 右：button，點 chevron＝就地展開子選單
+
+                    兩者都 ≥44px（左 min-h-14 = 56px、右 min-w-11 min-h-11 = 44×44），
+                    aria-expanded / aria-controls 掛在**展開鈕**身上，不是掛在連結上——
+                    連結沒有展開狀態，把 aria-expanded 放在 <a> 上是錯的語義。
+
+                    沒有子項的項目走下面的分支，維持單一 <Link>。
+                  */}
                   <div className="flex items-center gap-1">
-                    <button
-                      type="button"
-                      aria-expanded={expanded}
-                      aria-controls={panelId}
-                      onClick={() => setOpenGroup(expanded ? null : l.href)}
-                      className={`relative flex min-h-14 min-w-0 flex-1 items-center gap-4 text-left text-xl font-semibold transition-colors ${
+                    <Link
+                      href={l.href}
+                      aria-current={active ? "page" : undefined}
+                      className={`relative flex min-h-14 min-w-0 flex-1 items-center gap-4 text-xl font-semibold transition-colors ${
                         active ? "text-vital-bright" : "text-white/90"
                       }`}
                     >
@@ -198,29 +207,30 @@ export function MobileNav({
                         {String(i + 1).padStart(2, "0")}
                       </span>
                       <span className="min-w-0 flex-1 truncate">{l.label}</span>
-                      <ChevronDown
-                        size={18}
-                        aria-hidden
-                        className={`flex-none text-white/50 transition-transform duration-300 ${
-                          expanded ? "rotate-180" : ""
-                        }`}
-                      />
                       {active && (
                         <span
                           aria-hidden
                           className="absolute bottom-0 left-0 h-[2px] w-10 bg-vital-bright"
                         />
                       )}
-                    </button>
-                    {/* 父頁入口：不新增可見文案，只用圖示 + aria-label；
-                        左側細分隔線把它與展開控制分開，避免兩個圖示讀成同一個按鈕 */}
-                    <Link
-                      href={l.href}
-                      aria-label={`前往${l.label}頁`}
-                      className="ml-1 inline-flex min-h-11 min-w-11 flex-none items-center justify-center border-l border-white/10 text-white/55 transition-colors hover:text-white"
-                    >
-                      <ArrowUpRight size={16} aria-hidden />
                     </Link>
+
+                    <button
+                      type="button"
+                      aria-expanded={expanded}
+                      aria-controls={panelId}
+                      aria-label={`展開「${l.label}」子選單`}
+                      onClick={() => setOpenGroup(expanded ? null : l.href)}
+                      className="pub-focus-ring inline-flex min-h-11 min-w-11 flex-none items-center justify-center text-white/55 transition-colors hover:text-white"
+                    >
+                      <ChevronDown
+                        size={18}
+                        aria-hidden
+                        className={`transition-transform duration-300 ${
+                          expanded ? "rotate-180" : ""
+                        }`}
+                      />
+                    </button>
                   </div>
 
                   {/* 0fr → 1fr 過場，不需要量高度；收起後仍留在 DOM 以便過場 */}
