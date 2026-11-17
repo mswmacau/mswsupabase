@@ -35,6 +35,31 @@ const nextConfig: NextConfig = {
   // 去掉 X-Powered-By: Next.js（減少指紋洩漏）
   poweredByHeader: false,
 
+  /**
+   * 永久轉址（2026-11「關於我們整併」）
+   *
+   * `/about` 的內容已整併到 `/coaches` 底部的「關於我們」區塊
+   * （`BrandIntro` 自帶 `id="about"`，`/coaches#about` 可定位）。
+   *
+   * 為什麼要寫在這裡、而不是只靠 `src/app/about/page.tsx` 的 permanentRedirect：
+   * 本站有 `src/app/loading.tsx`，root 佈局的 HTML 外殼會先串流出去，頁面層的
+   * redirect 只能在串流開始後以 RSC 指令做「客戶端跳轉」——實測 `GET /about`
+   * 回的是 **200 OK 而不是 3xx**，搜尋引擎會把它當成真頁面收錄（等於轉址失效）。
+   * `next.config` 的 redirects 在路由層、渲染之前生效，才會回真正的 308。
+   *
+   * `src/app/about/page.tsx` 的 permanentRedirect 保留為第二層保險：
+   * 日後若有人移除這段設定，路由仍然是轉址而不是 404。
+   */
+  async redirects() {
+    return [
+      {
+        source: "/about",
+        destination: "/coaches#about",
+        permanent: true, // 308
+      },
+    ];
+  },
+
   // 安全標頭（2026-09-25 真機審計修復）
   // 注意：script-src / style-src 必須保留 'unsafe-inline'——
   // Next.js App Router 會在 HTML 內嵌 flight data <script>，

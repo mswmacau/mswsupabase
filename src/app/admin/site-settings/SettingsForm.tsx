@@ -286,7 +286,7 @@ export function SettingsForm({ initialTheme }: { initialTheme: SiteTheme }) {
               onChange={(e) => setField("brand_name_en", e.target.value)}
             />
             <FieldHint>
-              影響：頂部選單品牌英文字、頁尾版權英文、關於我們頁側標、首頁裝飾大字。
+              影響：頂部選單品牌英文字、手機選單品牌字、頁尾版權英文、首頁裝飾大字、定期訓練頁「加入行事曆」的行程來源名稱。
             </FieldHint>
             {fields.brand_name_en && (
               <p className="mt-1 text-xs text-red-300">
@@ -308,8 +308,7 @@ export function SettingsForm({ initialTheme }: { initialTheme: SiteTheme }) {
               }
             />
             <FieldHint>
-              影響：關於我們頁主標語。留空則顯示原廠預設文案。首頁大圖下方的描述句屬另一個欄位（網站內容
-              → 首頁文案 → 主標題下方描述），兩處分開改。
+              目前前台尚未使用此欄位，可先保留空白。
             </FieldHint>
             {fields.tagline_zh && (
               <p className="mt-1 text-xs text-red-300">{fields.tagline_zh}</p>

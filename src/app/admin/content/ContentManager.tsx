@@ -231,6 +231,11 @@ const PAGE_FIELD_LABELS: Partial<
   leaderboard: {
     empty_month: "本月無紀錄提示",
   },
+  // 關於我們頁已下架（/about → 永久轉址到 /coaches#about），
+  // 這裡只為覆蓋 COMMON_FIELD_LABELS.page_title（那句話已不成立）而存在。
+  about: {
+    page_title: "頁面標題（已停用）",
+  },
   coaches: {
     empty_state: "尚無教練資料提示",
   },
@@ -238,6 +243,14 @@ const PAGE_FIELD_LABELS: Partial<
     empty_submissions: "尚無提交紀錄提示（帳戶頁紀錄列表）",
     empty_points: "尚無積分紀錄提示",
     empty_checkins: "尚無訓練紀錄提示",
+  },
+};
+
+/** 已下架頁面的欄位補充說明（目前只有「關於我們」一頁） */
+const PAGE_FIELD_HINTS: Partial<Record<keyof SitePages, Record<string, string>>> = {
+  about: {
+    page_title:
+      "/about 現在是永久轉址，會直接跳到教練團隊頁底部的「關於我們」區塊。這個標題前台已不再顯示，填入只會保留在資料中。",
   },
 };
 
@@ -256,7 +269,9 @@ const PAGE_TABS: { key: keyof SitePages; label: string }[] = [
   { key: "training", label: "定期訓練" },
   { key: "run", label: "跑步挑戰" },
   { key: "leaderboard", label: "排行榜" },
-  { key: "about", label: "關於我們" },
+  // 這一頁 tab 編的是 site_pages.about.page_title；/about 改成轉址後該標題
+  // 前台已無渲染點，故標示「已停用」，避免管理員以為改了會生效。
+  { key: "about", label: "關於我們（已停用）" },
   { key: "coaches", label: "教練團隊" },
   { key: "dashboard", label: "我的帳戶" },
 ];
@@ -269,7 +284,6 @@ const NAV_HREF_LABELS: Record<string, string> = {
   "/training": "定期訓練",
   "/run": "月度跑步挑戰",
   "/leaderboard": "排行榜",
-  "/about": "關於我們",
   "/coaches": "教練團隊",
 };
 
@@ -735,7 +749,7 @@ function ContentSection({
       expanded={expanded}
       onToggle={onToggle}
       title="首頁文案"
-      desc="首頁大圖、關於我們、三大理由、訓練項目、跑馬燈與底部號召的文案。改動會即時套用至首頁與「關於我們」頁。"
+      desc="首頁大圖、關於我們、三大理由、訓練項目、跑馬燈與底部號召的文案。改動會即時套用至首頁與教練團隊頁底部的「關於我們」區塊。"
       resetLabel="回復原廠文案"
       previewHref="/"
       api={api}
@@ -813,10 +827,10 @@ function ContentSection({
           </div>
         </fieldset>
 
-        {/* 關於我們（首頁與 /about 同源） */}
+        {/* 關於我們（首頁與教練團隊頁同源） */}
         <fieldset className="space-y-4">
           <legend className="text-[11px] font-bold uppercase tracking-[0.22em] text-white/55">
-            關於我們（首頁與關於我們頁共用）
+            關於我們（首頁與教練團隊頁共用）
           </legend>
           <TextField
             id="about-eyebrow"
@@ -1553,12 +1567,14 @@ function PagesSection({
             const f = String(field);
             const maxLen = pageFieldMaxLen(f);
             const label = pageFieldLabel(active, f);
+            const hint = PAGE_FIELD_HINTS[active]?.[f];
             const value = (page as unknown as Record<string, string>)[f];
             return (
               <TextField
                 key={`${active}-${f}`}
                 id={`${active}-${f}`}
                 label={label}
+                hint={hint}
                 value={value}
                 maxLen={maxLen}
                 multiline={maxLen >= 140}
@@ -2128,7 +2144,7 @@ export function ContentManager({
   const contentApi = useSectionSave(
     "/api/admin/site-content",
     content,
-    "確定要回復原廠首頁文案嗎？這會清除你對首頁與關於我們文案的所有調整。"
+    "確定要回復原廠首頁文案嗎？這會清除你對首頁與教練團隊頁「關於我們」區塊文案的所有調整。"
   );
   const navApi = useSectionSave(
     "/api/admin/site-nav",

@@ -85,8 +85,9 @@ export function Footer({
           這組文案與首頁 hero 完全同義，且每一頁都重複，因此整塊移除。
 
           移除後頁尾只留「功能性內容」：聯絡資訊、三層連結、版權列。
-          ⚠️ config 的 tagline 與 content 的 intro **沒有刪**（首頁 hero 與
-             /about 仍在用），只是頁尾不再呈現。
+          ⚠️ config 的 tagline 與 content 的 intro **沒有刪**（`/about` 已下架、
+             首頁 hero 讀的是 site_content.hero，兩者在 `src/` 內已無渲染點），
+             只是頁尾不再呈現。
         */}
         <div className="grid gap-8 py-10 md:grid-cols-[minmax(0,18rem)_minmax(0,1fr)] md:gap-10 md:py-12">
           {/* 左欄：聯絡方式 —— 頁尾存在的理由，必須保留 */}
@@ -157,13 +158,6 @@ export function Footer({
                     {l.label}
                   </Link>
                 ))}
-                {/* F-G3：站主要求額外加嘅獨立連結（內部連結，唔開新視窗） */}
-                <Link
-                  href="/about"
-                  className="inline-flex min-h-11 min-w-11 items-center text-sm font-semibold text-white/75 transition hover:text-vital-bright"
-                >
-                  聯絡我們
-                </Link>
                 {/* 私隱政策：Google OAuth 同意畫面需要一個公開可達的政策頁 */}
                 <Link
                   href="/privacy"

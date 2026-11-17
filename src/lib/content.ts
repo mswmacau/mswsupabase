@@ -31,7 +31,7 @@
  * 型別
  * ============================================================= */
 
-/** 首頁「關於我們」四段（config.ts ABOUT；/about 同源） */
+/** 首頁「關於我們」四段（config.ts ABOUT；與 /coaches 的關於我們區塊同源） */
 export interface SiteContentAbout {
   eyebrow: string;
   lead: string;
@@ -215,7 +215,14 @@ export interface SitePageLeaderboard {
   empty_month: string;
 }
 
-/** 關於我們頁（/about；四段內文在 site_content.about，單一來源） */
+/**
+ * 關於我們頁（`/about`）。
+ *
+ * ⚠️ `/about` 已於「關於我們整併」下架，改成永久轉址到 `/coaches#about`，
+ * 這個 `page_title` 因此**前台已無任何渲染點**。欄位與 key 一律保留不刪
+ * （後台 tab、`PAGE_KEYS`、DB 既有資料都靠它，刪了會讓管理員失去相容資料）。
+ * 真正的四段內文在 `site_content.about`，與首頁、教練團隊頁共用同一來源。
+ */
 export interface SitePageAbout {
   page_title: string;
 }
@@ -358,8 +365,12 @@ export const DEFAULT_CONTENT: SiteContent = {
 };
 
 /**
- * 導覽預設結構：5 項 + 「活動」底下的 3 個子項。
+ * 導覽預設結構：4 項 + 「活動」底下的 3 個子項。
  * 原 8 項平級結構（含 /training、/run 在頂層）已收斂為此結構，URL 一律不變。
+ *
+ * 2026-11 「關於我們整併」：`/about` 項已移除（該路由改成永久轉址到
+ * `/coaches#about`，內容就在教練團隊頁底部，不必再佔一個選單位）。
+ * 移除後剛好等於 `NAV_MIN = 4`，仍在合法範圍內。
  */
 export const DEFAULT_NAV: SiteNav = {
   links: [
@@ -375,7 +386,6 @@ export const DEFAULT_NAV: SiteNav = {
       ],
     },
     { href: "/leaderboard", label: "排行榜", visible: true },
-    { href: "/about", label: "關於我們", visible: true },
     { href: "/coaches", label: "教練團隊", visible: true },
   ],
 };
@@ -476,6 +486,7 @@ export const DEFAULT_PAGES: SitePages = {
     page_title: "排行榜",
     empty_month: "本月尚無已確認紀錄，成為第一位上榜者。",
   },
+  // 關於我們頁已下架（/about → 永久轉址）：此 key 為後台相容而保留，前台不顯示。
   about: {
     page_title: "關於我們",
   },
@@ -509,7 +520,14 @@ export const DEFAULT_BLOCKS: SiteBlocks = {
  * 白名單
  * ============================================================= */
 
-/** 導覽選單允許的連結（= 現行 8 個路由，含 /hyrox；要加新頁面屬技術工作） */
+/**
+ * 導覽選單允許的連結（= 現行 7 個路由，含 /hyrox 子項；要加新頁面屬技術工作）。
+ *
+ * `/about` 已於「關於我們整併」移除：該路由只剩永久轉址到 `/coaches#about`，
+ * 內容掛在教練團隊頁底部，不該再被選為選單目標。移除後若 DB 仍有 `/about`
+ * 項目，`normalizeNavLink` 會判「此連結不在允許的清單」，所以動線是
+ * 「先清 DB 的 site_nav，再上這版程式」。
+ */
 export const NAV_HREFS: readonly string[] = [
   "/",
   "/events",
@@ -517,7 +535,6 @@ export const NAV_HREFS: readonly string[] = [
   "/training",
   "/run",
   "/leaderboard",
-  "/about",
   "/coaches",
 ];
 

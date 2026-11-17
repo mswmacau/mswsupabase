@@ -61,13 +61,13 @@ async function requireAdmin() {
     .maybeSingle();
   if (profile?.role !== "admin") return { error: jsonForbidden() as Response } as const;
 
-  // actorId 給 admin_audit_log 用：教練資料直接顯示在公開的 /coaches 與 /about
+  // actorId 給 admin_audit_log 用：教練資料直接顯示在公開的 /coaches
+  // （含頁尾的「關於我們」區塊；/about 已下架為永久轉址，不必再 revalidate）
   return { supabase, actorId: user.id } as const;
 }
 
 function revalidateCoachPages() {
   revalidatePath("/coaches");
-  revalidatePath("/about");
   revalidatePath("/admin/coaches");
 }
 
