@@ -57,6 +57,51 @@ const HERO_FACTS = [
   },
 ];
 
+/**
+ * Hero 大數字三聯。
+ *
+ * 站主 P1「日曆很難找」：手機 390 首屏完全看不到日期格（第一格 y=1461，
+ * 視窗只有 844）。三聯在手機是 grid-cols-1 三層疊、吃掉 422px，是 hero
+ * 最肥的一塊，而且它講的是「三條路線／月目標／獎分」，跟日曆的關聯
+ * 沒有強到必須擋在日曆前面。
+ *
+ * 做法：同一份 markup 抽成元件、渲染兩次，用斷點各顯示一份——
+ *   lg+（含桌面）：留在 hero 原位，與改版前完全一致
+ *   <lg（手機／平板）：移到日曆區塊之後，讓日曆直接接在 hero 標題下
+ *
+ * 兩份是 `display:none` 互斥，不會同時出現在無障礙樹或 innerText 裡，
+ * 文案也沒有任何一份被刪掉。
+ */
+function HeroFacts({ className = "" }: { className?: string }) {
+  return (
+    <div className={`relative z-10 ${className}`}>
+      <div className="container-msw">
+        <div className="grid grid-cols-1 divide-y divide-white/10 sm:grid-cols-3 sm:divide-x sm:divide-y-0">
+          {HERO_FACTS.map((f) => (
+            <div key={f.label} className="py-8 sm:px-8 sm:first:pl-0">
+              <div className="flex items-start gap-2">
+                <span
+                  className={`stat-figure text-5xl leading-none md:text-6xl ${
+                    f.accent ? "text-vital-bright" : "text-white"
+                  }`}
+                >
+                  {f.value}
+                </span>
+                <span className="text-accent-blue mt-2 text-[11px] font-semibold uppercase tracking-[0.22em]">
+                  {f.unit}
+                </span>
+              </div>
+              <div className="mt-4 text-[11px] font-semibold uppercase tracking-[0.22em] text-white/55">
+                {f.label}
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 /** 參加流程：改時間軸軌道，號碼用超大數字 */
 const STEPS = [
   { n: "01", t: "註冊會員", d: "用電郵註冊，一分鐘完成。" },
@@ -333,7 +378,7 @@ export default async function EventsPage({
         <div className="noise-overlay" />
 
         <div className="container-msw relative z-10">
-          <div className="relative pb-14 pt-28 md:pt-36 lg:pb-16">
+          <div className="relative pb-8 pt-20 md:pt-36 lg:pb-16">
             <div className="lg:pl-14">
               <span className="eyebrow">Events</span>
 
@@ -351,7 +396,7 @@ export default async function EventsPage({
                 </span>
               </h1>
 
-              <div className="mt-10 grid gap-10 lg:grid-cols-12 lg:gap-8">
+              <div className="mt-6 grid gap-6 lg:mt-10 lg:grid-cols-12 lg:gap-8">
                 <p className="text-base leading-relaxed text-white/70 lg:col-span-6">
                   三條路線、一份月曆。HYROX 付費場次、每週定期訓練、月度跑步累積
                   —— 想練的、想報的、想累積的，都在這一頁排好時間。
@@ -376,14 +421,22 @@ export default async function EventsPage({
                     <span className="text-accent-blue mb-2 text-[11px] font-semibold uppercase tracking-[0.22em]">
                       {nextUp ? (nextUp.startTime ?? "時間待定") : "To Be Announced"}
                     </span>
+                    {/* 手機緊湊版：課程名與日期時間擠在同一行（<lg）。
+                        分隔線與下面那句說明在手機收起（lg:block 反向），
+                        完整版在 lg+ 一字不動，說明句也沒有從程式碼刪掉。 */}
+                    {nextUp && (
+                      <span className="min-w-0 max-w-full truncate text-sm font-semibold text-white/85 lg:hidden">
+                        {nextUp.title}
+                      </span>
+                    )}
                   </div>
                   {nextUp && (
-                    <div className="mt-3 min-w-0 truncate text-sm font-semibold text-white/85">
+                    <div className="mt-3 hidden min-w-0 truncate text-sm font-semibold text-white/85 lg:block">
                       {nextUp.title}
                     </div>
                   )}
-                  <div className="mt-5 h-px w-16 bg-white/20" />
-                  <p className="mt-5 text-sm leading-relaxed text-white/65">
+                  <div className="mt-5 hidden h-px w-16 bg-white/20 lg:block" />
+                  <p className="mt-5 hidden text-sm leading-relaxed text-white/65 lg:block">
                     {nextUp
                       ? `下一場是 ${formatDayLong(nextUp.date)}。點下方日曆看整月場次與報名方式。`
                       : schedule
@@ -396,32 +449,8 @@ export default async function EventsPage({
           </div>
         </div>
 
-        {/* 大數字三聯 */}
-        <div className="relative z-10 border-t border-white/10">
-          <div className="container-msw">
-            <div className="grid grid-cols-1 divide-y divide-white/10 sm:grid-cols-3 sm:divide-x sm:divide-y-0">
-              {HERO_FACTS.map((f) => (
-                <div key={f.label} className="py-8 sm:px-8 sm:first:pl-0">
-                  <div className="flex items-start gap-2">
-                    <span
-                      className={`stat-figure text-5xl leading-none md:text-6xl ${
-                        f.accent ? "text-vital-bright" : "text-white"
-                      }`}
-                    >
-                      {f.value}
-                    </span>
-                    <span className="text-accent-blue mt-2 text-[11px] font-semibold uppercase tracking-[0.22em]">
-                      {f.unit}
-                    </span>
-                  </div>
-                  <div className="mt-4 text-[11px] font-semibold uppercase tracking-[0.22em] text-white/55">
-                    {f.label}
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
-        </div>
+        {/* 大數字三聯（桌面留在 hero 原位；手機版在日曆之後，見下方 #schedule 後） */}
+        <HeroFacts className="hidden border-t border-white/10 lg:block" />
       </section>
 
       {/* ================= 1. 當月班表日曆（第一段內容：站主反映原本排在第三段＝很難找） ================= */}
@@ -430,7 +459,10 @@ export default async function EventsPage({
         className="relative border-y border-ink-line bg-ink-soft"
       >
         <div className="noise-overlay" />
-        <div className="container-msw section-pad relative">
+        {/* 手機把上留白收窄：hero 已經有 pb-8 與 border-b 收邊，
+            日曆是這一頁的主角，不需要再隔 80px 才開始。
+            lg+ 仍沿用後台可調的 --space-section（SPEC §3.4），桌面節奏不變。 */}
+        <div className="container-msw section-pad relative pt-10 lg:pt-[var(--space-section,80px)]">
           {/* 站主要求取消「班表日曆」這組大標／kicker 字眼：
               上方「2026 年 11 月」月份切換器本身已經說明這是什麼，
               再放一個 h2 只是重複。原本 h2 撐出的垂直間距改由 section-pad
@@ -446,7 +478,7 @@ export default async function EventsPage({
           <div
             role="group"
             aria-label="切換班表月份"
-            className="mt-6 flex flex-wrap items-center gap-x-4 gap-y-3 border-y border-white/10 py-3"
+            className="mt-4 flex flex-wrap items-center gap-x-4 gap-y-3 border-y border-white/10 py-3 lg:mt-6"
           >
             {prevMonth ? (
               <Link
@@ -539,7 +571,7 @@ export default async function EventsPage({
           )}
 
           {display && schedule ? (
-            <div className="mt-6">
+            <div className="mt-3 lg:mt-6">
               <ScheduleCalendar
                 // 換月時重掛載：選中的場次與當日清單不該跨月沿用
                 key={displayKey ?? "schedule"}
@@ -582,6 +614,11 @@ export default async function EventsPage({
           )}
         </div>
       </section>
+
+      {/* 大數字三聯（手機／平板版）：日曆之後才出現。
+          手機把「這一頁有什麼數字」往後放，換到「日曆就在標題下一格」。
+          桌面由 hero 內那份負責（lg 以上），這裡 lg 起隱藏。 */}
+      <HeroFacts className="border-b border-ink-line lg:hidden" />
 
       {/* ================= 2. 三張分類卡（常駐，無活動時也顯示） ================= */}
       <section className="container-msw section-pad">
