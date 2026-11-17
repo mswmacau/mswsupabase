@@ -1,7 +1,7 @@
 "use client";
 
 /**
- * F-T1 下場訓練倒數卡 / F-T2 加入日曆（Brief §2.2）
+ * F-T1 下場訓練倒數卡（Brief §2.2）
  *
  * 數據全部由 props（page 傳入的 upcoming[0]）提供：日期、時段、地點、課名都來自
  * training_sessions 那一列，唔加新 query、唔 hardcode 任何日期時間。
@@ -13,8 +13,8 @@
  */
 
 import { useEffect, useMemo, useState } from "react";
-import { CalendarDays, CalendarPlus, Clock, MapPin } from "lucide-react";
-import { BRAND } from "@/lib/config";
+import Link from "next/link";
+import { ArrowRight, CalendarDays, Clock, MapPin } from "lucide-react";
 import { formatTimeRange, shortTime, weekdayLabel } from "@/lib/utils";
 
 /**
@@ -43,95 +43,26 @@ function splitDate(value: string): [number, number, number] | null {
   return m ? [Number(m[1]), Number(m[2]), Number(m[3])] : null;
 }
 
-/** 'HH:MM' → [時, 分] */
-function splitClock(value: string): [number, number] | null {
-  const m = /^(\d{1,2}):(\d{2})$/.exec(value);
-  return m ? [Number(m[1]), Number(m[2])] : null;
-}
-
 const pad2 = (n: number) => String(n).padStart(2, "0");
-
-/* ============================ F-T2：ICS ============================ */
-
-/** RFC 5545：逗號、分號、反斜線要 escape，換行轉 \\n */
-function escapeText(value: string): string {
-  return value
-    .replace(/\\/g, "\\\\")
-    .replace(/;/g, "\\;")
-    .replace(/,/g, "\\,")
-    .replace(/\r?\n/g, "\\n");
-}
-/** RFC 5545：每行上限 75 octets（呢度用字元數做近似值），續行以一個空格起頭 */
-function foldLine(line: string): string[] {
-  if (line.length <= 75) return [line];
-  const out: string[] = [line.slice(0, 75)];
-  let rest = line.slice(75);
-  while (rest.length > 74) {
-    out.push(` ${rest.slice(0, 74)}`);
-    rest = rest.slice(74);
-  }
-  if (rest.length) out.push(` ${rest}`);
-  return out;
-}
-
-function utcStamp(): string {
-  return `${new Date().toISOString().replace(/[-:]/g, "").replace(/\.\d{3}/, "")}`;
-}
-
-/**
- * 組 ICS 字串。DTSTART / DTEND 用「浮動本地時間」（唔帶 Z、唔帶 TZID）——
- * session_date 同 start_time / end_time 本身就係澳門本地時間，
- * 加時區反而會被日曆 App 再轉一次；浮動時間會直接按使用者日曆時區顯示，最貼近原意。
- *
- * T-4：PRODID 的品牌英文名改讀 site_theme.brand_name_en（由 page 傳入，
- * 回落 BRAND.nameEn），與導覽列／頁尾同源。
- */
-function buildIcs(
-  session: NextSessionCardData,
-  start: string,
-  end: string,
-  brandNameEn: string
-): string | null {
-  const d = splitDate(session.session_date);
-  const s = splitClock(start);
-  if (!d || !s) return null;
-
-  const e = splitClock(end);
-  const day = `${d[0]}${pad2(d[1])}${pad2(d[2])}`;
-
-  const lines: string[] = [
-    "BEGIN:VCALENDAR",
-    "VERSION:2.0",
-    `PRODID:-//${brandNameEn}//Training//ZH`,
-    "CALSCALE:GREGORIAN",
-    "METHOD:PUBLISH",
-    "BEGIN:VEVENT",
-    `UID:${session.id}@msw-street-workout`,
-    `DTSTAMP:${utcStamp()}`,
-    `DTSTART:${day}T${pad2(s[0])}${pad2(s[1])}00`,
-  ];
-  if (e) lines.push(`DTEND:${day}T${pad2(e[0])}${pad2(e[1])}00`);
-  lines.push(`SUMMARY:${escapeText(session.title)}`);
-  if (session.location) lines.push(`LOCATION:${escapeText(session.location)}`);
-  lines.push("END:VEVENT", "END:VCALENDAR");
-
-  return `${lines.flatMap(foldLine).join("\r\n")}\r\n`;
-}
 
 /* ============================ F-T1：倒數卡 ============================ */
 
 export function NextSessionCard({
   session,
-  brandNameEn = BRAND.nameEn,
 }: {
   session: NextSessionCardData;
-  /** 品牌英文名（site_theme.brand_name_en；用於 ICS PRODID，回落 BRAND.nameEn） */
+  /**
+   * 品牌英文名（site_theme.brand_name_en）。
+   *
+   * 原本是給 ICS 的 PRODID 用；ICS 下載已移除，這個 prop 因此不再有渲染作用，
+   * 但**型別必須留著**——`src/app/training/page.tsx` 仍在傳它，
+   * 刪掉會讓那個檔案型別爆掉（該檔不在本次改動範圍）。
+   */
   brandNameEn?: string;
 }) {
   // 時段一律讀這一場自己的 start_time / end_time（training_sessions），
   // 不再從 config 抽固定時間——那個值只屬於「每週固定」的介紹性文案。
   const start = shortTime(session.start_time);
-  const end = shortTime(session.end_time);
   const timeText = formatTimeRange(session.start_time, session.end_time);
 
   const startMs = useMemo(() => {
@@ -182,42 +113,6 @@ export function NextSessionCard({
     { unit: "分", value: Math.floor(ms / MINUTE_MS) % 60 },
   ];
 
-  /**
-   * 微信內建瀏覽器（iOS / Android X5）會忽略 <a download>，
-   * 直接觸發下載不會有任何反應。這裡改用剪貼簿作為替代路徑。
-   */
-  function isWeChatBrowser(): boolean {
-    if (typeof navigator === "undefined") return false;
-    return /micromessenger/i.test(navigator.userAgent ?? "");
-  }
-
-  function handleAddToCalendar() {
-    const ics = buildIcs(session, start, end, brandNameEn);
-    if (!ics) return;
-
-    // 微信內：改為複製 .ics 內容到剪貼簿，使用者可貼到行事曆 app。
-    // 注意：此分支刻意不新增任何頁面文案（遵守文案凍結）。
-    // TODO(站主確認)：若希望在微信內顯示一行提示（例如「已複製，請到行事曆貼上」），
-    // 需由站主提供文案後再補。
-    if (isWeChatBrowser()) {
-      void navigator.clipboard?.writeText(ics).catch(() => {
-        /* 剪貼簿不可用時靜默失敗，不影響其他功能 */
-      });
-      return;
-    }
-
-    const blob = new Blob([ics], { type: "text/calendar;charset=utf-8" });
-    const href = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = href;
-    a.download = `${session.session_date}.ics`;
-    document.body.appendChild(a);
-    a.click();
-    a.remove();
-    // 用完一定要 revoke，否則 blob 會一直留喺記憶體
-    window.setTimeout(() => URL.revokeObjectURL(href), 0);
-  }
-
   return (
     <section className="clip-notch relative mb-12 overflow-hidden border border-vital/60 bg-ink-soft p-6 md:p-8">
       <div className="glow-drift pointer-events-none absolute -right-24 -top-24 h-56 w-56 rounded-full bg-vital/15 blur-3xl" />
@@ -254,7 +149,7 @@ export function NextSessionCard({
           </div>
         </div>
 
-        {/* 倒數 + 加入日曆 */}
+        {/* 倒數 + 馬上報名 */}
         <div className="lg:col-span-7 lg:border-l lg:border-white/10 lg:pl-8">
           <div className="flex flex-wrap items-end gap-x-4 gap-y-3">
             <span className="mb-2 text-sm text-white/70">仲有</span>
@@ -272,13 +167,14 @@ export function NextSessionCard({
 
           <div className="mt-7 h-px w-16 bg-white/20" />
 
-          <button
-            type="button"
-            onClick={handleAddToCalendar}
-            className="btn-base btn-ghost btn-slab mt-7 min-h-11"
+          {/* 站主指定：把「＋加入日曆」（ICS 下載）換成「馬上報名」，
+              直接連到該場次所屬的日期頁，報名在那裡完成。 */}
+          <Link
+            href={`/training/${session.session_date}`}
+            className="btn-base btn-vital btn-slab mt-7 min-h-11"
           >
-            <CalendarPlus size={16} /> ＋加入日曆
-          </button>
+            馬上報名 <ArrowRight size={16} />
+          </Link>
         </div>
       </div>
     </section>
