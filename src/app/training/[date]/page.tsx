@@ -52,12 +52,21 @@ const CATEGORY_LABEL: Record<string, string> = {
   outdoor: "戶外",
 };
 
-/** 'YYYY-MM-DD' → '2026 年 11 月 17 日（週二）' */
-function formatFullDate(iso: string): string {
+/** 'YYYY-MM-DD' → { main: '2026 年 11 月 17 日', week: '（週二）' } */
+function splitFullDate(iso: string): { main: string; week: string } {
   const year = Number(iso.slice(0, 4));
   const month = Number(iso.slice(5, 7));
   const day = Number(iso.slice(8, 10));
-  return `${year} 年 ${month} 月 ${day} 日（週${WEEKDAY_LABELS[isoWeekdayIndex(iso)]}）`;
+  return {
+    main: `${year} 年 ${month} 月 ${day} 日`,
+    week: `（週${WEEKDAY_LABELS[isoWeekdayIndex(iso)]}）`,
+  };
+}
+
+/** 'YYYY-MM-DD' → '2026 年 11 月 17 日（週二）' */
+function formatFullDate(iso: string): string {
+  const { main, week } = splitFullDate(iso);
+  return `${main}${week}`;
 }
 
 type Params = { date: string };
@@ -150,7 +159,7 @@ export default async function TrainingDatePage({
 
   const prevDate = shiftISODate(date, -1);
   const nextDate = shiftISODate(date, 1);
-  const fullDate = formatFullDate(date);
+  const { main: fullDateMain, week: fullDateWeek } = splitFullDate(date);
   const sessionLabel = `${sessions.length} 場`;
 
   return (
@@ -180,8 +189,11 @@ export default async function TrainingDatePage({
           <div className="mt-4 flex flex-wrap items-end justify-between gap-x-6 gap-y-3">
             <div className="min-w-0">
               <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
-                <h1 className="text-3xl font-black leading-[1.05] tracking-[-0.02em] text-white sm:text-4xl md:text-5xl">
-                  {fullDate}
+                {/* 390 實測：`text-3xl` 會把「（週二）」斷成「（週 / 二）」，
+                    所以基準字級收到 26px，並把週幾包成 nowrap 讓它整段換行。 */}
+                <h1 className="text-[26px] font-black leading-[1.1] tracking-[-0.02em] text-white sm:text-4xl md:text-5xl">
+                  {fullDateMain}
+                  <span className="whitespace-nowrap">{fullDateWeek}</span>
                 </h1>
                 {isToday && (
                   <span className="border border-vital/60 bg-vital/15 px-2 py-0.5 text-[10px] font-bold uppercase tracking-[0.18em] text-vital-bright">

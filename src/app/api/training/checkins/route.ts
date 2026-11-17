@@ -144,9 +144,23 @@ export async function GET(request: Request) {
       return jsonValidation({ ids: "編號格式錯誤。" });
     }
 
+    /**
+     * ⚠️ `getUser()` 有三種結果，不能一律當成「未登入」：
+     *   1. user 有值              → 已登入
+     *   2. error = SessionMissing → 真的沒登入（正常情況，回 authenticated:false）
+     *   3. error = 其他（網路／Auth 服務暫時失敗）
+     *      → 若也回 authenticated:false，已登入的會員會突然看到「登入後報名」，
+     *        這是**靜默失敗**：使用者以為自己沒登入，其實只是查不到。
+     *        這種情況回 500，讓前台顯示「無法取得報名狀態＋重試」。
+     */
     const {
       data: { user },
+      error: authError,
     } = await supabase.auth.getUser();
+
+    if (authError && authError.name !== "AuthSessionMissingError") {
+      return jsonErr("目前無法確認登入狀態，請稍後重試。", "INTERNAL", 500);
+    }
     if (!user) return jsonOk({ authenticated: false, checkins: {} });
 
     const { data, error } = await supabase

@@ -9,6 +9,7 @@ import {
   Clock,
   Loader2,
   MapPin,
+  User,
   Users,
   X,
 } from "lucide-react";
@@ -264,11 +265,14 @@ export function DateSessionList({
                 </span>
                 {session.coachName && (
                   <span className="flex min-w-0 items-center gap-2">
-                    <span
-                      aria-hidden
-                      className="inline-block h-3.5 w-3.5 shrink-0 border border-white/30"
-                    />
-                    <span className="min-w-0 truncate">教練 {session.coachName}</span>
+                    <User size={15} className="shrink-0 text-vital-bright" aria-hidden />
+                    {/* 教練欄位本身就是「教練 C（示範）」這種寫法時不要再加前綴，
+                        否則會出現「教練 教練 C」 */}
+                    <span className="min-w-0 truncate">
+                      {session.coachName.startsWith("教練")
+                        ? session.coachName
+                        : `教練 ${session.coachName}`}
+                    </span>
                   </span>
                 )}
                 {session.location && (
