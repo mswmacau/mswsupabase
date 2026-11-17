@@ -382,8 +382,10 @@ export default async function EventsPage({
           {/* 三聯全斷點搬到日曆之後，hero 桌面高度由 792 降到 592：
               三聯本身佔 152px，另外把上留白 md:pt-36→md:pt-28（-32px）、
               桌面下留白 lg:pb-16→lg:pb-12（-16px），才讓 1440×900 首屏
-              進得了日曆第一行。手機 pb-8／pt-20 完全沒動。 */}
-          <div className="relative pb-8 pt-20 md:pt-28 lg:pb-12">
+              進得了日曆第一行。手機 pb-8／pt-20 完全沒動。
+              2026-11 第二輪：md:pt-28→md:pt-20（再 -32px），讓 1440×900
+              首屏露出的不是「日期格頂端 11px」而是真正看得到日期數字。 */}
+          <div className="relative pb-8 pt-20 md:pt-20 lg:pb-12">
             <div className="lg:pl-14">
               <span className="eyebrow">Events</span>
 
@@ -464,10 +466,11 @@ export default async function EventsPage({
       >
         <div className="noise-overlay" />
         {/* 上留白：hero 已經有 pb 與 border-b 收邊，日曆是這一頁的主角，
-            不需要再隔一整個 section 節奏才開始。手機 pt-10；桌面取後台
-            --space-section 的一半（預設 40px）——站主要求 1440×900 首屏
-            看得到日曆第一行，這裡是最不傷版面的一塊餘裕。 */}
-        <div className="container-msw section-pad relative pt-10 lg:pt-[calc(var(--space-section,80px)/2)]">
+            不需要再隔一整個 section 節奏才開始。手機 pt-10；桌面 24px
+            （原本取 --space-section 的一半＝40px，再收 16px）——站主要求
+            1440×900 首屏看得到日曆「日期數字」而不只是格子頂端，
+            這裡是最不傷版面的一塊餘裕。 */}
+        <div className="container-msw section-pad relative pt-10 lg:pt-6">
           {/* 站主要求取消「班表日曆」這組大標／kicker 字眼：
               上方「2026 年 11 月」月份切換器本身已經說明這是什麼，
               再放一個 h2 只是重複。原本 h2 撐出的垂直間距改由 section-pad
@@ -576,7 +579,7 @@ export default async function EventsPage({
           )}
 
           {display && schedule ? (
-            <div className="mt-3 lg:mt-6">
+            <div className="mt-3">
               <ScheduleCalendar
                 // 換月時重掛載：選中的場次與當日清單不該跨月沿用
                 key={displayKey ?? "schedule"}
