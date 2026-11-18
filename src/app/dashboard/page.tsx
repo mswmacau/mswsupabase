@@ -9,8 +9,9 @@ import {
   Route,
   Ticket,
   TrendingUp,
+  Trophy,
 } from "lucide-react";
-import { getCurrentProfile } from "@/lib/supabase/server";
+import { createClient, getCurrentProfile } from "@/lib/supabase/server";
 import {
   getUserCheckins,
   getUserCoupons,
@@ -22,6 +23,8 @@ import {
 import { ProgressBar } from "@/components/ProgressBar";
 import { ProfileCompletionNotice } from "@/components/ProfileCompletionNotice";
 import { RunSubmissionList } from "@/components/RunSubmissionList";
+import { CancelRegistrationButton } from "@/app/races/_components/CancelRegistrationButton";
+import { getMyRaceRegistrations } from "@/lib/races";
 import { getRewardsEnabled } from "@/lib/rewards";
 import { RULES } from "@/lib/config";
 import { currentMonth, formatDate, formatKm, monthLabel } from "@/lib/utils";
@@ -37,22 +40,71 @@ export async function generateMetadata(): Promise<Metadata> {
 const CUT_SM = { "--cut": "8px" } as CSSProperties;
 const CUT_MD = { "--cut": "22px" } as CSSProperties;
 
+/**
+ * 賽事報名狀態徽章（口徑與賽事報名頁一致，避免兩處用字走音）。
+ * 未知值照原樣顯示，不吞資料、不 crash。
+ */
+const RACE_REG_BADGE: Record<string, { label: string; cls: string }> = {
+  submitted: { label: "待確認", cls: "border-amber-500/40 text-amber-300" },
+  confirmed: { label: "已確認", cls: "border-emerald-500/40 text-emerald-300" },
+  needs_info: { label: "需補資料", cls: "border-red-500/40 text-red-300" },
+  cancelled: { label: "已取消", cls: "border-white/20 text-white/50" },
+};
+
 export default async function DashboardPage() {
   const profile = await getCurrentProfile();
   if (!profile) redirect("/login?next=/dashboard");
 
   const month = currentMonth();
-  const [monthKm, submissions, coupons, checkins, points, pages, rewardsEnabled] =
-    await Promise.all([
-      getUserMonthKm(profile.id, month),
-      getUserSubmissions(profile.id, 5),
-      getUserCoupons(profile.id),
-      getUserCheckins(profile.id, 5),
-      getUserPoints(profile.id, 10),
-      getSitePages(),
-      getRewardsEnabled(),
-    ]);
+  const [
+    monthKm,
+    submissions,
+    coupons,
+    checkins,
+    points,
+    pages,
+    rewardsEnabled,
+    myRaces,
+  ] = await Promise.all([
+    getUserMonthKm(profile.id, month),
+    getUserSubmissions(profile.id, 5),
+    getUserCoupons(profile.id),
+    getUserCheckins(profile.id, 5),
+    getUserPoints(profile.id, 10),
+    getSitePages(),
+    getRewardsEnabled(),
+    getMyRaceRegistrations(profile.id),
+  ]);
   const t = pages.dashboard;
+
+  /* 賽事名稱與日期：getMyRaceRegistrations 只回報名本身，賽事資訊要另外查。
+     查不到（例如賽事已回到 draft，RLS 不對會員開放）→ 顯示降級文案，不拋錯。 */
+  const raceEventIds = Array.from(new Set(myRaces.map((r) => r.event_id)));
+  const raceEvents = new Map<
+    string,
+    { title: string; event_date: string; end_date: string | null }
+  >();
+  if (raceEventIds.length > 0) {
+    try {
+      const supabase = await createClient();
+      if (supabase) {
+        const { data } = await supabase
+          .from("events")
+          .select("id,title,event_date,end_date")
+          .in("id", raceEventIds);
+        for (const row of (data ?? []) as Array<{
+          id: string;
+          title: string;
+          event_date: string;
+          end_date: string | null;
+        }>) {
+          raceEvents.set(row.id, row);
+        }
+      }
+    } catch {
+      // 降級：卡片仍要顯示（只有賽事名變成「賽事資料暫未公開」）
+    }
+  }
 
   const activeCoupons = coupons.filter((c) => c.status === "active").length;
   const goal = RULES.MONTHLY_GOAL_KM;
@@ -327,6 +379,122 @@ export default async function DashboardPage() {
             </div>
           </div>
         )}
+
+        {/* 我的賽事報名（新增卡；資料來自 race_registrations，只讀本人） */}
+        <div className="clip-notch-br card-dark z-raise mt-4 p-5 md:p-7" data-race-card="">
+          <div className="flex flex-wrap items-baseline justify-between gap-3">
+            <div className="flex min-w-0 items-center gap-3">
+              <span className="clip-slab flex h-10 w-10 flex-none items-center justify-center bg-vital/15 text-vital-bright">
+                <Trophy size={18} />
+              </span>
+              <h2 className="min-w-0 text-lg font-black tracking-tight">
+                我的賽事報名
+              </h2>
+            </div>
+            <Link
+              href="/races"
+              className="inline-flex min-h-11 flex-none items-center gap-1 text-sm font-semibold text-accent-blue transition hover:text-white"
+            >
+              所有賽事 <ArrowRight size={15} />
+            </Link>
+          </div>
+
+          {myRaces.length === 0 ? (
+            <div className="slab mt-4 border border-dashed border-white/15 px-4 py-10 text-center">
+              <p className="text-sm text-white/70">暫未報名任何賽事</p>
+              <Link
+                href="/races"
+                className="btn-base btn-ghost btn-slab mt-4 inline-flex min-h-11 px-5 text-sm"
+              >
+                去報名賽事 <ArrowRight size={15} />
+              </Link>
+            </div>
+          ) : (
+            <ul className="mt-4 divide-y divide-white/10">
+              {myRaces.map((r) => {
+                const ev = raceEvents.get(r.event_id) ?? null;
+                const title = ev?.title ?? "賽事資料暫未公開";
+                const dateRange = ev
+                  ? ev.end_date && ev.end_date !== ev.event_date
+                    ? `${formatDate(ev.event_date)}–${formatDate(ev.end_date)}`
+                    : formatDate(ev.event_date)
+                  : null;
+                const entryNames = r.entries
+                  .map((e) => e.category?.name)
+                  .filter((n): n is string => Boolean(n));
+                const badge =
+                  RACE_REG_BADGE[r.status] ?? {
+                    label: r.status,
+                    cls: "border-white/20 text-white/60",
+                  };
+                const cancelled = r.status === "cancelled";
+
+                return (
+                  <li
+                    key={r.id}
+                    className={`py-4 first:pt-0 last:pb-0 ${cancelled ? "opacity-75" : ""}`}
+                  >
+                    <div className="flex flex-wrap items-start justify-between gap-2">
+                      <div className="min-w-0 flex-1">
+                        <div className="break-words font-bold">{title}</div>
+                        {dateRange && (
+                          <div className="tnum mt-0.5 text-xs text-white/55">
+                            {dateRange}
+                          </div>
+                        )}
+                      </div>
+                      <span
+                        className={`slab inline-flex flex-none items-center border px-2.5 py-1 text-xs font-semibold ${badge.cls}`}
+                      >
+                        {badge.label}
+                      </span>
+                    </div>
+
+                    <dl className="mt-3 grid gap-x-5 gap-y-1.5 text-sm sm:grid-cols-2">
+                      <div className="flex min-w-0 gap-2 sm:col-span-2">
+                        <dt className="flex-none text-white/45">參賽項目</dt>
+                        <dd className="min-w-0 break-words text-white/80">
+                          {entryNames.length > 0
+                            ? entryNames.join("、")
+                            : "組別資料暫不可用"}
+                        </dd>
+                      </div>
+                      <div className="flex min-w-0 gap-2">
+                        <dt className="flex-none text-white/45">巴士</dt>
+                        <dd className="min-w-0 break-words text-white/80">
+                          {r.needs_bus ? `${r.bus_seats} 位` : "不需要"}
+                        </dd>
+                      </div>
+                      <div className="flex min-w-0 gap-2">
+                        <dt className="flex-none text-white/45">住宿</dt>
+                        <dd className="min-w-0 break-words text-white/80">
+                          {r.needs_lodging
+                            ? `${r.lodging_people} 人 ${r.lodging_nights} 晚`
+                            : "不需要"}
+                        </dd>
+                      </div>
+                    </dl>
+
+                    {!cancelled && (
+                      <div className="mt-3 flex flex-wrap items-start gap-2">
+                        <Link
+                          href={`/races/${r.event_id}/register`}
+                          className="btn-base btn-ghost btn-slab min-h-11 px-4 text-sm"
+                        >
+                          修改
+                        </Link>
+                        <CancelRegistrationButton
+                          eventId={r.event_id}
+                          eventTitle={title}
+                        />
+                      </div>
+                    )}
+                  </li>
+                );
+              })}
+            </ul>
+          )}
+        </div>
 
         {/* ===== 紀錄區：節奏式排版 ===== */}
         <div className="mt-12 grid gap-8 lg:grid-cols-12">

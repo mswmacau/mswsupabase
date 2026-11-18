@@ -511,6 +511,57 @@ export const getRace = cache(async (slug: string): Promise<Race | null> => {
   return { ...race, stats, schedule };
 });
 
+/**
+ * 報名表需要的「賽事層」付款資訊（不屬於公開頁的 Race 型別，故意另開一支）。
+ *
+ * 為什麼不併進 getRace()：`Race` 是公開頁三個消費端共用的型別，
+ * 為了一張報名表去動它會波及首頁賽事帶與列表頁；而且這三欄（fee_cents /
+ * payment_qr_path / registration_deadline）只有報名表要看。
+ *
+ * 【降級】任何錯誤（欄位不存在、賽事不可見、連線失敗）→ 全部回 null，
+ *   報名表就當「這場沒有賽事層費用、沒有收款碼」處理：不顯示付款區塊。
+ *   不拋錯、不 console.error（驗收要求 console 0 error）。
+ */
+export type RaceRegisterMeta = {
+  /** 賽事層費用（分）；null = 讀不到 */
+  feeCents: number | null;
+  /** 收款二維碼在 site-assets 內的相對路徑；null = 站主沒設 */
+  paymentQrPath: string | null;
+  /** 報名截止時間（ISO 字串，供顯示用） */
+  deadline: string | null;
+};
+
+const EMPTY_REGISTER_META: RaceRegisterMeta = {
+  feeCents: null,
+  paymentQrPath: null,
+  deadline: null,
+};
+
+export const getRaceRegisterMeta = cache(
+  async (eventId: string): Promise<RaceRegisterMeta> => {
+    const key = (eventId ?? "").trim();
+    if (!key) return { ...EMPTY_REGISTER_META };
+
+    const supabase = anonClient();
+    if (!supabase) return { ...EMPTY_REGISTER_META };
+
+    const { data, error } = await supabase
+      .from("events")
+      .select("fee_cents,payment_qr_path,registration_deadline")
+      .eq("id", key)
+      .maybeSingle();
+
+    if (error || !data) return { ...EMPTY_REGISTER_META };
+
+    const row = data as unknown as Row;
+    return {
+      feeCents: num(row.fee_cents),
+      paymentQrPath: str(row.payment_qr_path),
+      deadline: str(row.registration_deadline),
+    };
+  }
+);
+
 const byDateDesc = (a: Race, b: Race) =>
   a.dateStart < b.dateStart ? 1 : a.dateStart > b.dateStart ? -1 : 0;
 
