@@ -1,15 +1,7 @@
 import type { CSSProperties, ReactNode } from "react";
 import { Fragment } from "react";
 import Link from "next/link";
-import {
-  ArrowRight,
-  CalendarDays,
-  ChevronRight,
-  Medal,
-  Route,
-  Timer,
-  Trophy,
-} from "lucide-react";
+import { ArrowRight } from "lucide-react";
 import { BrandIntro } from "@/components/BrandIntro";
 /* 首頁圖片輪播：資料由後台 /admin/slides 維護（表 public.home_slides） */
 import { SlideCarousel } from "@/components/home/SlideCarousel";
@@ -19,7 +11,6 @@ import {
   getCachedMonthlyLeaderboard,
   getCachedSiteStats,
   getClassNamesByColor,
-  getNextSession,
   getScheduleLegend,
   getScheduleMonth,
   getSiteBlocks,
@@ -34,15 +25,12 @@ import {
   sortSessionViews,
 } from "@/components/schedule/schedule-utils";
 import { RULES } from "@/lib/config";
-import type { BlockId } from "@/lib/content";
+import type { BlockId, SiteBlock } from "@/lib/content";
 import { publicAssetUrl } from "@/lib/assets";
 import {
   currentMonth,
   formatKm,
-  formatTimeRange,
   monthLabel,
-  shortTime,
-  weekdayLabelOfDate,
 } from "@/lib/utils";
 import { isSupabaseConfigured } from "@/lib/supabase/env";
 import { getCurrentProfile } from "@/lib/supabase/server";
@@ -63,56 +51,38 @@ import { DriftWord } from "@/components/fx/home/DriftWord";
 /** E05 Hero 背景圖單層視差：沿用 useRafScroll，零依賴、冇新增 scroll listener */
 import { HeroParallax } from "@/components/fx/home/HeroParallax";
 import { StatCountUp } from "@/components/fx/home/StatCountUp";
-import { Countdown } from "@/components/fx/home/Countdown";
 
 export const dynamic = "force-dynamic";
 
-const TRAINING_ROWS = [
-  { icon: <Timer size={15} />, text: "每週固定，可隨時報名當週場次" },
-  { icon: <Medal size={15} />, text: `簽到一次 +${RULES.CHECKIN_POINTS} 分` },
-  { icon: <CalendarDays size={15} />, text: "適合任何程度，教練現場調整強度" },
-];
-
-const RUN_ROWS = [
-  { icon: <Route size={15} />, text: `每公里 +${RULES.POINTS_PER_KM} 積分` },
-  { icon: <Trophy size={15} />, text: `達標額外 +${RULES.MONTHLY_BONUS_POINTS} 分` },
-  { icon: <Medal size={15} />, text: "月底結算，發放電子優惠券（含 QR Code）" },
-];
-
-/** 不規則 Bento：每行總和 12 欄，但寬度各不相同 */
-const DISCIPLINE_SPANS = [
-  "lg:col-span-5",
-  "lg:col-span-4 lg:mt-12",
-  "lg:col-span-3",
-  "lg:col-span-4",
-  "lg:col-span-3 lg:mt-10",
-  "lg:col-span-5",
-];
-
 /**
- * 首頁區塊的固定渲染順序（站主 2026-02 指定）。
+ * 首頁區塊的固定渲染順序（站主指定）。
  *
  * 為什麼不再用 `site_blocks.order` 排序：DB 的 order 是舊次序（about 緊隨
- * stats、programs 在 reasons 之前），與站主要求的
- * 「統計帶 → 本月場次 → 排行榜 → 超越界限 → 各類訓練 → 兩大核心活動 → CTA」
- * 不一致。這裡以站主這次的指定為準，改由本常數決定順序；
- * **後台的 visible 仍然有效**（隱藏某個區塊照樣即時消失）。
+ * stats、programs 在 reasons 之前）。這裡以站主的指定為準，改由本常數決定
+ * 順序；**後台的 visible 仍然有效**（隱藏某個區塊照樣即時消失）。
+ *
+ * 2026-11 改版：站主要求「頁面重要的往上移」，`programs`（兩大核心活動）與
+ * `disciplines`（各類訓練項目）已整段下架，故不在本表內。`BlockId` 型別仍
+ * 保留這兩個 id（後台 site_blocks 的資料未變、也不該為了前台改 schema），
+ * 所以這裡改用子集型別 `HomeBlockId`，避免 `sections` 對照表被迫塞入已刪除
+ * 的區塊。
  *
  * 註：「本月場次」不是 BlockId（DB 沒有這個 id，加進去要改 schema），
  * 它由下方的 scheduleAfterId 掛在統計帶之後。
- * 註：about（BrandIntro「關於我們」）站主沒指定位置，放在「各類訓練項目」
- * 之後、「兩大核心活動」之前——敘事段收完、行動入口接著收尾。
  */
-const HOME_SECTION_ORDER: readonly BlockId[] = [
+const HOME_SECTION_ORDER = [
   "hero",
   "stats",
   "ranking",
   "reasons",
-  "disciplines",
   "about",
-  "programs",
   "cta",
-];
+] as const;
+
+type HomeBlockId = (typeof HOME_SECTION_ORDER)[number];
+
+const isHomeBlockId = (id: BlockId): id is HomeBlockId =>
+  (HOME_SECTION_ORDER as readonly BlockId[]).includes(id);
 
 /**
  * H-03 reveal 交錯延遲。
@@ -146,11 +116,9 @@ export default async function HomePage() {
   const month = currentMonth();
   // T-5 / T-20：首頁文案與區塊設定改讀 DB（site_content / site_blocks），
   // DB 無值時回落 DEFAULT_*（逐字等於原有硬編碼，沙箱渲染與基線一致）。
-  const [stats, nextSession, leaders, profile, theme, content, blocks, slides] =
+  const [stats, leaders, profile, theme, content, blocks, slides] =
     await Promise.all([
       getCachedSiteStats(),
-      // 「下一場定期訓練」改讀真實班表（training_sessions），不再用 config 的固定時間
-      getNextSession(),
       getCachedMonthlyLeaderboard(month, 5),
       getCurrentProfile(),
       getSiteTheme(),
@@ -198,14 +166,9 @@ export default async function HomePage() {
         })
       : [];
 
-  /**
-   * H-09 倒數目標：澳門牆上時間（session_date + start_time）→ 帶 +08:00 偏移的
-   * 絕對時刻。用絕對時刻而不是「下個週一 20:00」，倒數才會對準真正的那一場；
-   * 瀏覽器在任何時區算出來都是同一個瞬間。
-   */
-  const countdownTargetISO = nextSession?.start_time
-    ? `${nextSession.session_date}T${shortTime(nextSession.start_time)}:00+08:00`
-    : null;
+  /* 2026-11：hero 右欄（含「下一場定期訓練」卡與倒數）已下架——場次資訊在
+     下方「本月場次」日曆與 /training 已有，屬重複。倒數目標時刻
+     （countdownTargetISO）與 Countdown 用法一併移除。 */
   const isLoggedIn = Boolean(profile);
 
   // Hero 背景圖（後台設定）：有則顯示並覆上黑色遮罩，無則維持預設漸層 + 網格
@@ -254,22 +217,27 @@ export default async function HomePage() {
   }));
 
   // T-20：site_blocks.home 只決定 visible；渲染順序改由 HOME_SECTION_ORDER
-  // （站主 2026-02 指定）決定，理由見該常數的註解。
+  // （站主指定）決定，理由見該常數的註解。
+  // 2026-11：DB 的 site_blocks 仍留著 programs／disciplines 兩個 id（後台資料
+  // 未改），這裡用 isHomeBlockId 把它們濾掉，否則會渲染出 undefined 造成空白。
   const orderedBlocks = blocks.home
-    .filter((b) => b.visible)
+    .filter(
+      (b): b is SiteBlock & { id: HomeBlockId } =>
+        b.visible && isHomeBlockId(b.id)
+    )
     .sort(
       (a, b) =>
         HOME_SECTION_ORDER.indexOf(a.id) - HOME_SECTION_ORDER.indexOf(b.id)
     );
 
   /** 「本月場次」緊接統計帶之後；統計帶若被後台隱藏，退回接在第一個區塊之後 */
-  const scheduleAfterId: BlockId | undefined = orderedBlocks.some(
+  const scheduleAfterId: HomeBlockId | undefined = orderedBlocks.some(
     (b) => b.id === "stats"
   )
     ? "stats"
     : orderedBlocks[0]?.id;
 
-  /* ============ 首頁 8 個區塊（T-20：visible 由 site_blocks 決定，
+  /* ============ 首頁 6 個區塊（T-20：visible 由 site_blocks 決定，
      渲染順序由 HOME_SECTION_ORDER 決定） ============ */
 
   const heroSection = (
@@ -343,137 +311,101 @@ export default async function HomePage() {
               它純屬 aria-hidden 裝飾，手機卻佔 144px、桌面出血到右側壓住日期卡。
               下方背景裝飾層（光暈／網格／噪點）與輪播、h1、CTA 全部保留。 */}
           <div className="relative z-10 lg:pl-14">
-            {/* h1 本身就是視覺主標：display-hero 掛在 h1 上，
-                內層 span 只負責換行與顏色（字級／字重由 h1 繼承）。
-                描邊副本改用 data-dup + ::before 產生，避免同一串字
-                在文字節點裡出現兩次（h1.textContent 只會有一份）。 */}
-            <h1
-              className="pub-display-hero mt-4 md:mt-5 lg:-ml-[3vw] lg:w-[112%]"
-              data-fx-reveal
-              style={fxDelay(0.18)}
-            >
-              <span className="block text-white">
-                {content.hero.title_line1}
-              </span>
-              <span className="relative mt-1 block">
-                {/* 錯位描邊副本：純裝飾，文字由 CSS content 產生 */}
-                <span
-                  aria-hidden
-                  data-dup={content.hero.title_line2}
-                  className="text-outline text-outline-vital absolute left-[0.05em] top-[0.05em] block before:content-[attr(data-dup)]"
-                />
-                <span className="relative block text-vital-bright">
-                  {content.hero.title_line2}
-                </span>
-              </span>
-            </h1>
-
-            <div className="mt-6 grid gap-6 md:mt-8 md:gap-8 lg:grid-cols-12">
-              <p
-                className="text-base leading-relaxed text-white/70 sm:text-lg lg:col-span-5"
-                data-fx-reveal
-                style={fxDelay(0.34)}
-              >
-                {renderHeroDesc(content.hero.desc)}
-              </p>
-
-              <div
-                className="lg:col-span-5 lg:col-start-8 lg:border-l lg:border-white/10 lg:pl-8"
-                data-fx-reveal
-                style={fxDelay(0.48)}
-              >
-                <div className="flex flex-wrap items-center gap-3">
-                  {isLoggedIn ? (
-                    <>
-                      {/* 首屏唯一實心主色 CTA：加大尺寸與字級拉開與次要動作的差距 */}
-                      <Link
-                        href="/dashboard"
-                        className="btn-base btn-vital btn-slab pub-press !px-6 !py-3.5 text-[15px]"
-                        data-fx-sheen
-                        data-fx-magnet
-                      >
-                        {content.hero.cta_primary_member} <ArrowRight size={18} />
-                      </Link>
-                      <Link
-                        href="/run"
-                        className="btn-base btn-ghost btn-slab"
-                        data-fx-sheen
-                        data-fx-magnet
-                      >
-                        {content.hero.cta_secondary_member}
-                      </Link>
-                    </>
-                  ) : (
-                    <>
-                      <Link
-                        href="/signup"
-                        className="btn-base btn-vital btn-slab pub-press !px-6 !py-3.5 text-[15px]"
-                        data-fx-sheen
-                        data-fx-magnet
-                      >
-                        {content.hero.cta_primary_guest} <ArrowRight size={18} />
-                      </Link>
-                      <Link
-                        href="/events"
-                        className="btn-base btn-ghost btn-slab"
-                        data-fx-sheen
-                        data-fx-magnet
-                      >
-                        {content.hero.cta_secondary_guest}
-                      </Link>
-                    </>
-                  )}
-                </div>
-
-                {/* 「下一場定期訓練」：日期／星期／時段／課程名全部來自
-                    training_sessions（getNextSession），不再用 config 的固定字串。
-                    沒有場次時不編造時間，改成「班表整理中」空狀態。 */}
-                {nextSession ? (
-                  <div className="mt-6 border-l-2 border-vital bg-ink/75 px-4 py-3 backdrop-blur-sm">
-                    <div className="flex items-center gap-2 text-[11px] font-semibold uppercase tracking-[0.22em] text-white/55">
-                      <CalendarDays size={14} className="flex-none text-vital-bright" />
-                      下一場定期訓練
-                    </div>
-                    <div className="mt-2 flex flex-wrap items-baseline gap-x-3 gap-y-1">
-                      <span className="stat-figure text-2xl text-white">
-                        {nextSession.session_date}
-                      </span>
-                      <span className="text-sm text-white/70">
-                        （週{weekdayLabelOfDate(nextSession.session_date)}）{" "}
-                        {formatTimeRange(
-                          nextSession.start_time,
-                          nextSession.end_time
-                        ) || "時間待公布"}
-                      </span>
-                    </div>
-                    <p className="mt-1.5 min-w-0 break-words text-sm font-semibold text-white/85">
-                      {nextSession.class_name ?? nextSession.title}
-                    </p>
-                    {/* H-09 倒數到這一場的開始時刻（首次 render 係 "--"，mount 後先計） */}
-                    {countdownTargetISO && (
-                      <div className="mt-2 text-sm text-white/70">
-                        倒數 <Countdown targetISO={countdownTargetISO} />
-                      </div>
-                    )}
-                    <Link
-                      href="/training"
-                      className="mt-1 inline-flex min-h-11 items-center gap-1 text-sm font-semibold text-accent-blue hover:text-white"
-                    >
-                      報名 <ChevronRight size={15} />
-                    </Link>
-                  </div>
-                ) : (
-                  <div className="mt-6 border-l-2 border-vital bg-ink/75 px-4 py-3 backdrop-blur-sm">
-                    <div className="flex items-center gap-2 text-[11px] font-semibold uppercase tracking-[0.22em] text-white/55">
-                      <CalendarDays size={14} className="flex-none text-vital-bright" />
-                      下一場定期訓練
-                    </div>
-                    <p className="mt-2 break-words text-sm leading-relaxed text-white/70">
-                      班表整理中，請留意公告
-                    </p>
-                  </div>
-                )}
+            {/* 2026-11 改版（站主要求）：
+                ─ 桌面：大標題在左、標語在右，同一列（12 欄切 7／5、底部對齊）。
+                ─ 手機：窄屏沒有一列兩欄的空間，標語仍在大標題下方。
+                ─ h1 的 lg:-ml-[3vw] lg:w-[112%] 出血設計保留（站主要的大字），
+                  但外層兩欄都加了 min-w-0，出血量只吃掉欄距，不會壓到標語、
+                  也不會把標語推出視窗右緣。
+                ─ 原 hero 右欄（我的帳戶 CTA／上傳跑步紀錄 CTA／下一場定期訓練卡）
+                  整塊下架；兩顆 CTA 移到下方一行，入口不消失。 */}
+            <div className="lg:grid lg:grid-cols-12 lg:items-end lg:gap-8">
+              {/* 標題欄 */}
+              <div className="min-w-0 lg:col-span-7">
+                {/* h1 本身就是視覺主標：display-hero 掛在 h1 上，
+                    內層 span 只負責換行與顏色（字級／字重由 h1 繼承）。
+                    描邊副本改用 data-dup + ::before 產生，避免同一串字
+                    在文字節點裡出現兩次（h1.textContent 只會有一份）。 */}
+                <h1
+                  className="pub-display-hero mt-4 md:mt-5 lg:-ml-[3vw] lg:w-[112%]"
+                  data-fx-reveal
+                  style={fxDelay(0.18)}
+                >
+                  <span className="block text-white">
+                    {content.hero.title_line1}
+                  </span>
+                  <span className="relative mt-1 block">
+                    {/* 錯位描邊副本：純裝飾，文字由 CSS content 產生 */}
+                    <span
+                      aria-hidden
+                      data-dup={content.hero.title_line2}
+                      className="text-outline text-outline-vital absolute left-[0.05em] top-[0.05em] block before:content-[attr(data-dup)]"
+                    />
+                    <span className="relative block text-vital-bright">
+                      {content.hero.title_line2}
+                    </span>
+                  </span>
+                </h1>
               </div>
+
+              {/* 標語欄（= site_content.hero.desc，文案一字未改） */}
+              <div className="min-w-0 lg:col-span-5 lg:pb-1">
+                <p
+                  className="mt-6 break-words text-base leading-relaxed text-white/70 sm:text-lg lg:mt-0"
+                  data-fx-reveal
+                  style={fxDelay(0.34)}
+                >
+                  {renderHeroDesc(content.hero.desc)}
+                </p>
+              </div>
+            </div>
+
+            {/* 兩顆 CTA：搬到標題下方一行（文案、類別與登入／未登入兩套分支原樣保留） */}
+            <div
+              className="mt-6 flex flex-wrap items-center gap-3 md:mt-8"
+              data-fx-reveal
+              style={fxDelay(0.48)}
+            >
+              {isLoggedIn ? (
+                <>
+                  {/* 首屏唯一實心主色 CTA：加大尺寸與字級拉開與次要動作的差距 */}
+                  <Link
+                    href="/dashboard"
+                    className="btn-base btn-vital btn-slab pub-press !px-6 !py-3.5 text-[15px]"
+                    data-fx-sheen
+                    data-fx-magnet
+                  >
+                    {content.hero.cta_primary_member} <ArrowRight size={18} />
+                  </Link>
+                  <Link
+                    href="/run"
+                    className="btn-base btn-ghost btn-slab"
+                    data-fx-sheen
+                    data-fx-magnet
+                  >
+                    {content.hero.cta_secondary_member}
+                  </Link>
+                </>
+              ) : (
+                <>
+                  <Link
+                    href="/signup"
+                    className="btn-base btn-vital btn-slab pub-press !px-6 !py-3.5 text-[15px]"
+                    data-fx-sheen
+                    data-fx-magnet
+                  >
+                    {content.hero.cta_primary_guest} <ArrowRight size={18} />
+                  </Link>
+                  <Link
+                    href="/events"
+                    className="btn-base btn-ghost btn-slab"
+                    data-fx-sheen
+                    data-fx-magnet
+                  >
+                    {content.hero.cta_secondary_guest}
+                  </Link>
+                </>
+              )}
             </div>
           </div>
         </div>
@@ -559,130 +491,13 @@ export default async function HomePage() {
 
   const aboutSection = <BrandIntro about={content.about} />;
 
-  /* 兩大核心活動：整頁視覺重量最高的區塊（最亮的色帶 + 最多的空氣） */
-  const programsSection = (
-    <section className="pub-shell pub-band-2 pub-pad-l" data-fx-seq>
-      <div className="container-msw">
-        <div className="pub-head">
-          <h2 className="pub-head-title">兩大核心活動</h2>
-          <p className="pub-lede">
-            固定時間的團體訓練，加上可累積的月度跑步任務。前者建立紀律，後者累積成果。
-          </p>
-        </div>
-
-        <div className="pub-head-body grid gap-4 md:gap-8 lg:grid-cols-12">
-          {/* 01 定期訓練：主卡（實心面板 + 頂部品牌漸變線），視覺等級最高 */}
-          <article
-            className="clip-notch pub-card-primary pub-card-pad-lg pub-accent-top pub-lift group relative overflow-hidden lg:col-span-7"
-            data-fx-tilt
-          >
-            <div className="pointer-events-none absolute -right-20 -top-20 h-56 w-56 rounded-full bg-cobalt/25 blur-2xl transition-transform duration-500 group-hover:-translate-x-4 group-hover:translate-y-4" />
-            <div className="relative">
-              <div className="flex items-center justify-between gap-4">
-                <span className="text-[11px] font-semibold uppercase tracking-[0.22em] text-white/50">
-                  Program 01
-                </span>
-              </div>
-
-              <div className="mt-5 flex flex-wrap items-end gap-x-4 gap-y-2">
-                <span className="stat-figure text-4xl leading-none text-white md:text-6xl">
-                  WEEKLY
-                </span>
-                <span className="stat-figure text-outline text-3xl leading-none md:text-5xl">
-                  多時段
-                </span>
-                <span className="mb-1 text-sm text-white/55">· 澳門街健館</span>
-              </div>
-
-              <h3 className="mt-5 text-xl font-black tracking-tight md:text-3xl">
-                定期訓練活動
-              </h3>
-
-              <ul className="mt-5 border-t border-white/10">
-                {TRAINING_ROWS.map((row) => (
-                  <li
-                    key={row.text}
-                    className="flex items-center gap-3 border-b border-white/10 py-2 text-sm text-white/70 md:py-3"
-                  >
-                    <span className="text-vital-bright">{row.icon}</span>
-                    {row.text}
-                  </li>
-                ))}
-              </ul>
-
-              {/* 同一區塊只留一個實心主色（02 的上傳按鈕）。這顆是「瀏覽」性質的
-                  次要動作，降級為外框，避免兩顆實心按鈕在同一視線互搶。 */}
-              <Link
-                href="/training"
-                className="btn-base btn-ghost btn-slab mt-5"
-                data-fx-sheen
-                data-fx-magnet
-              >
-                查看訓練場次 <ArrowRight size={17} />
-              </Link>
-            </div>
-          </article>
-
-          {/* 02 月度跑步：次卡（透明底 + 上粗線 + 下沉錯位），刻意比 01 輕 */}
-          <article
-            className="group relative border-t-2 border-vital bg-transparent p-4 md:p-8 lg:col-span-5 lg:mt-24"
-            data-fx-tilt
-          >
-            <div className="flex items-center justify-between gap-4">
-              <span className="text-[11px] font-semibold uppercase tracking-[0.22em] text-white/50">
-                Program 02
-              </span>
-            </div>
-
-            <div className="mt-5 flex items-end gap-3">
-              <span className="stat-figure text-4xl leading-none text-vital-bright md:text-6xl">
-                {RULES.MONTHLY_GOAL_KM}
-              </span>
-              <span className="text-accent-blue mb-1.5 text-[11px] font-semibold uppercase tracking-[0.22em]">
-                km / month
-              </span>
-            </div>
-
-            <h3 className="mt-5 text-xl font-black tracking-tight md:text-3xl">
-              月度跑步挑戰
-            </h3>
-            <p className="mt-3 text-sm leading-relaxed text-white/70">
-              上傳跑步 app 截圖並填寫公里數，後台人工確認後計入累積。當月滿{" "}
-              <span className="font-semibold text-vital-bright">
-                {RULES.MONTHLY_GOAL_KM} 公里
-              </span>
-              ，即完成任務並獲得專屬優惠券。
-            </p>
-
-            <ul className="mt-5 border-t border-white/10">
-              {RUN_ROWS.map((row) => (
-                <li
-                  key={row.text}
-                  className="flex items-center gap-3 border-b border-white/10 py-2 text-sm text-white/70 md:py-3"
-                >
-                  <span className="text-accent-blue">{row.icon}</span>
-                  {row.text}
-                </li>
-              ))}
-            </ul>
-
-            <Link
-              href="/run"
-              className="btn-base btn-vital btn-slab pub-press mt-5"
-              data-fx-sheen
-              data-fx-magnet
-            >
-              上傳跑步紀錄 <ArrowRight size={17} />
-            </Link>
-          </article>
-        </div>
-      </div>
-    </section>
-  );
-
+  /* 「超越界限，讓訓練增加驅動力」——2026-11 站主要求把重要區塊往上移，
+     刪掉 programs／disciplines 之後，這一塊夾在排行榜與關於我們之間；
+     色帶由 band-0 改為 band-2：about 是 BrandIntro（component，固定 band-0），
+     原本兩塊相鄰同色，改用最亮的一層讓 ranking(1) → reasons(2) → about(0) 三段都不同。 */
   const reasonsSection = (
     <section
-      className="pub-shell pub-band-0 relative border-y border-ink-line"
+      className="pub-shell pub-band-2 relative border-y border-ink-line"
       data-fx-seq
     >
       <div className="noise-overlay" />
@@ -715,46 +530,6 @@ export default async function HomePage() {
                 {f.desc}
               </p>
             </div>
-          ))}
-        </div>
-      </div>
-    </section>
-  );
-
-  const disciplinesSection = (
-    <section className="pub-shell pub-band-1 pub-pad" data-fx-seq>
-      <div className="container-msw">
-        <div className="pub-head">
-          <h2 className="pub-head-title">各類訓練項目</h2>
-        </div>
-
-        {/* 六張卡在 390 用兩欄（原本單欄六張要 1,378px），卡片降為「輔助」等級
-            （.pub-card-tile：淺色帶底、無描邊），與 programs 的主卡區分開。
-            桌面維持原本的不規則 Bento（DISCIPLINE_SPANS 只作用於 lg）。 */}
-        <div className="pub-head-body grid grid-cols-2 gap-3 sm:gap-4 lg:grid-cols-12 lg:gap-5">
-          {content.disciplines.map((d, i) => (
-            <article
-              key={d.title}
-              className={`pub-card-tile pub-card-pad pub-lift group relative overflow-hidden ${
-                DISCIPLINE_SPANS[i] ?? ""
-              } ${i === 0 ? "lg:min-h-[260px]" : ""}`}
-              data-fx-tilt
-            >
-              <span className="stat-figure pointer-events-none absolute -top-2 right-3 text-4xl text-white/[0.07] transition-colors group-hover:text-vital/25 md:text-6xl">
-                {String(i + 1).padStart(2, "0")}
-              </span>
-              <div className="relative min-w-0">
-                <div className="text-accent-blue text-[11px] font-semibold uppercase tracking-[0.22em]">
-                  {d.sub}
-                </div>
-                <h3 className="mt-2 text-base font-black tracking-tight md:text-xl lg:text-2xl">
-                  {d.title}
-                </h3>
-                <p className="mt-2 max-w-sm break-words text-[13px] leading-snug text-white/70 md:text-sm md:leading-relaxed">
-                  {d.desc}
-                </p>
-              </div>
-            </article>
           ))}
         </div>
       </div>
@@ -959,13 +734,13 @@ export default async function HomePage() {
     </section>
   );
 
-  const sections: Record<BlockId, ReactNode> = {
+  /* 2026-11：programs（兩大核心活動）與 disciplines（各類訓練項目）已整段下架，
+     所以對照表只剩 6 個區塊；型別用 HomeBlockId 子集，BlockId 本身不動。 */
+  const sections: Record<HomeBlockId, ReactNode> = {
     hero: heroSection,
     stats: statsSection,
     about: aboutSection,
-    programs: programsSection,
     reasons: reasonsSection,
-    disciplines: disciplinesSection,
     ranking: rankingSection,
     cta: ctaSection,
   };
@@ -979,8 +754,9 @@ export default async function HomePage() {
       <HoverFx />
       <BackToTop />
 
-      {/* T-20：依 site_blocks 的 visible 過濾、依 HOME_SECTION_ORDER（站主
-          2026-02 指定）排序渲染。
+      {/* T-20：依 site_blocks 的 visible 過濾、依 HOME_SECTION_ORDER（站主指定）
+          排序渲染。2026-11 起 programs／disciplines 已下架，DB 若仍把它們設為
+          visible，會被 isHomeBlockId 過濾掉（不會渲染成空白區塊，也不會壞排序）。
           首頁輪播已移到 hero 區塊內、主標題之前（見 heroSection），
           所以這裡不再跟在 hero 之後插入輪播。
 
