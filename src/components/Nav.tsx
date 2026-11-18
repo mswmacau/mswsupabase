@@ -114,6 +114,11 @@ function DesktopNavItem({
         {link.label}
       </Link>
 
+      {/*
+        觸控目標 44×44：原本 w-7（28px 寬），實測 768/1440 都量到 28×44，
+        未達 44px 觸控標準（WCAG 2.5.5）；改 w-11 後與其他導覽項一致，
+        外層容器仍有餘裕（1440 量到 nav 432px / 可用 ~1200px）。
+      */}
       <button
         ref={triggerRef}
         type="button"
@@ -129,7 +134,7 @@ function DesktopNavItem({
           setOpen(true);
         }}
         onClick={() => setOpen((v) => !v)}
-        className="mr-1 inline-flex h-11 w-7 flex-none items-center justify-center text-white/60 transition-colors hover:text-white"
+        className="inline-flex h-11 w-11 flex-none items-center justify-center text-white/60 transition-colors hover:text-white"
       >
         <ChevronDown
           size={14}

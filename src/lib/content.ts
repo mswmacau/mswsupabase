@@ -365,12 +365,17 @@ export const DEFAULT_CONTENT: SiteContent = {
 };
 
 /**
- * 導覽預設結構：4 項 + 「活動」底下的 3 個子項。
+ * 導覽預設結構：5 項 + 「活動」底下的 3 個子項。
  * 原 8 項平級結構（含 /training、/run 在頂層）已收斂為此結構，URL 一律不變。
  *
  * 2026-11 「關於我們整併」：`/about` 項已移除（該路由改成永久轉址到
  * `/coaches#about`，內容就在教練團隊頁底部，不必再佔一個選單位）。
  * 移除後剛好等於 `NAV_MIN = 4`，仍在合法範圍內。
+ *
+ * 2026-11 「收費與會籍」：新增 `/pricing`，**放頂層第 5 項**而不是收進某個群組，
+ * 原因是本檔把「可以有子選單」寫死成 `NAV_PARENT_WITH_CHILDREN = "/events"`
+ * （見 normalizeNavLink），其他項目帶 children 會被判結構錯誤。5 項仍在
+ * `NAV_MIN = 4`～`NAV_MAX = 6` 範圍內。
  */
 export const DEFAULT_NAV: SiteNav = {
   links: [
@@ -387,6 +392,7 @@ export const DEFAULT_NAV: SiteNav = {
     },
     { href: "/leaderboard", label: "排行榜", visible: true },
     { href: "/coaches", label: "教練團隊", visible: true },
+    { href: "/pricing", label: "收費與會籍", visible: true },
   ],
 };
 
@@ -521,7 +527,12 @@ export const DEFAULT_BLOCKS: SiteBlocks = {
  * ============================================================= */
 
 /**
- * 導覽選單允許的連結（= 現行 7 個路由，含 /hyrox 子項；要加新頁面屬技術工作）。
+ * 導覽選單允許的連結（= 現行 8 個路由，含 /hyrox 子項；要加新頁面屬技術工作）。
+ *
+ * `/pricing`（收費與會籍）2026-11 新增：**只加路徑，不會自動出現在線上選單**。
+ * 前台導覽優先讀 DB `app_settings.site_nav`，若該筆已存 4 項舊結構，
+ * `coerceNav` 會照 DB 回傳（白名單只管「准不准」，不管「有沒有」）——
+ * 所以上線後要在後台「導覽」把「收費與會籍」加進去，選單才會出現。
  *
  * `/about` 已於「關於我們整併」移除：該路由只剩永久轉址到 `/coaches#about`，
  * 內容掛在教練團隊頁底部，不該再被選為選單目標。移除後若 DB 仍有 `/about`
@@ -536,6 +547,7 @@ export const NAV_HREFS: readonly string[] = [
   "/run",
   "/leaderboard",
   "/coaches",
+  "/pricing",
 ];
 
 /** site_pages 的 9 個頁面鍵 */
