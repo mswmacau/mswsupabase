@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { ArrowRight, Trophy } from "lucide-react";
+import { ArrowRight } from "lucide-react";
 import {
   getCachedAllTimeLeaderboard,
   getCachedMonthlyLeaderboard,
@@ -8,7 +8,6 @@ import {
 } from "@/lib/queries";
 import { RULES } from "@/lib/config";
 import { addMonths, currentMonth, formatKm, monthLabel, recentMonths } from "@/lib/utils";
-import { CountUp } from "@/components/fx/CountUp";
 import { LeaderboardSearch } from "@/components/fx/LeaderboardSearch";
 
 export const dynamic = "force-dynamic";
@@ -45,7 +44,6 @@ export default async function LeaderboardPage({
   });
 
   const months = recentMonths(6);
-  const topKm = monthly.length ? Number(monthly[0].total_km) : 0;
   const topAllTime = allTime.length ? Number(allTime[0].total_km) : 0;
 
   return (
@@ -66,56 +64,32 @@ export default async function LeaderboardPage({
         <div className="noise-overlay" />
 
         <div className="container-msw relative z-10">
-          <div className="relative pb-8 pt-20 md:pb-14 md:pt-36 lg:pb-16">
+          <div className="relative pb-6 pt-20 md:pb-10 md:pt-36 lg:pb-10">
             <div className="lg:pl-14">
               <span className="eyebrow">Leaderboard</span>
 
-              <h1 className="display-xl mt-6 lg:-ml-[3vw] lg:w-[112%]">
-                <span className="block text-white">{t.page_title}</span>
-                <span className="relative mt-1 block">
-                  <span
-                    aria-hidden
-                    data-dup="Rankings"
-                    className="text-outline text-outline-vital absolute left-[0.04em] top-[0.04em] block before:content-[attr(data-dup)]"
-                  />
-                  <span className="relative block text-vital-bright">
-                    Rankings
+              {/* 2026-11 站主要求：hero 右欄「榜首大數字」整塊刪除——榜首在下方
+                  榜單第一列就有，這裡是重複，還把榜單推到要下拉才看到。
+                  原本在標題下方的說明改為桌面與標題同列（手機仍在標題下方），
+                  文字未改。 */}
+              <div className="mt-6 grid gap-6 md:gap-10 lg:grid-cols-12 lg:items-end lg:gap-8">
+                <h1 className="display-xl lg:col-span-7 lg:-ml-[3vw] lg:w-[112%]">
+                  <span className="block text-white">{t.page_title}</span>
+                  <span className="relative mt-1 block">
+                    <span
+                      aria-hidden
+                      data-dup="Rankings"
+                      className="text-outline text-outline-vital absolute left-[0.04em] top-[0.04em] block before:content-[attr(data-dup)]"
+                    />
+                    <span className="relative block text-vital-bright">
+                      Rankings
+                    </span>
                   </span>
-                </span>
-              </h1>
+                </h1>
 
-              <div className="mt-6 grid gap-6 md:mt-10 md:gap-10 lg:grid-cols-12 lg:gap-8">
-                <p className="text-base leading-relaxed text-white/70 lg:col-span-6">
+                <p className="text-base leading-relaxed text-white/70 lg:col-span-5">
                   月度榜以當月經後台確認的跑步里程排序；總榜則是會員累積的總里程與積分。
                 </p>
-
-                {/* 榜首大數字：整頁的主角 */}
-                <div className="lg:col-span-5 lg:col-start-8 lg:border-l lg:border-white/10 lg:pl-8">
-                  <div className="flex items-center gap-2 text-[11px] font-semibold uppercase tracking-[0.22em] text-white/55">
-                    <Trophy size={14} className="text-vital-bright" />
-                    {monthLabel(month)} 榜首里程
-                  </div>
-                  {monthly.length ? (
-                    <div className="mt-4 flex flex-wrap items-end gap-x-3 gap-y-1">
-                      <span className="stat-figure text-6xl leading-none text-vital-bright md:text-7xl">
-                        <CountUp value={topKm} />
-                      </span>
-                      <span className="text-accent-blue mb-2 text-[11px] font-semibold uppercase tracking-[0.22em]">
-                        km
-                      </span>
-                    </div>
-                  ) : (
-                    <div className="mt-4 stat-figure text-6xl leading-none text-white/25 md:text-7xl">
-                      0
-                    </div>
-                  )}
-                  <div className="mt-5 h-px w-16 bg-white/20" />
-                  <p className="mt-3 text-sm leading-relaxed text-white/65 md:mt-5">
-                    {monthly.length
-                      ? `本月已有 ${monthly.length} 位會員上榜，目標 ${RULES.MONTHLY_GOAL_KM} 公里。`
-                      : t.empty_month}
-                  </p>
-                </div>
               </div>
             </div>
           </div>

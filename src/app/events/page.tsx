@@ -23,7 +23,6 @@ import { CategoryCards } from "./_components/CategoryCards";
 import { ScheduleCalendar } from "@/components/schedule/ScheduleCalendar";
 import {
   buildMonthDays,
-  formatDayLong,
   formatMonthTitle,
   macauTodayISO,
   sessionPhase,
@@ -350,16 +349,10 @@ export default async function EventsPage({
 
   const totalCount = schedule ? allViews.length : 0;
 
-  /**
-   * Hero 右欄的「下一場」：days 本身按日期有序（buildMonthDays 逐格產生），
-   * 取第一個不早於今天、且未取消的場次。用 days 而不是 allViews——
-   * allViews 只按「當天的時間」排序，跨日期沒有保證。
-   */
-  const nextUp =
-    days
-      .flatMap((day) => day.sessions)
-      .find((session) => session.date >= todayISO && session.status !== "cancelled") ??
-    null;
+  // 2026-11 站主要求刪掉 hero 右欄，連帶移除原本只給右欄用的 nextUp 查詢。
+  // 若之後要恢復「下一場」顯示，從 days（已按日期有序）取第一個不早於
+  // todayISO、且 status !== "cancelled" 的場次即可；不要改用 allViews——
+  // allViews 只按「當天的時間」排序，跨日期沒有保證。
 
   return (
     <>
@@ -384,8 +377,12 @@ export default async function EventsPage({
               桌面下留白 lg:pb-16→lg:pb-12（-16px），才讓 1440×900 首屏
               進得了日曆第一行。手機 pb-8／pt-20 完全沒動。
               2026-11 第二輪：md:pt-28→md:pt-20（再 -32px），讓 1440×900
-              首屏露出的不是「日期格頂端 11px」而是真正看得到日期數字。 */}
-          <div className="relative pb-8 pt-20 md:pt-20 lg:pb-12">
+              首屏露出的不是「日期格頂端 11px」而是真正看得到日期數字。
+              2026-11 第三輪（站主）：hero 右欄「Next Session」整塊刪除——日曆
+              就在正下方、已逐格列出所有場次，右欄是重複資訊，還把日曆推到
+              要下拉才看到。右欄一併帶走 grid wrapper，hero 只剩 eyebrow + h1。
+              下留白同步收窄：pb-8→pb-6、lg:pb-12→lg:pb-6。pt-20 不動。 */}
+          <div className="relative pb-6 pt-20 md:pt-20 lg:pb-6">
             <div className="lg:pl-14">
               <span className="eyebrow">Events</span>
 
@@ -403,53 +400,10 @@ export default async function EventsPage({
                 </span>
               </h1>
 
-              <div className="mt-6 grid gap-6 lg:mt-10 lg:grid-cols-12 lg:gap-8">
-                {/* 2026-11 文案精簡：hero 導言整段刪除（原「三條路線、一份月曆……」）。
-                    下方三聯已逐條列出同樣三條線，導言只是複述。 */}
-
-                {/* Hero 右欄：只講「下一場」。
-                    這裡以前也掛「班表日曆」標題 + 本月場次總數，跟下方日曆區
-                    的 h2 與月切換列的「共 N 場」講同一件事，已改成不同用途。 */}
-                <div className="min-w-0 lg:col-span-5 lg:col-start-8 lg:border-l lg:border-white/10 lg:pl-8">
-                  <div className="text-[11px] font-semibold uppercase tracking-[0.22em] text-white/55">
-                    Next Session
-                  </div>
-                  <div className="mt-4 flex flex-wrap items-end gap-x-3 gap-y-1">
-                    <span className="stat-figure text-5xl leading-none text-white md:text-6xl">
-                      {nextUp
-                        ? `${Number(nextUp.date.slice(5, 7))}.${nextUp.date.slice(
-                            8,
-                            10
-                          )}`
-                        : "—"}
-                    </span>
-                    <span className="text-accent-blue mb-2 text-[11px] font-semibold uppercase tracking-[0.22em]">
-                      {nextUp ? (nextUp.startTime ?? "時間待定") : "To Be Announced"}
-                    </span>
-                    {/* 手機緊湊版：課程名與日期時間擠在同一行（<lg）。
-                        分隔線與下面那句說明在手機收起（lg:block 反向），
-                        完整版在 lg+ 一字不動，說明句也沒有從程式碼刪掉。 */}
-                    {nextUp && (
-                      <span className="min-w-0 max-w-full truncate text-sm font-semibold text-white/85 lg:hidden">
-                        {nextUp.title}
-                      </span>
-                    )}
-                  </div>
-                  {nextUp && (
-                    <div className="mt-3 hidden min-w-0 truncate text-sm font-semibold text-white/85 lg:block">
-                      {nextUp.title}
-                    </div>
-                  )}
-                  <div className="mt-5 hidden h-px w-16 bg-white/20 lg:block" />
-                  <p className="mt-5 hidden text-sm leading-relaxed text-white/65 lg:block">
-                    {nextUp
-                      ? `下一場是 ${formatDayLong(nextUp.date)}。點下方日曆看整月場次與報名方式。`
-                      : schedule
-                        ? "本月場次已全部結束，往期班表可在下方查看。"
-                        : "本月班表尚未公布。班表由館方逐月建立與上架，公布後會出現在下方日曆。"}
-                  </p>
-                </div>
-              </div>
+              {/* 2026-11 站主要求：hero 右欄（Next Session 大數字＋說明）已整塊刪除。
+                  日曆就在正下方，本來就逐格列出所有場次與報名方式，右欄是重複，
+                  而且會把日曆往下推。連同 grid wrapper 一起移除，hero 只剩
+                  eyebrow + h1，日曆往上收。 */}
             </div>
           </div>
         </div>
