@@ -442,3 +442,199 @@ export interface SiteStats {
   total_runs: number;
   total_sessions: number;
 }
+
+/* =============================================================
+ * 賽事系統（HYROX 賽事外殼 + 報名）
+ * 資料來源：supabase/migration-races.sql
+ *   events（series='race'，加 6 個新欄位）｜race_categories
+ *   ｜race_registrations｜race_entries｜4 個只出數字的檢視
+ * ============================================================= */
+
+/**
+ * 賽事狀態（events.status）。
+ *
+ * 【為什麼不是 EventStatus】events.status 原有的 check 約束只允許
+ * ('draft','published','archived')；migration-races.sql §1 以「放寬約束」的方式
+ * 併入賽事生命週期值 ('open','closed','photos')，既有三個值一字未動，
+ * 所以一般活動（series is null）的行為完全不變。
+ * 'published' 保留在 union 內，是因為 DB 端真的可能存在（人工改成 published 的列），
+ * 型別要反映資料庫的真實值域，不能假裝它不存在。
+ */
+export type RaceStatus = "draft" | "open" | "closed" | "photos" | "archived" | "published";
+
+/** 賽事組別（race_categories）— 每場賽事的每日組別，可自訂，不寫死 */
+export interface RaceCategory {
+  id: string;
+  event_id: string;
+  /** 比賽日 YYYY-MM-DD（多日賽事每天可有不同組別） */
+  day: string;
+  /** 組別名稱，如 Men Open / Mixed Doubles / Relay */
+  name: string;
+  /** 每組人數（1 = 個人賽，2 = 雙人，4 = 接力…），1–8 */
+  team_size: number;
+  /** 報名費（分）。0 = 免費 */
+  fee_cents: number;
+  sort_order: number;
+  created_at: string;
+}
+
+/** 賽事報名狀態（race_registrations.status） */
+export type RaceRegistrationStatus = "submitted" | "confirmed" | "needs_info" | "cancelled";
+
+/**
+ * 賽事付款狀態（race_registrations.payment_status）。
+ * 與 HyroxPaymentStatus（not_required / pending_review / confirmed / rejected）
+ * 是兩套獨立語意：賽事這裡用 pending / approved / rejected。
+ */
+export type RacePaymentStatus = "not_required" | "pending" | "approved" | "rejected";
+
+/** 賽事（events 列，series='race'）— 只列賽事頁需要的欄位 */
+export interface RaceEvent {
+  id: string;
+  title: string;
+  subtitle: string | null;
+  body: string | null;
+  /** 開始日 YYYY-MM-DD */
+  event_date: string;
+  /** 結束日 YYYY-MM-DD；多日賽事才會有值 */
+  end_date: string | null;
+  start_time: string | null;
+  end_time: string | null;
+  location: string | null;
+  capacity: number | null;
+  registration_url: string | null;
+  registration_note: string | null;
+  cover_path: string | null;
+  status: RaceStatus;
+  series: string | null;
+  sort_order: number;
+  fee_cents: number | null;
+  /** 攝影師雲端相簿網址（外部連結） */
+  album_url: string | null;
+  /** 相簿按鈕文字；空值時前台顯示「睇比賽相片」 */
+  album_label: string | null;
+  /** 是否出現在主頁賽事帶 */
+  promo_on_home: boolean;
+  /** 主頁帶狀卡的一句話 */
+  promo_note: string | null;
+  /** 報名截止時間（timestamptz） */
+  registration_deadline: string | null;
+  /** 巴士／住宿／集合的自由文字（可手動編輯） */
+  logistics_note: string | null;
+  created_by: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+/**
+ * 人層報名（race_registrations）— 一個人一筆，巴士／住宿掛在這裡。
+ *
+ * 【為什麼不重用 event_registrations】見 migration-races.sql 檔頭：
+ * unique(event_id,user_id) 會擋死一人多報（雙人＋接力）、沒有姓名／巴士／住宿欄，
+ * 且 9 個付款欄位的語意與賽事需求衝突。
+ */
+export interface RaceRegistration {
+  id: string;
+  event_id: string;
+  user_id: string;
+  /** 本人自己填的姓名 */
+  full_name: string;
+  phone: string;
+  /** HYROX 分組需要；null = 未提供 */
+  gender: "male" | "female" | null;
+  needs_bus: boolean;
+  bus_seats: number;
+  needs_lodging: boolean;
+  lodging_people: number;
+  lodging_nights: number;
+  /** 付款截圖的私有桶路徑（run-screenshots） */
+  payment_proof_path: string | null;
+  payment_status: RacePaymentStatus;
+  status: RaceRegistrationStatus;
+  member_note: string | null;
+  admin_note: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+/** 人次層報名（race_entries）— 這個人跑哪一日哪一組，可多筆 */
+export interface RaceEntry {
+  id: string;
+  registration_id: string;
+  category_id: string;
+  /** 雙人／接力的隊友名（本人填）；個人賽為 null */
+  teammate_names: string | null;
+}
+
+/** 賽事彙總（檢視 race_summary）— 只出數字，不含任何姓名 */
+export interface RaceSummaryRow {
+  event_id: string;
+  registrations: number;
+  entries: number;
+  bus_seats: number;
+  lodging_people: number;
+  lodging_nights: number;
+}
+
+/** 賽事 × 日期彙總（檢視 race_day_summary） */
+export interface RaceDaySummaryRow {
+  event_id: string;
+  day: string;
+  registrations: number;
+  entries: number;
+}
+
+/** 賽事 × 日期 × 組別彙總（檢視 race_category_summary） */
+export interface RaceCategorySummaryRow {
+  event_id: string;
+  day: string;
+  category_id: string;
+  name: string;
+  registrations: number;
+  entries: number;
+}
+
+/** 賽事後勤彙總（檢視 race_logistics）— 給後台訂車訂房用 */
+export interface RaceLogisticsRow {
+  event_id: string;
+  bus_people: number;
+  bus_seats: number;
+  lodging_people: number;
+  lodging_nights: number;
+}
+
+/**
+ * 後台名單列（GET /api/admin/races/[id]/registrations）。
+ * 這是全站唯一會出現「姓名」的賽事端點，只有管理員讀得到。
+ */
+export interface RaceAdminRegistrationRow extends RaceRegistration {
+  /** 付款截圖的 signed URL（1 小時；後台專用，會員端不回） */
+  proof_url: string | null;
+  /** 這個人報名的組別（人次層展開） */
+  entries: Array<{
+    id: string;
+    category_id: string;
+    category_name: string | null;
+    day: string | null;
+    teammate_names: string | null;
+  }>;
+}
+
+/** 賽事報名的組別（會員端顯示用，已攤平 race_categories 的關鍵欄位） */
+export interface MyRaceEntry {
+  id: string;
+  category_id: string;
+  teammate_names: string | null;
+  category: {
+    id: string;
+    name: string;
+    day: string;
+    team_size: number;
+    fee_cents: number;
+  } | null;
+}
+
+/** 會員自己的賽事報名（getMyRaceRegistrations）；含姓名電話，只回本人 */
+export interface MyRaceRegistration extends RaceRegistration {
+  entries: MyRaceEntry[];
+}
