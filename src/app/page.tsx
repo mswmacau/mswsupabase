@@ -34,6 +34,11 @@ import {
 } from "@/lib/utils";
 import { isSupabaseConfigured } from "@/lib/supabase/env";
 import { getCurrentProfile } from "@/lib/supabase/server";
+/* 首頁「賽事推廣帶」：資料層是 src/app/races/_data.ts 的暫時實作，
+   第二階段換成 @/lib/races 時這一支 import 完全不用改。
+   沒有賽事時 getPromoRace() 回 null，RacePromoBand 整塊不渲染。 */
+import { getPromoRace } from "./races/_data";
+import { RacePromoBand } from "./races/_components/RacePromoBand";
 
 /* ===== 首頁動效（只喺首頁掛載，唔影響其他頁） ===== */
 import "./home-fx.css";
@@ -116,7 +121,7 @@ export default async function HomePage() {
   const month = currentMonth();
   // T-5 / T-20：首頁文案與區塊設定改讀 DB（site_content / site_blocks），
   // DB 無值時回落 DEFAULT_*（逐字等於原有硬編碼，沙箱渲染與基線一致）。
-  const [stats, leaders, profile, theme, content, blocks, slides] =
+  const [stats, leaders, profile, theme, content, blocks, slides, promoRace] =
     await Promise.all([
       getCachedSiteStats(),
       getCachedMonthlyLeaderboard(month, 5),
@@ -125,6 +130,8 @@ export default async function HomePage() {
       getSiteContent(),
       getSiteBlocks(),
       getActiveSlides(),
+      // 賽事推廣帶：與上面幾支並行，不增加一個序列化的 DB round trip
+      getPromoRace(),
     ]);
 
   /* ---------- 首頁「本月場次」日曆（B4 版本 1）----------
@@ -407,6 +414,12 @@ export default async function HomePage() {
                 </>
               )}
             </div>
+
+            {/* 賽事推廣帶（站主要求：hero 內部、標題與標語下方附近、最醒目）。
+                位置刻意放在 CTA 之後、hero 結束之前：不與主 CTA 爭第一眼，
+                但仍在首屏。沒有賽事時 RacePromoBand 回傳 null，
+                不留空 div、不留 margin —— 主頁總高與改動前一致。 */}
+            <RacePromoBand race={promoRace} />
           </div>
         </div>
       </div>
