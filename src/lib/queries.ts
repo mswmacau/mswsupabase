@@ -28,6 +28,9 @@ import {
 } from "./draft";
 import { addMonths, currentMonth, monthLabel, todayISO } from "./utils";
 import { isUuid } from "./api";
+// 賽事月曆查詢共用 races.ts 的快取 tag（後台寫入端以同一個字串 revalidateTag）。
+// races.ts 沒有反向 import queries.ts，不構成循環依賴。
+import { RACES_TAG } from "./races";
 import type {
   Coupon,
   Event,
@@ -1125,6 +1128,172 @@ export async function getHyroxEventById(id: string): Promise<HyroxEvent | null> 
     { tags: [HYROX_EVENTS_TAG], revalidate: 60 }
   )();
 }
+
+/* =============================================================
+ * 賽事（events，series='race'）→ /events 月曆
+ *
+ * 站主原話：「即將喺 11 月 20 至 22 日舉行嘅廣州 HYROX 比賽，亦請你擺落日曆度，
+ * 只係冇得報名而已。」→ /events 的月曆除了課堂（training_sessions）與
+ * HYROX 付費場（series='hyrox'），還要疊上賽事（series='race'）。
+ *
+ * 【為什麼另開查詢，不改 getHyroxEvents / getCachedPublishedEvents】
+ *   · getHyroxEvents 的 `.eq("series","hyrox")` 是付費場的月曆行為，動它等於
+ *     同時改變 /hyrox 的既有語意。
+ *   · getCachedPublishedEvents 刻意排除 HYROX（`.or("series.is.null,series.neq.hyrox")`），
+ *     而且只回「已發布的一般活動」，賽事的 status 是 open/closed/photos，本來就不在裡面。
+ *   所以這裡只**新增**，既有查詢一行不動。
+ *
+ * 【可見性】anon 只讀得到 series='race' 且 status in ('open','closed','photos')
+ *   （supabase/migration-races.sql §6 的 events_select_race_public 政策）。
+ *   查詢仍顯式列 status：RLS 是第二道防線，不把它當唯一防線。
+ *   draft / archived 任何情況下都不會出現在月曆。
+ *
+ * 【只 select 既有欄位】end_date / fee_cents 都在 base schema（見 types.ts 的
+ *   RaceEvent），刻意不碰 migration-races.sql 才新增的 6 個欄位，
+ *   這樣 SQL 尚未執行時這兩個查詢不會整支降級。
+ *
+ * 【快取】tag 一律用 RACES_TAG（= "races"），與 src/lib/races.ts 及後台
+ *   src/app/api/admin/races/** 的 revalidateTag 同值，否則後台改完賽事
+ *   月曆要等 60 秒才更新。
+ * ============================================================= */
+
+/** 月曆用的一場賽事（events，series='race'）。只列月曆需要的欄位。 */
+export interface CalendarRaceRow {
+  id: string;
+  title: string;
+  /** 開始日 YYYY-MM-DD（查詢已保證非 null） */
+  event_date: string;
+  /** 結束日；多日賽事才有值 */
+  end_date: string | null;
+  start_time: string | null;
+  end_time: string | null;
+  location: string | null;
+  fee_cents: number | null;
+  /** 'open' | 'closed' | 'photos'（draft / archived 由 RLS 與查詢條件擋掉） */
+  status: string;
+}
+
+/** 賽事月曆查詢的欄位（全部是 base schema 既有欄位） */
+const RACE_CALENDAR_COLUMNS =
+  "id,title,event_date,end_date,start_time,end_time,location,fee_cents,status";
+
+/**
+ * 某年某月要畫在月曆上的賽事。
+ *
+ * 【跨月賽事】查詢條件刻意只寫 `event_date <= 該月最後一天`，再在 JS 內用
+ *   `(end_date ?? event_date) >= 該月第一天` 過濾。若寫成
+ *   `.gte("event_date", 該月第一天)`，11/30 起 12/2 結束的賽事就會從 12 月消失
+ *   —— 那正是這次要修的「跨月看不到」情況。
+ *
+ * 參數非法或讀不到一律回空陣列，**不 throw**：少一場賽事不能讓 /events 500。
+ */
+export const getRaceEventsForMonth = unstable_cache(
+  cache(async (year: number, month: number): Promise<CalendarRaceRow[]> => {
+    const range = trainingMonthRange(year, month);
+    if (!range) return [];
+
+    const supabase = anonClient();
+    if (!supabase) return [];
+
+    const { data, error } = await supabase
+      .from("events")
+      .select(RACE_CALENDAR_COLUMNS)
+      .eq("series", "race")
+      .in("status", ["open", "closed", "photos"])
+      .not("event_date", "is", null)
+      .lte("event_date", range.to)
+      .order("event_date", { ascending: true })
+      .order("id", { ascending: true });
+
+    logQueryError("getRaceEventsForMonth", error);
+    if (error || !data) return [];
+
+    return (data as unknown as CalendarRaceRow[]).filter((row) => {
+      // end_date 早於 event_date 的髒資料視為單日賽事，不要讓它「消失」
+      const lastDay =
+        row.end_date && row.end_date > row.event_date
+          ? row.end_date
+          : row.event_date;
+      return lastDay >= range.from;
+    });
+  }),
+  ["race-events-for-month"],
+  { tags: [RACES_TAG], revalidate: 60 }
+);
+
+/**
+ * 有賽事的月份清單（`/events` 月份切換器用）。
+ *
+ * 為什麼需要它：月份切換器原本只走 `getAvailableMonths()`（= 已發布班表的月份）。
+ * 12 月班表還沒發布時，切換器上根本沒有 12 月可點，即使 12/05 有一場賽事
+ * 也永遠看不到。把「有賽事的月份」併進去，使用者才切得到（詳見 /events 的
+ * display 計算）。
+ *
+ * 回傳已展開多日賽事跨月的情況（11/30–12/2 → 同時回 2026-11 與 2026-12），
+ * 依 year → month 升冪排序。
+ */
+export const getRaceCalendarMonths = unstable_cache(
+  cache(async (): Promise<{ year: number; month: number }[]> => {
+    const supabase = anonClient();
+    if (!supabase) return [];
+
+    const { data, error } = await supabase
+      .from("events")
+      .select("event_date,end_date")
+      .eq("series", "race")
+      .in("status", ["open", "closed", "photos"])
+      .not("event_date", "is", null)
+      .order("event_date", { ascending: true })
+      .limit(300);
+
+    logQueryError("getRaceCalendarMonths", error);
+    if (error || !data) return [];
+
+    const keys = new Set<string>();
+    for (const row of data as {
+      event_date: string | null;
+      end_date: string | null;
+    }[]) {
+      const start = row.event_date;
+      if (!start || start.length < 7) continue;
+      const end = row.end_date && row.end_date > start ? row.end_date : start;
+
+      let year = Number(start.slice(0, 4));
+      let month = Number(start.slice(5, 7));
+      const endYear = Number(end.slice(0, 4));
+      const endMonth = Number(end.slice(5, 7));
+      if (
+        !Number.isInteger(year) ||
+        !Number.isInteger(month) ||
+        !Number.isInteger(endYear) ||
+        !Number.isInteger(endMonth)
+      ) {
+        continue;
+      }
+
+      // 逐月推進，含頭含尾。上限 36 個月只是防資料異常造成無限迴圈。
+      for (let i = 0; i < 36; i += 1) {
+        keys.add(`${year}-${String(month).padStart(2, "0")}`);
+        if (year === endYear && month === endMonth) break;
+        if (year > endYear || (year === endYear && month > endMonth)) break;
+        month += 1;
+        if (month > 12) {
+          month = 1;
+          year += 1;
+        }
+      }
+    }
+
+    return [...keys]
+      .sort()
+      .map((key) => ({
+        year: Number(key.slice(0, 4)),
+        month: Number(key.slice(5, 7)),
+      }));
+  }),
+  ["race-calendar-months"],
+  { tags: [RACES_TAG], revalidate: 60 }
+);
 
 /* =============================================================
  * HYROX 往期場次回顧相片 — supabase/migration-hyrox-photos.sql

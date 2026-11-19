@@ -14,9 +14,13 @@ import {
   getHyroxEvents,
   getMyEventRegistrations,
   getClassNamesByColor,
+  getRaceCalendarMonths,
+  getRaceEventsForMonth,
   getScheduleLegend,
   getScheduleMonth,
   getSitePages,
+  shiftISODate,
+  type CalendarRaceRow,
 } from "@/lib/queries";
 import { EventCard } from "@/components/EventCard";
 import { CategoryCards } from "./_components/CategoryCards";
@@ -29,6 +33,7 @@ import {
   sortSessionViews,
   type ScheduleCta,
   type ScheduleSessionView,
+  type ScheduleStatus,
 } from "@/components/schedule/schedule-utils";
 import type { HyroxEvent, TrainingSessionRow } from "@/lib/types";
 
@@ -243,6 +248,75 @@ function hyroxToView(
   };
 }
 
+/**
+ * 賽事（`events.series='race'`）→ 日曆要的形狀。
+ *
+ * 站主原話：「即將喺 11 月 20 至 22 日舉行嘅廣州 HYROX 比賽，亦請你擺落日曆度，
+ * 只係冇得報名而已。」→ 只顯示、不報名。
+ *
+ * 【多日賽事每一天各產生一筆】11/20–11/22 的賽事要在三個格子都出現
+ * （站主說「擺落日曆度」，只標第一天會讓人以為 21、22 號沒事）。
+ * 三筆的 `id` 相同（都是賽事 id），所以日曆的 React key 一定要帶上 `date`
+ * ——見 ScheduleCalendar 的 `${kind}-${id}-${date}`。
+ *
+ * 【CTA 只有兩種，都不導向報名】
+ *   已結束（以**最後一天**判斷）→ 「查看賽事回顧」
+ *   未結束                    → 「查看賽事」
+ * 兩者都連到 `/races/<id>`，要不要報名由賽事頁自己決定，月曆不給報名按鈕。
+ * 用「最後一天」而不是當天判斷，是為了讓三天賽事在賽期中不會出現
+ * 「第一天回顧、第三天查看賽事」這種自相矛盾的畫面。
+ *
+ * 【status】`open` → "open"；`closed` / `photos` → "closed"
+ * （photos = 已結束有相片，月曆上的「報名已截止」語意正確）。
+ * draft / archived 根本不會進來：查詢與 RLS 兩層都擋掉了。
+ *
+ * 【paid 一律 false】`paid` 的語意是「HYROX 付費場」，會影響
+ * 「需付費」徽章與橙色的付費統計；賽事不是付費場，不能混進去。
+ */
+function raceToViews(
+  event: CalendarRaceRow,
+  todayISO: string
+): ScheduleSessionView[] {
+  const start = event.event_date;
+  if (!start) return [];
+
+  // end_date 早於 event_date（或等於）都視為單日賽事，不讓髒資料把日期倒著展開
+  const end = event.end_date && event.end_date > start ? event.end_date : start;
+  const ended = end < todayISO;
+
+  const cta: ScheduleCta = ended
+    ? { label: "查看賽事回顧", href: `/races/${event.id}` }
+    : { label: "查看賽事", href: `/races/${event.id}` };
+
+  const status: ScheduleStatus = event.status === "open" ? "open" : "closed";
+
+  const views: ScheduleSessionView[] = [];
+  let cursor = start;
+  // 上限 60 天：end_date 若被打成 2099 年，也不至於把整個月曆灌爆
+  for (let i = 0; i < 60; i += 1) {
+    views.push({
+      id: event.id,
+      kind: "race",
+      title: event.title,
+      date: cursor,
+      startTime: event.start_time ? event.start_time.slice(0, 5) : null,
+      endTime: event.end_time ? event.end_time.slice(0, 5) : null,
+      colorKey: null,
+      coachName: null,
+      location: event.location ?? null,
+      capacity: null,
+      status,
+      paid: false,
+      feeCents: event.fee_cents ?? null,
+      cta,
+    });
+    if (cursor >= end) break;
+    cursor = shiftISODate(cursor, 1);
+  }
+
+  return views;
+}
+
 export default async function EventsPage({
   searchParams,
 }: {
@@ -250,20 +324,31 @@ export default async function EventsPage({
 }) {
   const params = await searchParams;
 
-  const [months, hyroxAll, profile, legend, upcomingEvents, classesByColor] =
-    await Promise.all([
-      getAvailableMonths(),
-      // 前台要看到「已結束（archived）」的付費場次，否則 11/11 那場在日曆上會消失。
-      // includeArchived 會回 draft —— draft 一律在下面過濾掉，不能外洩。
-      getHyroxEvents({ includeArchived: true }),
-      getCurrentProfile(),
-      // 顏色圖例（後台可編輯）。表未建時回 [] → 圖例整段不顯示，日曆照常。
-      getScheduleLegend(),
-      // 已發布、未過期的一般活動（已排除 HYROX）。空陣列 → 「近期活動」整段不渲染。
-      getCachedPublishedEvents(),
-      // 色票鍵 → 課程名：圖例文字以課程名為準（通稱「跑步／力量」看不出是哪一堂）
-      getClassNamesByColor(),
-    ]);
+  const [
+    months,
+    raceMonths,
+    hyroxAll,
+    profile,
+    legend,
+    upcomingEvents,
+    classesByColor,
+  ] = await Promise.all([
+    // 已發布且已到生效時間的「班表」月份（語意不變：training_months 仍是唯一真相）
+    getAvailableMonths(),
+    // 有賽事（series='race'）的月份。任務 3 的關鍵：12 月班表未發布、
+    // 但 12/05 有賽事時，切換器必須有 12 月可點，否則永遠切不到。
+    getRaceCalendarMonths(),
+    // 前台要看到「已結束（archived）」的付費場次，否則 11/11 那場在日曆上會消失。
+    // includeArchived 會回 draft —— draft 一律在下面過濾掉，不能外洩。
+    getHyroxEvents({ includeArchived: true }),
+    getCurrentProfile(),
+    // 顏色圖例（後台可編輯）。表未建時回 [] → 圖例整段不顯示，日曆照常。
+    getScheduleLegend(),
+    // 已發布、未過期的一般活動（已排除 HYROX）。空陣列 → 「近期活動」整段不渲染。
+    getCachedPublishedEvents(),
+    // 色票鍵 → 課程名：圖例文字以課程名為準（通稱「跑步／力量」看不出是哪一堂）
+    getClassNamesByColor(),
+  ]);
 
   // 會員已報名的 activity id（未登入不查）。查詢失敗回 [] → 全部顯示「站內報名」。
   const registeredIds = profile
@@ -276,24 +361,62 @@ export default async function EventsPage({
     month: Number(todayISO.slice(5, 7)),
   };
 
-  // getAvailableMonths() 回升冪，最後一個就是最新已發布月份
-  const latest = months.length > 0 ? months[months.length - 1] : null;
+  /**
+   * 月份切換器可達的月份 = 已發布班表的月份 ∪ 有賽事的月份。
+   *
+   * 兩者**不合併成一個陣列取代 months**：`months` 代表「班表已發布」，
+   * 那個語意仍被下面的 todayPublished / pastMonths / 「本月班表尚未公布」判斷使用。
+   * 這裡只是另外算一份「使用者切得到的月份」。
+   */
+  const availableMonths: YearMonth[] = (() => {
+    const byKey = new Map<string, YearMonth>();
+    for (const m of months) {
+      const ym = { year: m.year, month: m.month };
+      byKey.set(monthKeyOf(ym), ym);
+    }
+    for (const m of raceMonths) {
+      const ym = { year: m.year, month: m.month };
+      byKey.set(monthKeyOf(ym), ym);
+    }
+    return [...byKey.values()].sort((a, b) =>
+      a.year !== b.year ? a.year - b.year : a.month - b.month
+    );
+  })();
+
+  // availableMonths 已升冪，最後一個就是最新可看月份
+  const latest =
+    availableMonths.length > 0
+      ? availableMonths[availableMonths.length - 1]
+      : null;
 
   const requested = parseYearMonth(params);
   const requestedAvailable =
-    requested && months.some((m) => sameMonth(m, requested)) ? requested : null;
+    requested && availableMonths.some((m) => sameMonth(m, requested))
+      ? requested
+      : null;
 
   const todayPublished = months.some((m) => sameMonth(m, today));
+  const todayHasRace = raceMonths.some((m) => sameMonth(m, today));
 
-  /** 顯示月份：?y/?m（且該月已發布）→ 當月（若已發布）→ 最新已發布月份 → 無 */
+  /**
+   * 顯示月份：?y/?m（可達即可）→ 當月（有班表 **或** 有賽事）→ 最新可看月份 → 無。
+   *
+   * 舊版是「當月必須已發布班表才顯示」，於是 12 月有賽事時，
+   * 使用者連進 /events 都看不到（當月未發布 → 直接掉到降級卡）。
+   */
   const display: YearMonth | null =
     requestedAvailable ??
-    (todayPublished ? today : null) ??
+    (todayPublished || todayHasRace ? today : null) ??
     (latest ? { year: latest.year, month: latest.month } : null);
 
-  const schedule = display
-    ? await getScheduleMonth(display.year, display.month)
+  const monthData = display
+    ? await Promise.all([
+        getScheduleMonth(display.year, display.month),
+        getRaceEventsForMonth(display.year, display.month),
+      ])
     : null;
+  const schedule = monthData ? monthData[0] : null;
+  const raceRows: CalendarRaceRow[] = monthData ? monthData[1] : [];
 
   const displayKey = display ? monthKeyOf(display) : null;
   const hyroxInMonth = displayKey
@@ -310,14 +433,25 @@ export default async function EventsPage({
   const sessionViews: ScheduleSessionView[] = (schedule?.sessions ?? []).map(
     (row) => sessionToView(row, todayISO)
   );
-  const hyroxViews: ScheduleSessionView[] = hyroxInMonth.map((e) =>
-    hyroxToView(e, todayISO, isLoggedIn)
+  // 該月班表未發布時，HYROX 付費場仍然不單獨鋪成日曆（維持既有行為）
+  const hyroxViews: ScheduleSessionView[] = schedule
+    ? hyroxInMonth.map((e) => hyroxToView(e, todayISO, isLoggedIn))
+    : [];
+  // 賽事：不受「班表是否發布」影響，一律鋪上去（任務 1 + 任務 3）
+  const raceViews: ScheduleSessionView[] = raceRows.flatMap((e) =>
+    raceToViews(e, todayISO)
   );
-  // 只有該月班表已發布時才畫日曆；未發布＝整月都還不該露出，
-  // 此時連 HYROX 場次也不單獨鋪成日曆，改走「本月班表尚未公布」的降級卡。
-  const allViews = schedule ? sortSessionViews([...sessionViews, ...hyroxViews]) : [];
+
+  const allViews = sortSessionViews([...sessionViews, ...hyroxViews, ...raceViews]);
+
+  /**
+   * 畫月曆的條件：該月有已發布班表，**或**至少有賽事。
+   * 兩者都沒有 → 維持原本的「本月班表尚未公布」降級卡。
+   */
+  const hasCalendar = Boolean(display && (schedule || raceViews.length > 0));
+
   const days =
-    display && schedule
+    display && hasCalendar
       ? buildMonthDays({
           year: display.year,
           month: display.month,
@@ -326,28 +460,43 @@ export default async function EventsPage({
         })
       : [];
 
-  // 月份切換：只在「已發布且已生效」的月份之間走，未來未發布的月份切不到
+  /**
+   * 本月格內實際看得到的場次數。
+   * 不能用 `allViews.length`：跨月賽事（11/30–12/2）在 12 月那份資料裡
+   * 也包含 11/30，直接算長度會把不屬於本月的那一天算進來。
+   */
+  const inMonthCount = days.reduce(
+    (n, day) => n + (day.inMonth ? day.sessions.length : 0),
+    0
+  );
+
+  // 月份切換：在「可達月份」之間走（含只有賽事的月份）
   const displayIndex = display
-    ? months.findIndex((m) => sameMonth(m, display))
+    ? availableMonths.findIndex((m) => sameMonth(m, display))
     : -1;
   const prevMonth =
     displayIndex > 0
-      ? { year: months[displayIndex - 1].year, month: months[displayIndex - 1].month }
+      ? {
+          year: availableMonths[displayIndex - 1].year,
+          month: availableMonths[displayIndex - 1].month,
+        }
       : null;
   const nextMonth =
-    displayIndex >= 0 && displayIndex < months.length - 1
+    displayIndex >= 0 && displayIndex < availableMonths.length - 1
       ? {
-          year: months[displayIndex + 1].year,
-          month: months[displayIndex + 1].month,
+          year: availableMonths[displayIndex + 1].year,
+          month: availableMonths[displayIndex + 1].month,
         }
       : null;
 
-  // 往期：已發布但不是目前顯示月份的，新的排前面
+  // 往期：已發布班表但不是目前顯示月份的，新的排前面。
+  // 刻意仍以 months（班表）為準：這一區的標題寫「往期班表」，
+  // 塞進只有賽事的月份會變成「2026 年 12 月班表」而其實沒有班表。
   const pastMonths = months
     .filter((m) => !display || !sameMonth(m, display))
     .sort((a, b) => (a.year !== b.year ? b.year - a.year : b.month - a.month));
 
-  const totalCount = schedule ? allViews.length : 0;
+  const totalCount = hasCalendar ? inMonthCount : 0;
 
   // 2026-11 站主要求刪掉 hero 右欄，連帶移除原本只給右欄用的 nextUp 查詢。
   // 若之後要恢復「下一場」顯示，從 days（已按日期有序）取第一個不早於
@@ -467,8 +616,8 @@ export default async function EventsPage({
               <div className="text-[10px] uppercase tracking-[0.18em] text-white/40">
                 {!display
                   ? "待館方公布"
-                  : schedule
-                    ? `共 ${totalCount} 場`
+                  : hasCalendar
+                    ? `共 ${totalCount} 場${schedule ? "" : "賽事"}`
                     : "本月班表尚未公布"}
               </div>
             </div>
@@ -512,9 +661,10 @@ export default async function EventsPage({
           {display && !sameMonth(display, today) && (
             <div className="mt-5 flex flex-wrap items-center gap-x-3 gap-y-1 border-l-2 border-vital bg-vital/[0.07] px-4 py-2.5 text-sm text-white/75">
               <span className="font-semibold text-white">
-                目前顯示 {formatMonthTitle(display.year, display.month)}班表
+                目前顯示 {formatMonthTitle(display.year, display.month)}
+                {schedule ? "班表" : "賽事"}
               </span>
-              {todayPublished ? (
+              {todayPublished || todayHasRace ? (
                 <Link
                   href={monthHref(today)}
                   scroll={false}
@@ -530,7 +680,26 @@ export default async function EventsPage({
             </div>
           )}
 
-          {display && schedule ? (
+          {/* 該月班表未發布、但有賽事 → 月曆照畫，但要講清楚「這裡只有賽事」，
+              不然使用者會以為課程被取消了。 */}
+          {display && !schedule && raceViews.length > 0 && (
+            <div
+              className="mt-5 flex flex-wrap items-center gap-x-3 gap-y-1 border-l-2 px-4 py-2.5 text-sm text-white/75"
+              style={{
+                borderColor: "rgba(217,70,239,0.65)",
+                backgroundColor: "rgba(217,70,239,0.07)",
+              }}
+            >
+              <span className="font-semibold text-white">
+                {formatMonthTitle(display.year, display.month)}班表尚未公布
+              </span>
+              <span className="text-white/55">
+                以下只顯示已排定的賽事，課程班表待館方公布。
+              </span>
+            </div>
+          )}
+
+          {display && hasCalendar ? (
             <div className="mt-3">
               <ScheduleCalendar
                 // 換月時重掛載：選中的場次與當日清單不該跨月沿用
@@ -541,6 +710,8 @@ export default async function EventsPage({
                 legend={legend}
                 classesByColor={classesByColor}
                 todayISO={todayISO}
+                // 該月沒有班表、只有賽事時，標題寫「賽事」才不會說謊
+                headingSuffix={schedule ? "班表" : "賽事"}
               />
             </div>
           ) : (

@@ -6,10 +6,12 @@ import { SessionDetailPanel } from "./SessionDetailPanel";
 import { ScheduleLegend } from "./ScheduleLegend";
 import {
   PAID_HEX,
+  RACE_HEX,
+  RACE_LABEL,
   WEEKDAY_LABELS,
-  colorHex,
   formatDayShort,
   formatMonthTitle,
+  sessionAccentHex,
   type ScheduleDay,
   type ScheduleSessionView,
 } from "./schedule-utils";
@@ -21,8 +23,6 @@ const MAX_PILLS_DESKTOP = 3;
 const MAX_PILLS_TABLET = 2;
 /** 手機每格最多幾條顏色短條 */
 const MAX_BARS_MOBILE = 3;
-/** 已取消的顏色條／色塊統一用灰（與詳情面板一致） */
-const CANCELLED_HEX = "#6b7280";
 
 /**
  * 班表日曆 —— **所有斷點都是月曆**（7 欄 × 5–6 列），只調整密度。
@@ -55,6 +55,7 @@ export function ScheduleCalendar({
   classesByColor,
   todayISO,
   compact = false,
+  headingSuffix = "班表",
 }: {
   year: number;
   month: number;
@@ -70,11 +71,34 @@ export function ScheduleCalendar({
    * 不顯示圖例全文。桌面上仍顯示完整圖例，所以同一個元件兩種密度。
    */
   compact?: boolean;
+  /**
+   * 標題尾字，預設「班表」。
+   * `/events` 在「該月只有賽事、班表還沒發布」時傳「賽事」，
+   * 因為那時的月曆上真的一堂課都沒有，寫「班表」是錯的。
+   */
+  headingSuffix?: string;
 }) {
   /** 第二層：哪一場被打開（有值時開單場詳情面板） */
   const [selected, setSelected] = useState<ScheduleSessionView | null>(null);
 
   const hasAnySession = days.some((day) => day.inMonth && day.sessions.length > 0);
+
+  /** 這個月有沒有賽事：決定要不要在圖例裡補一項「比賽」 */
+  const hasRaceDay = days.some(
+    (day) => day.inMonth && day.sessions.some((s) => s.kind === "race")
+  );
+
+  /**
+   * 圖例 = 後台維護的課程色票 + （有賽事時）一項「比賽」。
+   *
+   * 「比賽」刻意**不寫進資料庫**的 schedule_legend：那張表是站主編輯課程顏色的地方，
+   * 賽事顏色由程式定義（RACE_HEX），寫進 DB 反而會多一份要同步的真相。
+   * 這裡只是把一個靜態項接在後台資料前面，color_key 用 "race"，
+   * 讓 ScheduleLegend 走同一個 colorHex() 解析，色塊與格子上的顏色必然一致。
+   */
+  const legendItems: ScheduleLegendItem[] = hasRaceDay
+    ? [{ color_key: "race", label: RACE_LABEL, sort_order: -1 }, ...legend]
+    : legend;
 
   function openSession(session: ScheduleSessionView) {
     setSelected(session);
@@ -88,7 +112,8 @@ export function ScheduleCalendar({
     <div className="min-w-0">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <h3 className="text-lg font-black tracking-tight text-white md:text-xl">
-          {formatMonthTitle(year, month)}班表
+          {formatMonthTitle(year, month)}
+          {headingSuffix}
         </h3>
 
         {/* 舊的兩項說明：手機隱藏，把空間讓給上方顏色圖例 */}
@@ -105,6 +130,16 @@ export function ScheduleCalendar({
             />
             <span style={{ color: PAID_HEX }}>付費場次</span>
           </span>
+          {hasRaceDay && (
+            <span className="inline-flex items-center gap-1.5">
+              <span
+                aria-hidden
+                className="h-2 w-[3px]"
+                style={{ backgroundColor: RACE_HEX }}
+              />
+              <span style={{ color: RACE_HEX }}>{RACE_LABEL}</span>
+            </span>
+          )}
         </div>
       </div>
 
@@ -112,9 +147,9 @@ export function ScheduleCalendar({
           legend 為空（migration 未執行）時整段不 render，不留空行。
           compact（首頁版）在手機隱藏圖例全文：首頁只要「看一眼有沒有課」，
           完整的顏色對照留給 /events，避免首頁多出五、六行文字把高度撐爆。 */}
-      {legend.length > 0 && (
+      {legendItems.length > 0 && (
         <div className={`mt-4 ${compact ? "hidden md:block" : ""}`}>
-          <ScheduleLegend items={legend} classesByColor={classesByColor} />
+          <ScheduleLegend items={legendItems} classesByColor={classesByColor} />
         </div>
       )}
 
@@ -146,6 +181,36 @@ export function ScheduleCalendar({
           {days.map((day) => {
             const extraBars = Math.max(day.sessions.length - MAX_BARS_MOBILE, 0);
 
+            /**
+             * 賽事（kind = "race"）在這一格的處理。
+             *
+             * 手機格子只有 ~44px 寬，放不下「廣州 HYROX 2026」，所以：
+             *   · 日期數字旁只放一個單字徽章「賽」（見下方日期列）
+             *   · 完整名稱由 pill（平板以上）與賽事頁承接
+             *
+             * `raceOnly`：這天只有賽事、沒有任何課堂或 HYROX 付費場時，
+             * 整格直接連到賽事頁。手機的顏色短條是 aria-hidden 的純裝飾、
+             * 沒有 pill 可點，若不改連結，390 用戶點下去只會看到
+             * `/training/[date]` 的「當日無場次」，等於無法從月曆走到賽事。
+             */
+            const firstRace = day.sessions.find((s) => s.kind === "race") ?? null;
+            const hasRace = firstRace !== null;
+            const raceOnly =
+              firstRace !== null && day.sessions.every((s) => s.kind === "race");
+
+            const cellHref =
+              raceOnly && firstRace
+                ? `/races/${firstRace.id}`
+                : `/training/${day.date}`;
+            const cellLabel =
+              raceOnly && firstRace
+                ? `${formatDayShort(day.date)}，比賽：${firstRace.title}，點擊看賽事`
+                : day.sessions.length > 0
+                  ? `${formatDayShort(day.date)}，${day.sessions.length} 個場次${
+                      hasRace ? "，含比賽" : ""
+                    }，點擊看當日場次`
+                  : `${formatDayShort(day.date)}，當日無場次，點擊查看`;
+
             return (
               <div
                 key={day.date}
@@ -163,15 +228,12 @@ export function ScheduleCalendar({
                     現在每個本月格子都是 `/training/YYYY-MM-DD` 的連結，
                     日期頁有完整場次、名額與報名入口，而且可以加書籤／分享。
                     沒有場次的日子**也連**：日期頁會顯示「當日無場次」＋前後日導覽，
-                    比「點了沒反應」清楚。 */}
+                    比「點了沒反應」清楚。
+                    只有賽事的日子改連 `/races/[id]`（見上方 raceOnly 的說明）。 */}
                 {day.inMonth && (
                   <Link
-                    href={`/training/${day.date}`}
-                    aria-label={
-                      day.sessions.length > 0
-                        ? `${formatDayShort(day.date)}，${day.sessions.length} 個場次，點擊看當日場次`
-                        : `${formatDayShort(day.date)}，當日無場次，點擊查看`
-                    }
+                    href={cellHref}
+                    aria-label={cellLabel}
                     className="absolute inset-0 z-10 cursor-pointer transition-colors hover:bg-white/[0.04] focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-vital-bright"
                   />
                 )}
@@ -188,6 +250,19 @@ export function ScheduleCalendar({
                   >
                     {Number(day.date.slice(8, 10))}
                   </span>
+                  {/* 手機：賽事只放單字「賽」。格子約 50px 寬、可用 ~36px，
+                      日期數字約 16px，剩下的寬度放 9px 字 + 2px padding 剛好（實測 14×12px）。
+                      刻意不寫「比賽」兩字，會把格子撐爆。
+                      桌面（md 以上）改由下方 pill 上的「比賽」徽章表示，這裡收起來。 */}
+                  {hasRace && day.inMonth && (
+                    <span
+                      aria-hidden
+                      className="ml-auto shrink-0 rounded-[2px] px-[2px] text-[9px] font-black leading-[12px] md:hidden"
+                      style={{ backgroundColor: RACE_HEX, color: "#0f0f0f" }}
+                    >
+                      賽
+                    </span>
+                  )}
                   {day.isToday && (
                     <span className="hidden text-[9px] font-semibold uppercase tracking-[0.16em] text-vital-bright md:inline">
                       今天
@@ -199,9 +274,9 @@ export function ScheduleCalendar({
                 <div className="mt-1 space-y-[2px] md:hidden" aria-hidden>
                   {day.sessions.slice(0, MAX_BARS_MOBILE).map((session) => (
                     <span
-                      key={`${session.kind}-${session.id}`}
+                      key={`${session.kind}-${session.id}-${session.date}`}
                       className="block h-1 w-full rounded-[1px]"
-                      style={{ backgroundColor: sessionBarColor(session) }}
+                      style={{ backgroundColor: sessionAccentHex(session) }}
                     />
                   ))}
                   {extraBars > 0 && (
@@ -217,7 +292,7 @@ export function ScheduleCalendar({
                 <div className="pointer-events-none relative z-20 mt-1.5 hidden min-w-0 space-y-1 md:block lg:hidden">
                   {day.sessions.slice(0, MAX_PILLS_TABLET).map((session) => (
                     <SessionPill
-                      key={`${session.kind}-${session.id}`}
+                      key={`${session.kind}-${session.id}-${session.date}`}
                       session={session}
                       compact
                       onSelect={openSession}
@@ -240,7 +315,7 @@ export function ScheduleCalendar({
                 <div className="pointer-events-none relative z-20 mt-1.5 hidden min-w-0 space-y-1 lg:block">
                   {day.sessions.slice(0, MAX_PILLS_DESKTOP).map((session) => (
                     <SessionPill
-                      key={`${session.kind}-${session.id}`}
+                      key={`${session.kind}-${session.id}-${session.date}`}
                       session={session}
                       onSelect={openSession}
                     />
@@ -277,18 +352,15 @@ export function ScheduleCalendar({
   );
 }
 
-/** 手機顏色短條的顏色：已取消 → 灰；付費 → 橙；其餘依課程色票 */
-function sessionBarColor(session: ScheduleSessionView): string {
-  if (session.status === "cancelled") return CANCELLED_HEX;
-  return session.paid ? PAID_HEX : colorHex(session.colorKey);
-}
-
 /**
  * 一個場次 pill：時間 + 課程名，左側顏色條依 class_color_key；
- * 付費場次整體轉橙並帶「付費」小標；已取消加刪除線並灰化（但仍可點開看原因）。
+ * 付費場次整體轉橙並帶「付費」小標；已取消加刪除線並灰化（但仍可點開看原因）；
+ * 賽事（kind="race"）轉洋紅並帶「比賽」文字徽章（顏色不是唯一區分手段）。
  *
  * `compact` 給平板用：字縮一級、去掉「付費／已取消」小標（那兩個字在這個
  * 寬度會把課名擠掉），但仍保留左側色條與刪除線，狀態不會因此看不出來。
+ * 賽事的徽章在 compact 下縮成單字「賽」——完全拿掉的話，平板就只能靠顏色
+ * 分辨「課堂 / 比賽」，違反色盲可及性。
  */
 function SessionPill({
   session,
@@ -300,11 +372,8 @@ function SessionPill({
   onSelect: (session: ScheduleSessionView) => void;
 }) {
   const cancelled = session.status === "cancelled";
-  const accent = cancelled
-    ? CANCELLED_HEX
-    : session.paid
-      ? PAID_HEX
-      : colorHex(session.colorKey);
+  const isRace = session.kind === "race";
+  const accent = sessionAccentHex(session);
   const time = session.startTime ?? "待定";
 
   return (
@@ -312,8 +381,8 @@ function SessionPill({
       type="button"
       onClick={() => onSelect(session)}
       aria-label={`${formatDayShort(session.date)} ${time} ${session.title}${
-        session.paid ? "，付費場次" : ""
-      }${cancelled ? "，已取消" : ""}`}
+        isRace ? "，比賽" : ""
+      }${session.paid ? "，付費場次" : ""}${cancelled ? "，已取消" : ""}`}
       className={`pointer-events-auto flex w-full min-w-0 cursor-pointer items-center gap-1.5 text-left transition hover:bg-white/[0.07] ${
         compact ? "py-[2px] pl-1 pr-0.5" : "py-[3px] pl-1.5 pr-1"
       }`}
@@ -331,6 +400,16 @@ function SessionPill({
       >
         <span className="tabular-nums">{time}</span> {session.title}
       </span>
+      {/* 賽事徽章：文字一定在，不能只靠洋紅色分辨。
+          平板格只有約 110px，用單字「賽」；桌面（lg）才寫「比賽」。 */}
+      {isRace && !cancelled && (
+        <span
+          className="shrink-0 text-[9px] font-bold leading-none"
+          style={{ color: accent }}
+        >
+          {compact ? "賽" : RACE_LABEL}
+        </span>
+      )}
       {!compact && session.paid && !cancelled && (
         <span
           className="shrink-0 text-[9px] font-bold leading-none"

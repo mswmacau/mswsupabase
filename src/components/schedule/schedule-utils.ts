@@ -16,7 +16,17 @@
 
 import type { TrainingSessionRow } from "@/lib/types";
 
-export type ScheduleKind = "class" | "hyrox";
+/**
+ * 月曆上一筆資料的種類。
+ *
+ *   class  —— 班表堂（training_sessions）
+ *   hyrox  —— HYROX 付費場（events，series='hyrox'）
+ *   race   —— 賽事（events，series='race'）：站主要求「廣州 HYROX 比賽也擺落日曆」，
+ *             只顯示、**不給報名**，點進去才在 /races/[slug] 報名。
+ *
+ * 新增 kind 只影響「顏色與徽章怎麼畫」，不得改變 class / hyrox 的既有行為。
+ */
+export type ScheduleKind = "class" | "hyrox" | "race";
 export type ScheduleStatus = "open" | "closed" | "cancelled";
 
 /** 面板上的行動呼籲（由 Server Component 決定，Client 只負責畫） */
@@ -199,9 +209,29 @@ const COLOR_HEX: Record<string, string> = {
   pink: "#fb7185",
   gray: "#9ca3af",
   grey: "#9ca3af",
+  // 賽事用的洋紅：讓「比賽」的圖例項（color_key = "race"）也能走同一個解析函式
+  race: "#D946EF",
 };
 
 export const NEUTRAL_HEX = "#9ca3af";
+
+/** 已取消的顏色條／色塊統一用灰（日曆、圖例、詳情面板共用同一支） */
+export const CANCELLED_HEX = "#6b7280";
+
+/**
+ * 賽事（kind = "race"）固定用洋紅。
+ *
+ * 為什麼是洋紅：課程圖例已經用到 blue / green / amber / teal / violet / orange
+ * 六色，橙（PAID_HEX）又保留給「HYROX 付費場」，賽事再用相近色會讓手機上的
+ * 顏色短條完全分不出來。洋紅（#D946EF）與這七個都拉得開。
+ *
+ * ⚠️ 顏色不是唯一區分手段：日曆格與 pill 上一定同時有「比賽」文字徽章，
+ *    色盲使用者靠文字辨識（可及性要求）。
+ */
+export const RACE_HEX = "#D946EF";
+
+/** 賽事在圖例與徽章上的文字 */
+export const RACE_LABEL = "比賽";
 
 export function colorHex(key: string | null): string {
   if (!key) return NEUTRAL_HEX;
@@ -213,6 +243,21 @@ export function colorHex(key: string | null): string {
  * 值與圖例的「戶外付費」同色：手機上看圖例解釋橙＝戶外付費，日曆上的橙條就是同一種。
  */
 export const PAID_HEX = "#F9761F";
+
+/**
+ * 一場在日曆／面板上的代表色（顏色短條、左側色條、菱形色塊共用）。
+ *
+ * 優先序：已取消（灰）→ 付費場（橙）→ 賽事（洋紅）→ 課程色票。
+ * 之所以集中成一支，是因為 ScheduleCalendar 與 SessionDetailPanel 原本各有一份
+ * 幾乎相同的實作；加了第三種 kind 之後再各寫一次，遲早會有一邊忘記更新，
+ * 出現「日曆上是洋紅、面板上卻是灰」的不一致。
+ */
+export function sessionAccentHex(session: ScheduleSessionView): string {
+  if (session.status === "cancelled") return CANCELLED_HEX;
+  if (session.paid) return PAID_HEX;
+  if (session.kind === "race") return RACE_HEX;
+  return colorHex(session.colorKey);
+}
 
 /** 場次相對「今天」的位置 */
 export type SessionPhase = "past" | "today" | "future";
@@ -237,12 +282,23 @@ export function sessionPhase(dateISO: string, todayISO: string): SessionPhase {
  *
  * `phase` 是「相對今天的時間位置」，不是資料庫狀態：日期已過的場次即使
  * status 仍是 open，也不能寫「可報名」——點進去只會看到活動已完結的頁面。
+ *
+ * `kind` 只影響賽事（"race"）：賽事在月曆上**不提供報名**（站主原話「只係冇得報名
+ * 而已」），所以文案不能出現「可報名」這種暗示可即時報名的字眼。
+ * class / hyrox 的分支維持原樣，逐字未動。
  */
 export function statusText(
   status: ScheduleStatus,
-  phase: SessionPhase = "future"
+  phase: SessionPhase = "future",
+  kind: ScheduleKind = "class"
 ): string {
   if (status === "cancelled") return "已取消";
+  if (kind === "race") {
+    if (phase === "past") return "已結束";
+    if (phase === "today") return "今日舉行";
+    if (status === "closed") return "報名已截止";
+    return "即將舉行";
+  }
   if (status === "closed") return "已滿";
   if (phase === "past") return "已結束";
   if (phase === "today") return "今天";

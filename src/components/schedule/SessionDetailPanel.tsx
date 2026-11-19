@@ -17,23 +17,16 @@ import { feeLabel } from "@/components/hyrox/shared";
 import { usePanelOverlay } from "./use-panel-overlay";
 import {
   PAID_HEX,
-  colorHex,
+  RACE_HEX,
+  RACE_LABEL,
   formatDayLong,
+  sessionAccentHex,
   sessionPhase,
   statusBadgeClass,
   statusText,
   type ScheduleDay,
   type ScheduleSessionView,
 } from "./schedule-utils";
-
-/** 已取消的顏色條／色塊統一用灰，讓「這堂不辦了」一眼看得出來 */
-const CANCELLED_HEX = "#6b7280";
-
-/** 場次的代表色：已取消 → 灰；付費 → 橙；其餘依課程色票（與日曆格子一致） */
-function sessionAccent(session: ScheduleSessionView): string {
-  if (session.status === "cancelled") return CANCELLED_HEX;
-  return session.paid ? PAID_HEX : colorHex(session.colorKey);
-}
 
 /**
  * 場次詳情面板（兩層：當日清單 → 單場詳情）。
@@ -146,10 +139,14 @@ export function SessionDetailPanel({
                   <span
                     aria-hidden
                     className="h-3 w-3 shrink-0 rotate-45"
-                    style={{ backgroundColor: sessionAccent(layer.session) }}
+                    style={{ backgroundColor: sessionAccentHex(layer.session) }}
                   />
                   <span className="text-[11px] font-semibold uppercase tracking-[0.22em] text-white/50">
-                    {layer.session.paid ? "付費場次" : "班表堂次"}
+                    {layer.session.paid
+                      ? "付費場次"
+                      : layer.session.kind === "race"
+                        ? RACE_LABEL
+                        : "班表堂次"}
                   </span>
                 </>
               ) : (
@@ -227,7 +224,8 @@ function DaySessionList({
     <ul className="mt-5 divide-y divide-white/10 border-t border-white/10">
       {day.sessions.map((session) => {
         const cancelled = session.status === "cancelled";
-        const accent = sessionAccent(session);
+        const isRace = session.kind === "race";
+        const accent = sessionAccentHex(session);
         const phase = sessionPhase(session.date, todayISO);
         const time = session.startTime
           ? session.endTime
@@ -236,13 +234,15 @@ function DaySessionList({
           : "時間待定";
 
         return (
-          <li key={`${session.kind}-${session.id}`}>
+          <li key={`${session.kind}-${session.id}-${session.date}`}>
             <button
               type="button"
               onClick={() => onSelectSession(session)}
               aria-label={`${time} ${session.title}${
-                session.paid ? "，付費場次" : ""
-              }${cancelled ? "，已取消" : ""}，看詳情`}
+                isRace ? "，比賽" : ""
+              }${session.paid ? "，付費場次" : ""}${
+                cancelled ? "，已取消" : ""
+              }，看詳情`}
               className="flex w-full min-w-0 items-start gap-3 py-3 text-left transition hover:bg-white/[0.06]"
             >
               <span
@@ -269,14 +269,28 @@ function DaySessionList({
                   >
                     {session.title}
                   </span>
-                  <span
-                    className={`shrink-0 border px-1.5 py-0.5 text-[10px] font-semibold ${statusBadgeClass(
-                      session.status,
-                      phase
-                    )}`}
-                  >
-                    {statusText(session.status, phase)}
-                  </span>
+                  {isRace ? (
+                    // 賽事徽章走洋紅 inline style（statusBadgeClass 的綠／灰是課程語意）
+                    <span
+                      className="shrink-0 border px-1.5 py-0.5 text-[10px] font-semibold"
+                      style={{
+                        color: RACE_HEX,
+                        borderColor: `color-mix(in srgb, ${RACE_HEX} 45%, transparent)`,
+                        backgroundColor: `color-mix(in srgb, ${RACE_HEX} 12%, transparent)`,
+                      }}
+                    >
+                      {statusText(session.status, phase, session.kind)}
+                    </span>
+                  ) : (
+                    <span
+                      className={`shrink-0 border px-1.5 py-0.5 text-[10px] font-semibold ${statusBadgeClass(
+                        session.status,
+                        phase
+                      )}`}
+                    >
+                      {statusText(session.status, phase)}
+                    </span>
+                  )}
                 </span>
 
                 <span
@@ -284,9 +298,16 @@ function DaySessionList({
                     cancelled ? "text-white/35" : "text-white/55"
                   }`}
                 >
-                  <span className="break-words">
-                    教練 {session.coachName ?? "待定"}
-                  </span>
+                  {isRace ? (
+                    // 賽事沒有教練、沒有名額，寫「教練 待定」是假資訊
+                    <span className="break-words" style={{ color: RACE_HEX }}>
+                      {RACE_LABEL}
+                    </span>
+                  ) : (
+                    <span className="break-words">
+                      教練 {session.coachName ?? "待定"}
+                    </span>
+                  )}
                   <span className="break-words">
                     場地 {session.location ?? "待定"}
                   </span>
@@ -314,8 +335,9 @@ function SessionDetailBody({
   session: ScheduleSessionView;
   todayISO: string;
 }) {
-  const accent = sessionAccent(session);
+  const accent = sessionAccentHex(session);
   const cancelled = session.status === "cancelled";
+  const isRace = session.kind === "race";
   const phase = sessionPhase(session.date, todayISO);
 
   const timeText = session.startTime
@@ -325,20 +347,40 @@ function SessionDetailBody({
     : "時間待定";
 
   const statusClass = statusBadgeClass(session.status, phase);
+  const showFee = session.paid || (isRace && session.feeCents !== null);
 
   return (
     <>
       <div className="mt-5 flex flex-wrap items-center gap-2">
-        <span
-          className={`inline-flex items-center gap-1.5 border px-2 py-0.5 text-[11px] font-semibold ${statusClass}`}
-        >
+        {isRace ? (
+          // 賽事徽章：洋紅 inline style，不用 statusBadgeClass（那組色是課程語意）
           <span
-            aria-hidden
-            className="h-2 w-2 shrink-0 rounded-[2px]"
-            style={{ backgroundColor: accent }}
-          />
-          {statusText(session.status, phase)}
-        </span>
+            className="inline-flex items-center gap-1.5 border px-2 py-0.5 text-[11px] font-semibold"
+            style={{
+              color: RACE_HEX,
+              borderColor: `color-mix(in srgb, ${RACE_HEX} 45%, transparent)`,
+              backgroundColor: `color-mix(in srgb, ${RACE_HEX} 12%, transparent)`,
+            }}
+          >
+            <span
+              aria-hidden
+              className="h-2 w-2 shrink-0 rounded-[2px]"
+              style={{ backgroundColor: accent }}
+            />
+            {RACE_LABEL}・{statusText(session.status, phase, session.kind)}
+          </span>
+        ) : (
+          <span
+            className={`inline-flex items-center gap-1.5 border px-2 py-0.5 text-[11px] font-semibold ${statusClass}`}
+          >
+            <span
+              aria-hidden
+              className="h-2 w-2 shrink-0 rounded-[2px]"
+              style={{ backgroundColor: accent }}
+            />
+            {statusText(session.status, phase)}
+          </span>
+        )}
         {session.paid && (
           <span
             className="inline-flex items-center border px-2 py-0.5 text-[11px] font-semibold"
@@ -360,17 +402,23 @@ function SessionDetailBody({
         <DetailRow icon={<Clock size={15} />} label="時間">
           {timeText}
         </DetailRow>
-        <DetailRow icon={<UserRound size={15} />} label="教練">
-          {session.coachName ?? "教練待定"}
-        </DetailRow>
+        {/* 賽事沒有教練、也沒有名額（raceToView 兩者都是 null）。
+            硬畫「教練待定」「不限」就是把「不知道」寫成假資料，所以整列不渲染。 */}
+        {!isRace && (
+          <DetailRow icon={<UserRound size={15} />} label="教練">
+            {session.coachName ?? "教練待定"}
+          </DetailRow>
+        )}
         <DetailRow icon={<MapPin size={15} />} label="場地">
           {session.location ?? "場地待定"}
         </DetailRow>
-        <DetailRow icon={<Users size={15} />} label="名額">
-          {session.capacity === null ? "不限" : `${session.capacity} 人`}
-        </DetailRow>
-        {session.paid && (
-          <DetailRow icon={<Ticket size={15} />} label="費用">
+        {!isRace && (
+          <DetailRow icon={<Users size={15} />} label="名額">
+            {session.capacity === null ? "不限" : `${session.capacity} 人`}
+          </DetailRow>
+        )}
+        {showFee && (
+          <DetailRow icon={<Ticket size={15} />} label={isRace ? "報名費" : "費用"}>
             {feeLabel(session.feeCents)}
           </DetailRow>
         )}
@@ -389,6 +437,7 @@ function SessionDetailBody({
           </div>
         </div>
       ) : session.cta ? (
+        // 賽事固定 btn-cobalt：月曆不導向報名，只是把人帶去賽事頁
         <Link
           href={session.cta.href}
           className={`btn-base btn-slab mt-7 w-full ${
