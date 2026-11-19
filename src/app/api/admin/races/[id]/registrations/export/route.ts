@@ -325,19 +325,32 @@ function csvCell(raw: unknown): string {
 }
 
 /**
- * 電話欄。
+ * 強制成文字的儲存格。
  *
- * 【為什麼是 ="…"】
- * Excel 看到 0123456789 會自動轉成數字 123456789（前導 0 消失），這是匯出
- * 電話最常見的災難。用 `="0123456789"` 讓 Excel／LibreOffice／Numbers 都當成
- * 文字公式，儲存格顯示與複製出去都是 0123456789。
- * 含 +／空格／- 的號碼（例如 +853 6666 7777）Excel 本來就只會當文字，不加。
- * 代價：純文字讀這個檔（grep／程式解析）會看到 ="0123456789" 這串字面值。
+ * 【為什麼需要】
+ * Excel 開 CSV 會自作聰明：`0123456789` 變 123456789（前導 0 消失）、
+ * `2026-11-20 00:19` 變日期序號（欄寬不足就顯示成一排 ####）。
+ * 用 `="…"` 讓 Excel／LibreOffice／Numbers 都當成文字公式，儲存格顯示的值
+ * 與檔案裡的字面值完全一致（實測 Excel 16：儲存格顯示 0123456789，
+ * 編輯列顯示 ="0123456789"）。
+ *
+ * 代價：用 grep／程式解析時會看到 ="…" 這串字面值（見交付說明的限制）。
+ */
+function textCell(value: string | null | undefined): string {
+  const s = (value ?? "").trim();
+  if (s === "") return "";
+  if (/[",\r\n]/.test(s)) return `"${s.replace(/"/g, '""')}"`;
+  return `="${s}"`;
+}
+
+/**
+ * 電話欄。純數字（有前導 0 的風險）強制成文字；含 +／空格／- 的號碼
+ * （例如 +853 6666 7777）Excel 本來就只會當文字，照一般規則跳脫即可。
  */
 function phoneCell(phone: string | null | undefined): string {
   const p = (phone ?? "").trim();
   if (p === "") return "";
-  if (PURE_DIGITS.test(p)) return `="${p}"`;
+  if (PURE_DIGITS.test(p)) return textCell(p);
   return csvCell(p);
 }
 
@@ -483,7 +496,8 @@ function buildDetailCsv(
       // 只給「已上載／未上載」——私有桶物件路徑不外流
       csvCell(r.payment_proof_path ? "已上載" : "未上載"),
       csvCell(noteParts.join("｜")),
-      csvCell(macauDateTime(r.created_at)),
+      // 建立時間強制成文字：Excel 會把 YYYY-MM-DD HH:mm 轉成日期，欄寬不足顯示 ####
+      textCell(macauDateTime(r.created_at)),
     ]);
   }
 
