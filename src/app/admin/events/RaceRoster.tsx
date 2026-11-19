@@ -24,7 +24,7 @@
  */
 
 import { useCallback, useEffect, useState } from "react";
-import { Loader2, Phone, X } from "lucide-react";
+import { Download, Loader2, Phone, X } from "lucide-react";
 import { patchJson, requestJson } from "@/lib/fetch-json";
 import {
   RACE_STATUS_META,
@@ -110,6 +110,8 @@ export function RaceRoster({ race, onClose, onReviewed }: RaceRosterProps) {
   const [reviewing, setReviewing] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
+  /** 匯出選項是否展開（手機沒有 hover，所以一律「點一下才展開」） */
+  const [exportOpen, setExportOpen] = useState(false);
 
   /**
    * 取數。沿用 EventManager 的「cancelled 旗標」模式：卸載或換頁後
@@ -353,17 +355,57 @@ export function RaceRoster({ race, onClose, onReviewed }: RaceRosterProps) {
 
           {/* ── 下半：名單 ─────────────────────────────────── */}
           <section aria-labelledby="roster-list">
-            <div className="mb-2 flex flex-wrap items-baseline justify-between gap-2">
+            <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
               <h4
                 id="roster-list"
                 className="text-xs font-semibold uppercase tracking-[0.14em] text-white/55"
               >
                 報名名單
               </h4>
-              <span className="text-xs text-white/45 tabular-nums">
-                共 {total} 筆 · 第 {page} / {totalPages} 頁
-              </span>
+              <div className="flex flex-wrap items-center gap-2">
+                <span className="text-xs text-white/45 tabular-nums">
+                  共 {total} 筆 · 第 {page} / {totalPages} 頁
+                </span>
+                {/*
+                  匯出：一律「點一下展開」，不做 hover 選單（手機沒有 hover）。
+                  純 <a download> 讓瀏覽器自己下載，不用 fetch + blob
+                  （iOS Safari 會把 blob 下載吃掉）。
+                */}
+                <button
+                  type="button"
+                  data-act="export-toggle"
+                  aria-expanded={exportOpen}
+                  aria-controls="roster-export"
+                  onClick={() => setExportOpen((v) => !v)}
+                  className="inline-flex min-h-11 items-center gap-1.5 rounded-lg border border-white/20 px-3 text-xs font-semibold text-white/80 transition hover:border-white/40"
+                >
+                  <Download size={14} aria-hidden /> 匯出 CSV
+                </button>
+              </div>
             </div>
+
+            {exportOpen && (
+              <div id="roster-export" className="mb-3 grid gap-2 sm:grid-cols-3">
+                <ExportLink
+                  raceId={race.id}
+                  type="detail"
+                  label="匯出全部名單"
+                  hint="每人一列 · 對帳用"
+                />
+                <ExportLink
+                  raceId={race.id}
+                  type="logistics"
+                  label="匯出交通住宿"
+                  hint="巴士與酒店用"
+                />
+                <ExportLink
+                  raceId={race.id}
+                  type="summary"
+                  label="匯出彙總"
+                  hint="日期 × 組別"
+                />
+              </div>
+            )}
 
             {loading && !data ? (
               <p className="flex items-center gap-2 text-sm text-white/60">
@@ -449,6 +491,37 @@ function SummaryCell({
       </div>
       {hint && <div className="mt-1 text-[11px] text-white/45">{hint}</div>}
     </div>
+  );
+}
+
+/**
+ * 匯出下載連結。
+ *
+ * 用純 <a download> 而不是 fetch + Blob：下載由瀏覽器自己處理（iOS Safari 對
+ * Blob 下載支援很差），檔名由伺服器的 Content-Disposition 決定，也不需要
+ * 在前端把整份 CSV 塞進記憶體。
+ */
+function ExportLink({
+  raceId,
+  type,
+  label,
+  hint,
+}: {
+  raceId: string;
+  type: "detail" | "logistics" | "summary";
+  label: string;
+  hint: string;
+}) {
+  return (
+    <a
+      href={`/api/admin/races/${raceId}/registrations/export?type=${type}`}
+      download
+      data-act={`export-${type}`}
+      className="flex min-h-11 items-center justify-between gap-2 rounded-lg border border-ink-line bg-ink-soft px-3 py-2 text-xs font-semibold text-white/80 transition hover:border-white/40"
+    >
+      <span className="min-w-0">{label}</span>
+      <span className="shrink-0 text-[11px] font-normal text-white/45">CSV · {hint}</span>
+    </a>
   );
 }
 
