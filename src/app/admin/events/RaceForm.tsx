@@ -120,12 +120,11 @@ function feeToCents(value: string): number {
   return Math.max(0, Math.round(n * 100));
 }
 
-/** 第三段已填幾項（給收合時的摘要行用） */
+/** 第三段已填幾項（給收合時的摘要行用；logistics 已移到第二段，不計入） */
 function advancedFilledCount(form: FormState): number {
   const values = [
     form.assembly,
     form.fee,
-    form.logistics,
     form.notice,
     form.albumUrl,
     form.albumLabel,
@@ -447,6 +446,30 @@ export function RaceForm({ mode, race, onClose, onSaved }: RaceFormProps) {
                 <FieldError message={fields.promo_note} />
               </div>
             </div>
+
+            {/* 交通與住宿：站主 2026-11 明確要求「不用加欄位，先給我手動輸入方式」。
+                這段自由文字會原樣（保留換行）顯示在賽事頁的後勤區塊，
+                不涉及任何結構化欄位，也不需要改 DB。
+                原本收在「進階（收合）」內，但這是站主每場都要填的欄位，
+                收起來等於找不到，所以移到本段永遠可見。 */}
+            <div>
+              <label className="label" htmlFor="rf-logistics">
+                交通與住宿安排（最多 2000 字，可留空）
+              </label>
+              <textarea
+                id="rf-logistics"
+                className="field min-h-28 resize-y"
+                value={form.logistics}
+                onChange={(e) => setField("logistics", e.target.value)}
+                maxLength={2000}
+                placeholder={"例如：\n巴士：11/20 07:00 關閘集合，來回\n住宿：廣州天河區，兩晚，2 人房"}
+              />
+              <p className="mt-1 text-xs text-white/50">
+                直接照你打的文字顯示在賽事頁（保留換行）。每場賽事可以完全不同，
+                也可以隨時改或清空。
+              </p>
+              <FieldError message={fields.logistics_note} />
+            </div>
           </section>
 
           {/* ───────────── 第三段：進階（預設收合）───────────── */}
@@ -512,24 +535,6 @@ export function RaceForm({ mode, race, onClose, onSaved }: RaceFormProps) {
                     placeholder="例如：1200"
                   />
                   <FieldError message={fields.fee_cents} />
-                </div>
-
-                <div>
-                  <label className="label" htmlFor="rf-logistics">
-                    交通與住宿安排（最多 2000 字）
-                  </label>
-                  <textarea
-                    id="rf-logistics"
-                    className="field min-h-28 resize-y"
-                    value={form.logistics}
-                    onChange={(e) => setField("logistics", e.target.value)}
-                    maxLength={2000}
-                    placeholder={"例如：\n巴士：11/20 07:00 關閘集合\n住宿：廣州天河區，兩晚"}
-                  />
-                  <p className="mt-1 text-xs text-white/50">
-                    前台賽事頁的後勤區塊會直接照這段文字顯示（保留換行）。
-                  </p>
-                  <FieldError message={fields.logistics_note} />
                 </div>
 
                 <div>

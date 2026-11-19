@@ -38,14 +38,14 @@ export const PRICE_GROUPS: readonly PriceGroup[] = [
   {
     key: "single",
     title: "單堂體驗",
-    hint: "單堂 MOP$100 起",
+    hint: "MSW 會員 MOP$200、METAL 會員 MOP$100",
     open: true,
     rows: [
       {
         name: "單堂",
         include: "一堂課，適合第一次試堂。",
-        msw: "MOP$100",
-        metal: "MOP$200",
+        msw: "MOP$200",
+        metal: "MOP$100",
       },
     ],
   },
