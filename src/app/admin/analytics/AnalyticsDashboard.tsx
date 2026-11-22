@@ -27,6 +27,7 @@ import {
   fmtPct,
   monthShort,
 } from "./charts";
+import { Download } from "lucide-react";
 import { EventRegistrationCards, PagePathCards, SessionCards } from "./cards";
 import { Section } from "./Section";
 import { RetryButton } from "./RetryButton";
@@ -36,6 +37,8 @@ import type {
   BehaviorSegmentsData,
   CouponSummaryData,
   EventRegistrationsData,
+  HyroxMonthlyData,
+  HyroxMonthlyRow,
   MemberGrowthData,
   PageStatsData,
   RunMonthlyData,
@@ -833,6 +836,157 @@ function EventRegistrationsSection({ data }: { data: EventRegistrationsData | nu
 }
 
 /* =============================================================
+ * 八之一、戶外 HYROX 月度（G-2：RPC analytics_hyrox_monthly）
+ * ============================================================= */
+
+/** 每月一列的手機卡（390：資訊以卡呈現，不做橫向滾動表） */
+function HyroxMonthlyCards({ rows }: { rows: HyroxMonthlyRow[] }) {
+  return (
+    <ul data-card-list="hyrox-monthly" className="space-y-2 md:hidden">
+      {rows.map((r) => (
+        <li key={r.month} className="rounded-xl border border-ink-line p-3.5">
+          <div className="flex items-start gap-3">
+            <div className="min-w-0 flex-1">
+              <div className="break-words text-sm font-semibold">
+                {monthLabel(r.month)}
+              </div>
+              <div className="mt-0.5 font-mono text-xs tabular-nums text-white/60">
+                報名 {r.registrations} · 確認 {r.confirmed}
+                （{fmtPct(r.confirm_rate)}）
+              </div>
+              <div className="mt-0.5 font-mono text-xs tabular-nums text-white/50">
+                回頭會員 {r.returning_members}（{fmtPct(r.returning_rate)}）
+              </div>
+            </div>
+            <div className="shrink-0 text-right">
+              <div className="text-lg font-black tabular-nums">
+                {r.confirmed}
+              </div>
+              <div className="text-[11px] text-white/50">確認</div>
+            </div>
+          </div>
+        </li>
+      ))}
+    </ul>
+  );
+}
+
+function HyroxMonthlySection({ data }: { data: HyroxMonthlyData | null }) {
+  if (!data) {
+    return (
+      <Section title="戶外 HYROX 月度" desc="每月報名、確認與收入。">
+        <FailedNote />
+      </Section>
+    );
+  }
+
+  const rows = [...data.months].reverse(); // RPC 降序 → 圖表由舊到新
+  const totalReg = data.months.reduce((s, r) => s + r.registrations, 0);
+  const totalRevenue = data.months.reduce((s, r) => s + r.revenue_cents, 0);
+  const empty = data.months.length === 0;
+
+  return (
+    <Section
+      title="戶外 HYROX 月度"
+      desc="每月 HYROX 場次的報名、確認率、收入與回頭會員（近 12 個月）。"
+      summary={empty ? "無資料" : `報名 ${totalReg}`}
+    >
+      {empty ? (
+        <EmptyNote>還沒有 HYROX 報名資料。</EmptyNote>
+      ) : (
+        <>
+          {/* 卡片數字（三格） */}
+          <div className="grid gap-3 sm:grid-cols-3">
+            <div className="rounded-xl border border-ink-line p-4">
+              <div className="text-2xl font-black tabular-nums">{totalReg}</div>
+              <div className="mt-1 text-xs text-white/55">近 12 個月報名</div>
+            </div>
+            <div className="rounded-xl border border-ink-line p-4">
+              <div className="text-2xl font-black tabular-nums">
+                {totalRevenue === 0
+                  ? "MOP 0"
+                  : `MOP ${(totalRevenue / 100).toLocaleString("en-US")}`}
+              </div>
+              <div className="mt-1 text-xs text-white/55">確認收入合計（分→元）</div>
+            </div>
+            <div className="rounded-xl border border-ink-line p-4">
+              <div className="text-2xl font-black tabular-nums">
+                {data.months.length}
+              </div>
+              <div className="mt-1 text-xs text-white/55">有報名的月份數</div>
+            </div>
+          </div>
+
+          {/* 報名數長條（月份由舊到新） */}
+          <ColumnChart
+            data={rows.map((r) => ({ label: monthShort(r.month), value: r.registrations }))}
+            ariaLabel="戶外 HYROX 每月報名人數長條圖"
+          />
+
+          {/* 手機卡 */}
+          <HyroxMonthlyCards rows={data.months} />
+
+          {/* 桌面明細表（不做橫向滾動：欄位精簡） */}
+          <div className="hidden overflow-x-auto rounded-xl border border-ink-line md:block">
+            <table className="w-full min-w-[560px] text-sm">
+              <caption className="sr-only">
+                戶外 HYROX 月度彙總（近 12 個月，最近的在前）
+              </caption>
+              <thead>
+                <tr className="border-b border-ink-line text-left text-xs uppercase tracking-[0.14em] text-white/70">
+                  <th className="py-3 pl-4 pr-4">月份</th>
+                  <th className="py-3 pr-4 text-right">報名</th>
+                  <th className="py-3 pr-4 text-right">確認</th>
+                  <th className="py-3 pr-4 text-right">確認率</th>
+                  <th className="py-3 pr-4 text-right">收入</th>
+                  <th className="py-3 pr-4 text-right">回頭會員</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-ink-line">
+                {data.months.map((r) => (
+                  <tr key={r.month}>
+                    <td className="py-3 pl-4 pr-4 font-semibold">{monthLabel(r.month)}</td>
+                    <td className="py-3 pr-4 text-right tabular-nums">{r.registrations}</td>
+                    <td className="py-3 pr-4 text-right tabular-nums">{r.confirmed}</td>
+                    <td className="py-3 pr-4 text-right tabular-nums">
+                      {fmtPct(r.confirm_rate)}
+                    </td>
+                    <td className="py-3 pr-4 text-right tabular-nums">
+                      {r.revenue_cents === 0
+                        ? "—"
+                        : `MOP ${(r.revenue_cents / 100).toLocaleString("en-US")}`}
+                    </td>
+                    <td className="py-3 pr-4 text-right tabular-nums">
+                      {r.returning_members}（{fmtPct(r.returning_rate)}）
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+
+          {/* 匯出 CSV（G-3 第 7 項；純 <a download>，同 RaceRoster 做法） */}
+          <div className="mt-4">
+            <a
+              href="/api/admin/hyrox/analytics/export?limit=12"
+              download
+              className="inline-flex min-h-11 items-center gap-1.5 rounded border border-white/20 px-4 text-xs font-semibold text-white/80 transition hover:border-white/40"
+            >
+              <Download size={14} aria-hidden /> 匯出 CSV
+            </a>
+          </div>
+        </>
+      )}
+      <ChartNote>
+        只計 events.series=&apos;hyrox&apos; 的場次；「確認」以付款狀態 confirmed 為準，
+        收入＝確認報名的費用合計。「回頭會員」＝該月報名且在往前 12 個月內
+        曾報過任一場 HYROX 的會員（詳細口徑見 migration-hyrox-analytics.sql）。
+      </ChartNote>
+    </Section>
+  );
+}
+
+/* =============================================================
  * 九、頁面流量（估算值；追蹤剛上線可能未有數據；T-25 加天數切換）
  * ============================================================= */
 
@@ -1028,6 +1182,7 @@ export function AnalyticsDashboard({ data }: { data: AnalyticsPayload }) {
       <RunMonthlySection data={data.runMonthly} />
       <CouponSection data={data.coupon} />
       <EventRegistrationsSection data={data.eventRegistrations} />
+      <HyroxMonthlySection data={data.hyroxMonthly} />
       <PageStatsSection data={data.pageStats} />
     </div>
   );

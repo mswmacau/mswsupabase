@@ -129,6 +129,25 @@ export interface EventRegistrationsData {
   events: EventRegistrationRow[];
 }
 
+/**
+ * 戶外 HYROX 月度一列（RPC analytics_hyrox_monthly；鍵由 migration 固定，
+ * 空資料時 months=[]，月份降序）。
+ */
+export interface HyroxMonthlyRow {
+  /** 'YYYY-MM' */
+  month: string;
+  registrations: number;
+  confirmed: number;
+  confirm_rate: number;
+  revenue_cents: number;
+  returning_members: number;
+  returning_rate: number;
+}
+
+export interface HyroxMonthlyData {
+  months: HyroxMonthlyRow[];
+}
+
 /** 儀表板 payload：一次取數、同一份資料渲染全部圖表與明細表 */
 export interface AnalyticsPayload {
   memberGrowth: MemberGrowthData | null;
@@ -139,6 +158,8 @@ export interface AnalyticsPayload {
   coupon: CouponSummaryData | null;
   pageStats: PageStatsData | null;
   eventRegistrations: EventRegistrationsData | null;
+  /** 戶外 HYROX 月度（G-2；migration-hyrox-analytics 未跑時為 null → 錯誤牌） */
+  hyroxMonthly: HyroxMonthlyData | null;
   /** 待審核筆數（後台總覽同源：跑步提交 + 訓練簽到） */
   pending: { runs: number; checkins: number } | null;
   /** 八支 RPC 全部失敗（如分析功能尚未啟用）→ 頂部顯示錯誤與重試 */

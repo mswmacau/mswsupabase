@@ -25,6 +25,7 @@ import { createClient, requireAdmin } from "@/lib/supabase/server";
 import { AnalyticsDashboard } from "./AnalyticsDashboard";
 import type {
   ActivityOverviewData,
+  HyroxMonthlyData,
   AnalyticsPayload,
   BehaviorSegmentsData,
   CouponSummaryData,
@@ -99,6 +100,7 @@ export default async function AdminAnalyticsPage({
     coupon: null,
     pageStats: null,
     eventRegistrations: null,
+    hyroxMonthly: null,
     pending,
     allFailed: true,
   };
@@ -106,8 +108,17 @@ export default async function AdminAnalyticsPage({
   const supabase = await createClient();
   if (supabase) {
     try {
-      const [growth, activity, behavior, attendance, run, coupon, page, eventRegs] =
-        await Promise.all([
+      const [
+        growth,
+        activity,
+        behavior,
+        attendance,
+        run,
+        coupon,
+        page,
+        eventRegs,
+        hyroxMonthly,
+      ] = await Promise.all([
           supabase.rpc("analytics_member_growth", { p_months: MONTHS }),
           supabase.rpc("analytics_activity_overview"),
           supabase.rpc("analytics_behavior_segments"),
@@ -116,6 +127,8 @@ export default async function AdminAnalyticsPage({
           supabase.rpc("analytics_coupon_summary"),
           supabase.rpc("analytics_page_stats", { p_days: pageStatsDays }),
           supabase.rpc("analytics_event_registrations", { p_limit: EVENT_LIMIT }),
+          // G-2：戶外 HYROX 月度（migration-hyrox-analytics.sql；未跑 → error → null 錯誤牌）
+          supabase.rpc("analytics_hyrox_monthly", { p_limit: MONTHS }),
         ]);
 
       payload = {
@@ -151,6 +164,10 @@ export default async function AdminAnalyticsPage({
           eventRegs.error || !isRpcRow(eventRegs.data)
             ? null
             : (eventRegs.data as unknown as EventRegistrationsData),
+        hyroxMonthly:
+          hyroxMonthly.error || !isRpcRow(hyroxMonthly.data)
+            ? null
+            : (hyroxMonthly.data as unknown as HyroxMonthlyData),
         pending,
         allFailed: [
           growth,
@@ -161,6 +178,7 @@ export default async function AdminAnalyticsPage({
           coupon,
           page,
           eventRegs,
+          hyroxMonthly,
         ].every((r) => r.error !== null),
       };
     } catch {
