@@ -80,6 +80,8 @@ type RawRow = {
   payment_status: string;
   disclaimer_accepted_at: string | null;
   created_at: string;
+  /** 出席點名（migration-event-attendance.sql）；未跑該 migration 時查不到此欄 */
+  attended_at?: string | null;
   profile: {
     display_name: string | null;
     full_name: string | null;
@@ -94,6 +96,24 @@ const COLUMNS =
   "disclaimer_accepted_at,created_at," +
   "profile:profiles!event_registrations_user_id_fkey(" +
   "display_name,full_name,gender,phone,id_last4)";
+
+/** 出席點名欄位（migration-event-attendance.sql §1） */
+const ATTENDANCE_COLUMN = "attended_at";
+const COLUMNS_WITH_ATTENDANCE = `${COLUMNS},${ATTENDANCE_COLUMN}`;
+
+/**
+ * 欄位不存在（migration 未跑）：42703 / PGRST204。
+ * 命中時本檔退回不含 attended_at 的查詢，CSV 的「出席」欄顯示「—」，
+ * 而不是整份匯出失敗（降級硬要求）。
+ */
+function isMissingColumn(error: unknown): boolean {
+  if (typeof error !== "object" || error === null) return false;
+  const code = "code" in error ? String((error as { code?: unknown }).code ?? "") : "";
+  if (code === "42703" || code === "PGRST204") return true;
+  const message =
+    "message" in error ? String((error as { message?: unknown }).message ?? "") : "";
+  return /column .* does not exist|could not find the .*column/i.test(message);
+}
 
 export function POST() {
   return jsonMethodNotAllowed();
@@ -136,24 +156,42 @@ export async function GET(request: Request) {
       return jsonNotFound(NOT_FOUND_MSG);
     }
 
-    /* ── 取數：自己翻頁（列表端點單頁 500 且 truncated 不自動續）── */
+    /* ── 取數：自己翻頁（列表端點單頁 500 且 truncated 不自動續）──
+     *
+     * 出席欄（attended_at）是 migration-event-attendance.sql 才有的欄位。
+     * 這裡先試「含出席欄」的查詢，若回 42703 / PGRST204（欄位不存在）
+     * 就退回不含該欄的查詢，並把 attendanceAvailable 設為 false
+     * → CSV 的「出席」欄顯示「—」，匯出本身照常成功（降級硬要求）。 */
+    let attendanceAvailable = true;
+
+    const queryPage = async (cols: string, from: number, to: number) => {
+      const { data, error: pageErr } = await supabase
+        .from("event_registrations")
+        .select(cols)
+        .eq("event_id", eventId)
+        .eq("status", "registered")
+        // created_at 可能同秒，補 id 排序才不會有列在分頁邊界被跳過／重複
+        .order("created_at", { ascending: true })
+        .order("id", { ascending: true })
+        .range(from, to);
+      return {
+        rows: (data as unknown as RawRow[]) ?? [],
+        error: pageErr,
+      };
+    };
+
     const { rows, error } = await fetchAllPages<RawRow>({
       label: "HYROX 報名名單匯出",
       maxRows: MAX_ROWS,
       fetchPage: async (from, to) => {
-        const { data, error: pageErr } = await supabase
-          .from("event_registrations")
-          .select(COLUMNS)
-          .eq("event_id", eventId)
-          .eq("status", "registered")
-          // created_at 可能同秒，補 id 排序才不會有列在分頁邊界被跳過／重複
-          .order("created_at", { ascending: true })
-          .order("id", { ascending: true })
-          .range(from, to);
-        return {
-          rows: (data as unknown as RawRow[]) ?? [],
-          error: pageErr,
-        };
+        if (!attendanceAvailable) return queryPage(COLUMNS, from, to);
+
+        const withAttendance = await queryPage(COLUMNS_WITH_ATTENDANCE, from, to);
+        if (withAttendance.error && isMissingColumn(withAttendance.error)) {
+          attendanceAvailable = false;
+          return queryPage(COLUMNS, from, to);
+        }
+        return withAttendance;
       },
     });
 
@@ -161,7 +199,7 @@ export async function GET(request: Request) {
       return jsonInternal("GET /api/admin/hyrox/registrations/export list", error);
     }
 
-    /* ── 組 CSV（欄位順序＝G-1 定稿）──────────────────────── */
+    /* ── 組 CSV（欄位順序＝G-1 定稿；出席欄由 migration-event-attendance.sql 追加）── */
     const header = [
       "會員名稱",
       "姓名",
@@ -174,6 +212,7 @@ export async function GET(request: Request) {
       "付款狀態",
       "免責聲明同意時間",
       "報名時間",
+      "出席",
     ];
 
     const body = rows.map((r) => [
@@ -188,6 +227,8 @@ export async function GET(request: Request) {
       csvCell(PAYMENT_STATUS_LABEL[r.payment_status] ?? r.payment_status),
       textCell(r.disclaimer_accepted_at ? macauDateTime(r.disclaimer_accepted_at) : "未同意"),
       textCell(macauDateTime(r.created_at)),
+      // 未跑 migration 時整欄顯示「—」（讀不到 ≠ 未出席，不可寫成「未出席」）
+      csvCell(!attendanceAvailable ? "—" : r.attended_at ? "已出席" : "未出席"),
     ]);
 
     const csv = toCsv([header, ...body]);
