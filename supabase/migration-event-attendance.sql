@@ -20,12 +20,35 @@
 --   點名是唯一能回答這些問題的資料，且只需一個時間戳，成本最低。
 --
 -- 【口徑定義（前端／CSV／分析頁全部照這套）】
---   attended   = 該月 status='registered' 且 attended_at is not null 的列數
---   出席率     = round(100.0 * attended / greatest(confirmed, 1), 1)
---                **分母是 confirmed（已付款確認）**，不是報名數——
---                「報了名但沒付款、也沒來」不該算進出席率分母，
---                否則付費活動的出席率永遠被未付款者拉低，失去意義。
---   no-show    = confirmed − attended（可由前端自行相減，不另回鍵）
+--   attended            = 該月 status='registered' 且 attended_at is not null 的列數
+--                         （點名總數，含「未付款但到場」的人）
+--   attended_confirmed  = 其中 payment_status='confirmed' 的人數
+--                         （已付款且出席；attendance_rate 的分子）
+--   出席率              = confirmed = 0 → 0.0
+--                         否則 round(100.0 * attended_confirmed / confirmed, 1)
+--                         **分母是 confirmed（已付款確認）**，不是報名數——
+--                         「報了名但沒付款、也沒來」不該算進出席率分母，
+--                         否則付費活動的出席率永遠被未付款者拉低，失去意義。
+--                         分子分母同一集合 → 恆在 0–100，不會出現 >100%。
+--   no-show    = confirmed − attended_confirmed（可由前端自行相減，不另回鍵）
+--
+--   【2026-11-22 修正記錄（站主如已貼過舊版，請重跑本檔一次）】
+--     舊版：attendance_rate = round(100.0 * attended / greatest(confirmed,1), 1)
+--     兩個實測發現的問題（白客在線上以臨時帳號量到）：
+--       1. confirmed = 0 但有人點名時 → 分母被 greatest(…,1) 撐成 1
+--          → 算出 100.0%（應為 0.0，因為「沒有任何已付款的人」）
+--       2. 分子 attended 含「未付款但到場」的人，而分母只算已付款者
+--          → 兩個不同集合相除，理論上可算出 >100%
+--          例：1 人未付款卻到場、1 人付款沒來 → 1/1 = 100%
+--              （語意應是「已付款那位沒來」＝ 0%）
+--     現版：
+--       · 新增 attended_confirmed =「已付款且出席」的人數（與分母同一集合）
+--       · attendance_rate = case when confirmed = 0 then 0.0
+--                                else round(100.0 * attended_confirmed / confirmed, 1) end
+--         → confirmed=0 固定 0.0；ratio 恆在 0–100
+--       · 保留 attended 為「點名總數」（含未付款但到場），兩個數都回，
+--         站主看得出「點了幾個人」與「已付款的人裡來了幾個」的分別
+--     本次只改函式（create or replace），**不改任何資料**，重跑本檔即生效。
 --
 --   【v1 的語意取捨】attended_at = null 同時代表「未點名」與「已標記缺席」
 --   （撤回點名時兩欄一起清空，資料上分不出來）。團隊決定 v1 **不加第三態**
@@ -141,7 +164,7 @@ end $$;
 
 
 -- ------------------------------------------------------------
--- §3  analytics_hyrox_monthly：擴充 attended / attendance_rate
+-- §3  analytics_hyrox_monthly：擴充 attended / attended_confirmed / attendance_rate
 --
 --     簽名不變（p_limit int default 12 → jsonb），前端 rpc 呼叫不會壞。
 --     除了既有的 month/registrations/confirmed/confirm_rate/revenue_cents/
@@ -179,6 +202,12 @@ begin
           count(*)::int                                                 as registrations,
           count(*) filter (where r.payment_status = 'confirmed')::int   as confirmed,
           count(*) filter (where r.attended_at is not null)::int        as attended,
+          -- 已付款且出席：與 confirmed 同一集合，attendance_rate 的分子
+          -- （2026-11-22 修正：原本用 attended 當分子，含未付款者，
+          --   會算出 >100% 或「沒有人付款卻 100%」的荒謬值）
+          count(*) filter (
+            where r.payment_status = 'confirmed' and r.attended_at is not null
+          )::int                                                        as attended_confirmed,
           coalesce(
             sum(r.payment_amount_cents) filter (where r.payment_status = 'confirmed'),
             0
@@ -225,11 +254,19 @@ begin
           'returning_members', wr.returning_members,
           'returning_rate',    round(100.0 * wr.returning_members / greatest(wr.registrations, 1), 1),
           'attended',          wr.attended,
-          'attendance_rate',   round(100.0 * wr.attended / greatest(wr.confirmed, 1), 1)
+          -- 已付款且出席的人數（與 confirmed 同一集合）
+          'attended_confirmed', wr.attended_confirmed,
+          -- confirmed = 0 → 固定 0.0（沒有任何已付款的人，出席率無意義）；
+          -- 否則分子分母同一集合，恆在 0–100（不會出現 >100%）
+          'attendance_rate',   case
+                                 when wr.confirmed = 0 then 0.0
+                                 else round(100.0 * wr.attended_confirmed / wr.confirmed, 1)
+                               end
         ) order by wr.month desc
       )
       from (
-        select month, registrations, confirmed, attended, revenue_cents, returning_members
+        select month, registrations, confirmed, attended, attended_confirmed,
+               revenue_cents, returning_members
           from with_returning
          order by month desc
          limit v_limit
@@ -241,7 +278,8 @@ $$;
 
 comment on function public.analytics_hyrox_monthly(int) is
   'HYROX 月度彙總（管理員限定）：報名數／確認數／確認率／收入分／回頭會員數與率／'
-  '出席數／出席率。出席率分母為 confirmed（已付款確認）；'
+  '出席數（attended＝點名總數）／已付款且出席數（attended_confirmed）／出席率。'
+  '出席率＝attended_confirmed / confirmed（同一集合，恆 0–100；confirmed=0 時固定 0.0）；'
   '未點名（attended_at is null）一律當未出席計算（實際意義＝沒來）；空資料回 {months:[]}';
 
 revoke all on function public.analytics_hyrox_monthly(int) from public, anon;
@@ -284,9 +322,31 @@ notify pgrst, 'reload schema';
 --
 -- 5.5 分析函式回傳新鍵（空資料也要有 months）
 --   select public.analytics_hyrox_monthly(12);
---   → {"months":[...]}；有資料的月份列應含 attended / attendance_rate
+--   → {"months":[...]}；有資料的月份列應含 attended / attended_confirmed / attendance_rate
 --
--- 5.6 會員改不到出席欄位（用會員 JWT 直接打 PostgREST）
+-- 5.6 出席率口徑自檢（2026-11-22 修正後的驗收查詢）
+--   把每個月的兩個數字並排看，確認三件事：
+--     (a) confirmed = 0 的月份 → attendance_rate 必須是 0.0（不是 100.0）
+--     (b) attendance_rate 恆在 0–100（不可能 >100）
+--     (c) attended ≥ attended_confirmed（點名總數不會少於「已付款且出席」）
+--
+--   select
+--     m->>'month'                                     as month,
+--     (m->>'registrations')::int                      as registrations,
+--     (m->>'confirmed')::int                          as confirmed,
+--     (m->>'attended')::int                           as attended,
+--     (m->>'attended_confirmed')::int                 as attended_confirmed,
+--     (m->>'attendance_rate')::numeric                as attendance_rate
+--     from jsonb_array_elements(
+--            (public.analytics_hyrox_monthly(12)) -> 'months'
+--          ) m
+--    order by 1 desc;
+--   → 預期：無 confirmed 的月份 attendance_rate = 0.0；
+--           所有列 attendance_rate between 0 and 100；
+--           attended >= attended_confirmed
+--
+--
+-- 5.7 會員改不到出席欄位（用會員 JWT 直接打 PostgREST）
 --   curl -X PATCH "$SUPABASE_URL/rest/v1/event_registrations?id=eq.<自己那筆>" \
 --        -H "apikey: $ANON_KEY" -H "authorization: Bearer $USER_JWT" \
 --        -H "content-type: application/json" -d '{"attended_at":"2026-12-16T10:00:00Z"}'
