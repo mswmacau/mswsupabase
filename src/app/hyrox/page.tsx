@@ -6,7 +6,8 @@
  *   2. 下一場卡片（日期未定 → 顯示「日期待定」＋「開放報名後通知我」）
  *   3. 報名 CTA（未登入 / 已報名 / 未報名 三態）
  *   4. 活動資訊（訓練內容、教練、費用、天氣取消聲明）
- *   5. 往期場次（getHyroxPastEvents；沒有就整段不顯示，整張卡可點進詳情頁）
+ *   5. 完賽排行榜入口卡（F-04；文案凍結 §5-2）
+ *   6. 往期場次（getHyroxPastEvents；沒有就整段不顯示，整張卡可點進詳情頁）
  *
  * 資料：
  *   · 下一場／活動資訊 → getHyroxEvents()（只回 published，有快取）
@@ -26,6 +27,7 @@ import {
   History,
   MapPin,
   ShieldCheck,
+  Trophy,
   UserRound,
   Users,
   Wallet,
@@ -427,7 +429,34 @@ export default async function HyroxPage() {
         </div>
       </section>
 
-      {/* ===== 5. 往期場次（沒有就整段不顯示；整張卡可點進詳情頁） ===== */}
+      {/* ===== 5. 完賽排行榜入口（F-04；無資料相依：空榜時卡仍顯示，
+                  導向 /hyrox/results 的空狀態頁。文案為方案 §5-2 凍結文案，逐字） ===== */}
+      <section className="pub-pad container-msw">
+        <div className="card-dark relative overflow-hidden p-6 md:p-8">
+          <div className="pointer-events-none absolute inset-x-0 top-0 h-px bg-gradient-to-r from-vital/60 via-white/20 to-transparent" />
+          <div className="flex flex-col gap-5 md:flex-row md:items-center md:justify-between">
+            <div className="min-w-0">
+              <p className="flex items-center gap-2 text-[11px] font-bold uppercase tracking-[0.22em] text-white/45">
+                <Trophy size={14} /> Results
+              </p>
+              <h2 className="mt-3 text-2xl font-black tracking-tight md:text-3xl">
+                完賽排行榜
+              </h2>
+              <p className="mt-2 max-w-xl break-words text-sm leading-relaxed text-white/65">
+                想知邊個跑得最快？按比賽類別睇會員完賽成績。
+              </p>
+            </div>
+            <Link
+              href="/hyrox/results"
+              className="btn-base btn-vital btn-slab min-h-11 w-full sm:w-auto md:flex-none"
+            >
+              <Trophy size={16} /> 查看完賽排行榜 <ArrowRight size={16} />
+            </Link>
+          </div>
+        </div>
+      </section>
+
+      {/* ===== 6. 往期場次（沒有就整段不顯示；整張卡可點進詳情頁） ===== */}
       {past.length > 0 && (
         <section className="pub-pad container-msw">
           <div className="flex flex-wrap items-end justify-between gap-3">
