@@ -1,6 +1,14 @@
 /**
  * GET  /api/admin/training/sessions?year=&month= — 該月全部場次（含 cancelled）
- * POST /api/admin/training/sessions               — { action: 'create' | 'update' | 'delete' | 'copy' }
+ * POST /api/admin/training/sessions               — { action: 'create' | 'update' | 'delete' | 'copy' | 'batch' }
+ *
+ * 【batch（批量生成）—— 站主需求原話】
+ * 「如果定期訓練是星期一、四、六，希望可以一次過生成一四六，即時批量生成，
+ *   不用一日一日去做。」
+ * 做法：給 year / month / weekdays，一次生成該月所有符合星期的場次；
+ * 已存在同時段的日期自動跳過（可重複按，不會產生重複資料）。
+ * 同一天不同時段仍可並存（session_date 的單欄唯一約束已被
+ * migration-training-schedule.sql:127 移除，因此**不用 upsert**）。
  *
  * 【與 legacy /api/admin/sessions 的關係】
  * 那支路由是 /admin/sessions 頁的舊入口，本次**刻意不動**（不刪、不改行為）。
@@ -23,8 +31,10 @@
  * Owner：白客（backend-engineer）
  */
 
+import { revalidatePath } from "next/cache";
 import { writeAuditLog } from "@/lib/audit";
 import { trainingMonthRange } from "@/lib/queries";
+import { todayISO } from "@/lib/utils";
 import {
   jsonBadJson,
   jsonForbidden,
@@ -227,10 +237,11 @@ export async function POST(request: Request) {
     if (action === "update") return updateSession(supabase, userId, body);
     if (action === "delete") return deleteSession(supabase, userId, body);
     if (action === "copy") return copyMonth(supabase, userId, body);
+    if (action === "batch") return batchMonth(supabase, userId, body);
 
     return jsonValidation(
       { action: "不支援的操作。" },
-      "不支援的操作，action 必須是 create、update、delete 或 copy。"
+      "不支援的操作，action 必須是 create、update、delete、copy 或 batch。"
     );
   } catch (err) {
     return jsonInternal("POST /api/admin/training/sessions", err);
@@ -736,6 +747,266 @@ async function copyMonth(
     conflicts,
     from: result.from ?? `${fromYear}-${String(fromMonth).padStart(2, "0")}`,
     to: result.to ?? `${toYear}-${String(toMonth).padStart(2, "0")}`,
+  });
+}
+
+/* -------------------------------------------------------------
+ * batch — 批量生成某月「按星期」的場次（站主需求：一次過生成一四六）
+ * ----------------------------------------------------------- */
+
+/** ISO 星期 → 中文單字（1=一 … 7=日） */
+const WEEKDAY_CHARS = ["一", "二", "三", "四", "五", "六", "日"] as const;
+
+/** [1,4,6] → '週一/四/六' */
+function weekdayLabel(weekdays: number[]): string {
+  return `週${weekdays.map((w) => WEEKDAY_CHARS[w - 1]).join("/")}`;
+}
+
+/**
+ * 該月所有符合星期的日期（YYYY-MM-DD）。
+ *
+ * 一律用 UTC 運算：`Date.UTC(year, month-1, day)` 再 `getUTCDay()`，
+ * 結果與執行環境時區完全無關（伺服器在 UTC、本機在 UTC+8 都一樣），
+ * 不會出現「跨時區差一天」。
+ *
+ * ISO 星期換算：getUTCDay() 是 0=週日，ISO 是 1=週一…7=週日
+ * → `(getUTCDay() + 6) % 7 + 1`，與 Postgres 的 isodow 同口徑。
+ *
+ * @param includePast false 時，早於 today（澳門今天，由 todayISO() 提供）的日期不生成。
+ */
+function datesForMonth(
+  year: number,
+  month: number,
+  weekdays: number[],
+  includePast: boolean,
+  today: string
+): string[] {
+  const wanted = new Set(weekdays);
+  const lastDay = new Date(Date.UTC(year, month, 0)).getUTCDate();
+  const mm = String(month).padStart(2, "0");
+  const out: string[] = [];
+
+  for (let day = 1; day <= lastDay; day += 1) {
+    const dt = new Date(Date.UTC(year, month - 1, day));
+    const isoWeekday = ((dt.getUTCDay() + 6) % 7) + 1;
+    if (!wanted.has(isoWeekday)) continue;
+    const date = `${year}-${mm}-${String(day).padStart(2, "0")}`;
+    if (!includePast && date < today) continue;
+    out.push(date);
+  }
+
+  return out;
+}
+
+async function batchMonth(
+  supabase: Supabase,
+  userId: string,
+  body: Record<string, unknown>
+): Promise<Response> {
+  /* 1. 年月 */
+  const year = Number(body.year);
+  const month = Number(body.month);
+  if (!isIntInRange(year, 2024, 2100)) {
+    return jsonValidation({ year: "年份需介於 2024 與 2100 之間。" }, "請選擇正確的年月。");
+  }
+  if (!isIntInRange(month, 1, 12)) {
+    return jsonValidation({ month: "月份需介於 1 與 12 之間。" }, "請選擇正確的年月。");
+  }
+  const range = trainingMonthRange(year, month);
+  if (!range) return jsonValidation({}, "年月不合法。");
+
+  /* 2. 星期：非空、整數 1–7、去重（去重後排序，訊息與稽核才穩定） */
+  const rawWeekdays = body.weekdays;
+  if (!Array.isArray(rawWeekdays) || rawWeekdays.length === 0) {
+    return jsonValidation({ weekdays: "請至少選擇一個星期。" }, "請檢查表單內容。");
+  }
+  const weekdays: number[] = [];
+  for (const raw of rawWeekdays) {
+    if (!isIntInRange(raw, 1, 7)) {
+      return jsonValidation(
+        { weekdays: "星期需為 1–7 的整數（1 = 星期一、7 = 星期日）。" },
+        "請檢查表單內容。"
+      );
+    }
+    weekdays.push(Number(raw));
+  }
+  const uniqueWeekdays = [...new Set(weekdays)].sort((a, b) => a - b);
+
+  /* 3. 課程 */
+  const classId = requireUuid(body.class_id);
+  if (!classId) {
+    return jsonValidation({ class_id: "課程編號格式錯誤。" }, "請檢查表單內容。");
+  }
+
+  /* 4. 時段 */
+  const start = normalizeTime(body.start_time);
+  if (!start) {
+    return jsonValidation({ start_time: "時間格式需為 HH:MM。" }, "請檢查表單內容。");
+  }
+  const end = normalizeTime(body.end_time);
+  if (!end) {
+    return jsonValidation({ end_time: "時間格式需為 HH:MM。" }, "請檢查表單內容。");
+  }
+  // 皆為零填充的 HH:MM:SS，字串比較等同時間比較
+  if (end <= start) {
+    return jsonValidation({ end_time: "結束時間需晚於開始時間。" }, "請檢查表單內容。");
+  }
+
+  /* 5. 狀態 / 名額 */
+  const status = readStatus(body.status, "open");
+  if (!status) {
+    return jsonValidation({ status: "狀態必須是開放、截止或取消。" }, "請檢查表單內容。");
+  }
+  const providedCapacity = readCapacity(body.capacity, DEFAULT_CAPACITY);
+  if (providedCapacity === null) {
+    return jsonValidation({ capacity: "名額需介於 1 與 999 之間。" }, "請檢查表單內容。");
+  }
+
+  /* 6. 文字長度（與 createSession 同一口徑） */
+  const providedLocation = text(body.location);
+  const coachName = text(body.coach_name);
+  const note = text(body.note);
+
+  const badLocation = tooLong(providedLocation, LIMITS.location, "location", "場地名稱");
+  if (badLocation) return jsonValidation(badLocation, "請檢查表單內容。");
+  const badCoach = tooLong(coachName, LIMITS.coachName, "coach_name", "教練名稱");
+  if (badCoach) return jsonValidation(badCoach, "請檢查表單內容。");
+  const badNote = tooLong(note, LIMITS.note, "note", "備註");
+  if (badNote) return jsonValidation(badNote, "請檢查表單內容。");
+
+  /* 7. 課程必須存在（不依賴 FK 錯誤，文案才可控） */
+  const { data: klass, error: classError } = await loadClassDefaults(supabase, classId);
+  if (classError) {
+    return jsonTrainingDbError("POST /api/admin/training/sessions class", classError, MIGRATION);
+  }
+  if (!klass) {
+    return jsonValidation({ class_id: "找不到這門課程。" }, "請檢查表單內容。");
+  }
+
+  const capacity =
+    body.capacity === undefined || body.capacity === null || body.capacity === ""
+      ? (klass.capacity ?? DEFAULT_CAPACITY)
+      : providedCapacity;
+
+  /* 8. 目標日期（include_past=false 時不生成今天之前） */
+  const includePast = body.include_past === true || body.include_past === "true";
+  const today = todayISO();
+  const candidates = datesForMonth(year, month, uniqueWeekdays, includePast, today);
+
+  /* 9. 去重：該月既有的 (session_date, start_time)
+   *
+   * 為什麼不用 upsert onConflict：session_date 的單欄唯一約束已被
+   * migration-training-schedule.sql:127 移除，現在只有
+   * uq_sessions_class_date_time (class_id, session_date, start_time) 部分索引，
+   * 而且站主的規則更嚴——「同一天同一時段」不管哪門課都算已佔用，
+   * 所以先讀既有列自己比對，命中的列入 skipped_dates。
+   * 讀到的是 'HH:MM:SS'，統一只比前 5 碼（'HH:MM'），舊資料的 null 也安全。 */
+  const { data: existingData, error: existingError } = await supabase
+    .from("training_sessions")
+    .select("session_date, start_time")
+    .gte("session_date", range.from)
+    .lte("session_date", range.to);
+
+  if (existingError) {
+    return jsonTrainingDbError(
+      "POST /api/admin/training/sessions batch existing",
+      existingError,
+      MIGRATION
+    );
+  }
+
+  const startHHMM = start.slice(0, 5);
+  const endHHMM = end.slice(0, 5);
+  const taken = new Set(
+    ((existingData ?? []) as { session_date: string; start_time: string | null }[]).map(
+      (row) => `${row.session_date}|${(row.start_time ?? "").slice(0, 5)}`
+    )
+  );
+
+  const toInsert: string[] = [];
+  const skippedDates: string[] = [];
+  for (const date of candidates) {
+    if (taken.has(`${date}|${startHHMM}`)) skippedDates.push(date);
+    else toInsert.push(date);
+  }
+
+  /* 10. 寫入：一次 insert 全部（整批成功或整批失敗，不會留半套） */
+  if (toInsert.length > 0) {
+    const rows = toInsert.map((date) => ({
+      session_date: date,
+      class_id: classId,
+      start_time: start,
+      end_time: end,
+      starts_at: macauTimestamp(date, start),
+      ends_at: macauTimestamp(date, end),
+      // title 一律由課程名稱帶入（與 createSession 同規則）
+      title: klass.name,
+      location: providedLocation || klass.location || DEFAULT_LOCATION,
+      location_override: providedLocation || null,
+      coach_name: coachName || klass.coach_name || null,
+      capacity,
+      note: note || null,
+      status,
+    }));
+
+    const { error } = await supabase.from("training_sessions").insert(rows);
+
+    if (error) {
+      if (isUniqueViolation(error)) {
+        return jsonTrainingConflict(
+          "DUPLICATE",
+          "同一課程在同一天同一時段已經有場次了。請重新整理後再試一次。"
+        );
+      }
+      if (isForeignKeyViolation(error)) {
+        return jsonValidation({ class_id: "找不到這門課程。" }, "請檢查表單內容。");
+      }
+      return jsonTrainingDbError(
+        "POST /api/admin/training/sessions batch insert",
+        error,
+        MIGRATION
+      );
+    }
+  }
+
+  /* 11. 快取失效 + 稽核 */
+  revalidateTrainingSchedule();
+  try {
+    // 前台訓練頁（revalidateTrainingSchedule 只涵蓋 /events 與後台班表頁）
+    revalidatePath("/training");
+  } catch (err) {
+    console.warn("[training] revalidatePath(/training) 失敗（不影響主流程）：", err);
+  }
+
+  const created = toInsert.length;
+  const skipped = skippedDates.length;
+  const label = weekdayLabel(uniqueWeekdays);
+  const timeLabel = `${startHHMM}–${endHHMM}`;
+
+  await writeAuditLog(
+    supabase,
+    userId,
+    "sessions",
+    "batch",
+    `批量生成 ${year} 年 ${month} 月班表：${label} ${timeLabel}，新增 ${created} 場、略過 ${skipped} 場（已存在同時段）`
+  );
+
+  /* 三種結果都要講清楚「為什麼是 0」，否則站主重複按一次會以為壞了 */
+  const message =
+    created > 0
+      ? `已在 ${year} 年 ${month} 月生成 ${created} 場班表（${label} ${timeLabel}）${
+          skipped > 0 ? `；另有 ${skipped} 場因同時段已存在而略過` : ""
+        }。`
+      : skipped > 0
+        ? `這個月份的${label} ${timeLabel} 場次都已存在（略過 ${skipped} 場），沒有新增。`
+        : `這個月份沒有可生成的日期（所選星期在該月沒有符合的日期，或全部早於今天）。`;
+
+  return jsonOk({
+    message,
+    created,
+    skipped,
+    dates: toInsert,
+    skipped_dates: skippedDates,
   });
 }
 
