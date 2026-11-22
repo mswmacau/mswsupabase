@@ -21,6 +21,7 @@ import { useRouter } from "next/navigation";
 import {
   AlertCircle,
   Check,
+  Download,
   ExternalLink,
   ImageOff,
   Loader2,
@@ -247,6 +248,23 @@ export function PaymentReview({ events }: { events: HyroxEvent[] }) {
           )}
           重新整理
         </button>
+        {/*
+          匯出 CSV（G-1）：純 <a download> 讓瀏覽器自己下載，不用 fetch+blob
+          （iOS Safari 會把 blob 下載吃掉；同 RaceRoster 的既有做法）。
+          端點：GET /api/admin/hyrox/registrations/export?event_id=&type=roster
+          （UTF-8 BOM＋RFC5987 檔名，Excel 直開中文不亂碼）。
+          390：外層 flex-col，這顆按鈕 w-full 全寬（§2.3 G-1）。
+        */}
+        <a
+          href={`/api/admin/hyrox/registrations/export?event_id=${encodeURIComponent(eventId)}&type=roster`}
+          download
+          aria-disabled={!eventId}
+          className={`btn-base btn-ghost min-h-11 w-full px-3 py-2 text-sm sm:w-auto ${
+            eventId ? "" : "pointer-events-none opacity-50"
+          }`}
+        >
+          <Download size={16} /> 匯出 CSV
+        </a>
       </div>
 
       <p className="text-xs text-white/60">
