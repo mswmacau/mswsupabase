@@ -49,6 +49,8 @@ type RawRow = {
   payment_amount_cents: number | null;
   payment_proof_path: string | null;
   admin_note: string | null;
+  /** 出席點名（migration-event-attendance.sql）；未跑該 migration 時查不到此欄 */
+  attended_at?: string | null;
   profile: {
     display_name: string | null;
     full_name: string | null;
@@ -57,6 +59,41 @@ type RawRow = {
     id_last4: string | null;
   } | null;
 };
+
+/**
+ * 回傳列的型別：既有的 HyroxAdminRegistrationRow 再補 attended_at。
+ *
+ * 為什麼不直接改 src/lib/types.ts 的介面：那支是共用檔（前端型別也在用），
+ * 本輪只動本檔；這裡用交集型別達到同樣效果，回應多了 attended_at 但既有
+ * 欄位一個都沒少，前端加欄位即可讀。
+ */
+type RegistrationWithAttendance = HyroxAdminRegistrationRow & {
+  /** 已點名的時間（ISO）；null = 未點名。migration 未跑時一律 null */
+  attended_at: string | null;
+};
+
+const BASE_COLUMNS =
+  "id,created_at,group_pref,weekly_freq,longest_run,payment_status," +
+  "payment_amount_cents,payment_proof_path,admin_note," +
+  "profile:profiles!event_registrations_user_id_fkey(" +
+  "display_name,full_name,gender,phone,id_last4)";
+
+/** 出席點名欄位（migration-event-attendance.sql §1） */
+const COLUMNS_WITH_ATTENDANCE = `${BASE_COLUMNS},attended_at`;
+
+/**
+ * 欄位不存在（migration 未跑）：42703 / PGRST204。
+ * 命中時退回不含 attended_at 的查詢，attended_at 一律回 null，
+ * **不是** 500（降級硬要求）。判斷與名單匯出端點同款。
+ */
+function isMissingColumn(error: unknown): boolean {
+  if (typeof error !== "object" || error === null) return false;
+  const code = "code" in error ? String((error as { code?: unknown }).code ?? "") : "";
+  if (code === "42703" || code === "PGRST204") return true;
+  const message =
+    "message" in error ? String((error as { message?: unknown }).message ?? "") : "";
+  return /column .* does not exist|could not find the .*column/i.test(message);
+}
 
 export async function GET(request: Request) {
   try {
@@ -88,18 +125,23 @@ export async function GET(request: Request) {
     // 免得管理員以為名單只有 500 人）
     const PAGE_LIMIT = 500;
 
-    const { data, error } = await supabase
-      .from("event_registrations")
-      .select(
-        "id,created_at,group_pref,weekly_freq,longest_run,payment_status," +
-          "payment_amount_cents,payment_proof_path,admin_note," +
-          "profile:profiles!event_registrations_user_id_fkey(" +
-          "display_name,full_name,gender,phone,id_last4)"
-      )
-      .eq("event_id", eventId)
-      .eq("status", "registered")
-      .order("created_at", { ascending: true })
-      .limit(PAGE_LIMIT);
+    const queryRows = (cols: string) =>
+      supabase
+        .from("event_registrations")
+        .select(cols)
+        .eq("event_id", eventId)
+        .eq("status", "registered")
+        .order("created_at", { ascending: true })
+        .limit(PAGE_LIMIT);
+
+    // 先試含出席欄的查詢；欄位不存在（migration 未跑）就退回不含該欄的版本。
+    // 兩次查詢的條件完全相同，只是 select 清單不同。
+    let result = await queryRows(COLUMNS_WITH_ATTENDANCE);
+    if (result.error && isMissingColumn(result.error)) {
+      result = await queryRows(BASE_COLUMNS);
+    }
+
+    const { data, error } = result;
 
     if (error) {
       return jsonInternal("GET /api/admin/hyrox/registrations read", error);
@@ -127,7 +169,7 @@ export async function GET(request: Request) {
       }
     }
 
-    const registrations: HyroxAdminRegistrationRow[] = rows.map((r) => ({
+    const registrations: RegistrationWithAttendance[] = rows.map((r) => ({
       registration_id: r.id,
       display_name: r.profile?.display_name ?? null,
       full_name: r.profile?.full_name ?? null,
@@ -142,6 +184,8 @@ export async function GET(request: Request) {
       admin_note: r.admin_note,
       created_at: r.created_at,
       proof_url: r.payment_proof_path ? (urlMap.get(r.payment_proof_path) ?? null) : null,
+      // 未跑 migration 時這個鍵不存在 → 一律回 null（不是 undefined、不是省略）
+      attended_at: r.attended_at ?? null,
     }));
 
     return jsonOk({
