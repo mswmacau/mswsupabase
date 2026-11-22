@@ -4,6 +4,7 @@ import RunsTab from "./tabs/runs";
 import CheckinsTab from "./tabs/checkins";
 import RedemptionsTab from "./tabs/redemptions";
 import HyroxTab from "./tabs/hyrox";
+import HyroxResultsTab from "./tabs/hyrox-results";
 
 export const metadata = { title: "待審核" };
 export const dynamic = "force-dynamic";
@@ -31,7 +32,13 @@ export const dynamic = "force-dynamic";
  *  - 對話框（拒絕原因等）掛在各自的 client component 內，切分頁即卸載，
  *    不會殘留半開的 modal。
  */
-const TAB_KEYS = ["runs", "checkins", "redemptions", "hyrox"] as const;
+const TAB_KEYS = [
+  "runs",
+  "checkins",
+  "redemptions",
+  "hyrox",
+  "hyrox-results",
+] as const;
 type TabKey = (typeof TAB_KEYS)[number];
 
 export default async function AdminReviewPage({
@@ -50,6 +57,7 @@ export default async function AdminReviewPage({
     todos.pendingCheckins,
     todos.pendingRedemptions,
     todos.pendingHyroxPayments,
+    todos.pendingHyroxResults,
   ];
   const total = values.every((v) => v !== null)
     ? (values as number[]).reduce((sum, v) => sum + v, 0)
@@ -96,6 +104,12 @@ export default async function AdminReviewPage({
             href: "/admin/review?tab=hyrox",
             count: todos.pendingHyroxPayments,
           },
+          {
+            key: "hyrox-results",
+            label: "完賽成績",
+            href: "/admin/review?tab=hyrox-results",
+            count: todos.pendingHyroxResults,
+          },
         ]}
       />
 
@@ -105,6 +119,8 @@ export default async function AdminReviewPage({
         <CheckinsTab />
       ) : active === "redemptions" ? (
         <RedemptionsTab />
+      ) : active === "hyrox-results" ? (
+        <HyroxResultsTab />
       ) : (
         <HyroxTab />
       )}
