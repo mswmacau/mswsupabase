@@ -26,6 +26,7 @@ import {
   ImageOff,
   Loader2,
   RefreshCw,
+  UserCheck,
   X,
 } from "lucide-react";
 import { AdminError, AdminModal, AdminNotice } from "@/components/admin/ui";
@@ -38,6 +39,60 @@ import {
   type HyroxEvent,
 } from "@/components/hyrox/shared";
 import { formatDate, formatDateTime } from "@/lib/utils";
+
+/**
+ * 名單一列：既有 HyroxAdminRegistrationRow 再補 attended_at
+ * （白客的 GET 已回此欄；migration 未跑時一律 null）。
+ * 只在本檔擴充型別，不動 src/components/hyrox/shared.ts。
+ */
+type RowWithAttendance = HyroxAdminRegistrationRow & {
+  /** 已點名時間（ISO）；null = 未點名／功能未啟用 */
+  attended_at: string | null;
+};
+
+/**
+ * PATCH 出席點名（本檔專用薄包裝）。
+ * 為什麼不用 components/hyrox/api.ts 的 getHyrox／postHyrox：它們只支援
+ * GET/POST，而這支端點是 PATCH。回傳判別式聯集，呼叫端不會漏接錯誤。
+ */
+async function patchAttendance(
+  registrationId: string,
+  attended: boolean
+): Promise<{ ok: true } | { ok: false; status: number; code?: string; error: string }> {
+  try {
+    const res = await fetch(
+      `/api/admin/hyrox/registrations/${encodeURIComponent(registrationId)}/attendance`,
+      {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ attended }),
+      }
+    );
+    const contentType = res.headers.get("content-type") ?? "";
+    if (!contentType.includes("application/json")) {
+      return {
+        ok: false,
+        status: res.status,
+        error: `伺服器回應異常（HTTP ${res.status}），請稍後再試。`,
+      };
+    }
+    const data = (await res.json().catch(() => null)) as
+      | { ok?: boolean; error?: string; code?: string }
+      | null;
+    if (!data) {
+      return { ok: false, status: res.status, error: "伺服器回應異常，請稍後再試。" };
+    }
+    if (data.ok === true) return { ok: true };
+    return {
+      ok: false,
+      status: res.status,
+      code: typeof data.code === "string" ? data.code : undefined,
+      error: typeof data.error === "string" ? data.error : "操作失敗，請稍後再試。",
+    };
+  } catch {
+    return { ok: false, status: 0, error: "網路中斷，請檢查連線後再試。" };
+  }
+}
 
 const GENDER_LABEL: Record<string, string> = {
   male: "男",
@@ -53,7 +108,7 @@ export function PaymentReview({ events }: { events: HyroxEvent[] }) {
     events.find((e) => e.status === "published")?.id ?? events[0]?.id ?? "";
   const [eventId, setEventId] = useState(defaultEventId);
 
-  const [rows, setRows] = useState<HyroxAdminRegistrationRow[]>([]);
+  const [rows, setRows] = useState<RowWithAttendance[]>([]);
   const [loading, setLoading] = useState(false);
   const [slow, setSlow] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -72,6 +127,13 @@ export function PaymentReview({ events }: { events: HyroxEvent[] }) {
   const [rejectPending, setRejectPending] = useState(false);
 
   /**
+   * 出席點名是否可用（migration-event-attendance.sql 有沒有跑）。
+   * null = 尚未探測；true = 可用；false = 未啟用（按鈕 disabled＋小字說明）。
+   */
+  const [attendanceEnabled, setAttendanceEnabled] = useState<boolean | null>(null);
+  const [attendanceBusyId, setAttendanceBusyId] = useState<string | null>(null);
+
+  /**
    * 取某一場的名單（effect 與「重新整理」共用）。
    * seq 守衛：快速切換場次時，較慢回來的舊請求不會蓋掉新名單。
    */
@@ -87,7 +149,7 @@ export function PaymentReview({ events }: { events: HyroxEvent[] }) {
     setLoading(true);
     setSlow(false);
     setError(null);
-    const res = await getHyrox<{ registrations?: HyroxAdminRegistrationRow[] }>(
+    const res = await getHyrox<{ registrations?: RowWithAttendance[] }>(
       `/api/admin/hyrox/registrations?event_id=${encodeURIComponent(id)}`
     );
     if (seq !== seqRef.current) return; // 已經換場次，丟掉這個回應
@@ -107,6 +169,33 @@ export function PaymentReview({ events }: { events: HyroxEvent[] }) {
     }
     void run();
   }, [eventId, fetchRows]);
+
+  /**
+   * 探測「出席點名」是否已啟用（migration 未跑時端點回 503 SCHEMA_OUTDATED）。
+   *
+   * 為什麼用「不存在的 uuid + attended:false」探一次：
+   *   · 端點順序是 授權 → 參數 → 讀取（含 attended_at 欄位）→ 找不到才回 404，
+   *     所以欄位不存在時會先回 503，而不是 404 —— 兩態可分。
+   *   · uuid 不存在 ⇒ 一定在「讀不到就 404」就結束，不會寫入任何資料。
+   * GET 名單在 migration 未跑時 attended_at 一律 null，與「全部未點名」
+   * 無法區分，所以不能只看名單欄位。
+   */
+  useEffect(() => {
+    let alive = true;
+    const probeId = "00000000-0000-4000-8000-000000000000";
+    void patchAttendance(probeId, false).then((res) => {
+      if (!alive) return;
+      if (res.ok) {
+        setAttendanceEnabled(true);
+        return;
+      }
+      // 503 / SCHEMA_OUTDATED = 功能未啟用；404 = 端點正常（這筆不存在而已）
+      setAttendanceEnabled(!(res.status === 503 || res.code === "SCHEMA_OUTDATED"));
+    });
+    return () => {
+      alive = false;
+    };
+  }, []);
 
   // 超過 3 秒給文字說明，而不是只有轉圈（重設在 fetchRows 內做）
   useEffect(() => {
@@ -184,6 +273,39 @@ export function PaymentReview({ events }: { events: HyroxEvent[] }) {
       setRejectTarget(null);
       setRejectNote("");
     }
+  }
+
+  /**
+   * 出席切換：點名／撤回。成功只更新那一列（不整頁 reload）。
+   * 503（migration 未跑）→ 把整頁切成「未啟用」並用小字說明，
+   * 不彈錯誤框（站主要的是「知到未開」，不是紅字嚇人）。
+   */
+  async function toggleAttendance(row: RowWithAttendance) {
+    const next = !row.attended_at;
+    setAttendanceBusyId(row.registration_id);
+    setActionError(null);
+    const res = await patchAttendance(row.registration_id, next);
+    setAttendanceBusyId(null);
+
+    if (!res.ok) {
+      if (res.status === 503 || res.code === "SCHEMA_OUTDATED") {
+        setAttendanceEnabled(false);
+        return;
+      }
+      setActionError(res.error);
+      return;
+    }
+
+    const nowIso = new Date().toISOString();
+    setRows((prev) =>
+      prev.map((r) =>
+        r.registration_id === row.registration_id
+          ? { ...r, attended_at: next ? nowIso : null }
+          : r
+      )
+    );
+    const who = row.full_name || row.display_name || "這位會員";
+    setNotice(next ? `已為 ${who} 點名出席。` : `已取消 ${who} 的出席點名。`);
   }
 
   const pendingRows = rows.filter((r) => r.payment_status === "pending_review");
@@ -325,6 +447,9 @@ export function PaymentReview({ events }: { events: HyroxEvent[] }) {
               key={row.registration_id}
               row={row}
               busy={busyId === row.registration_id}
+              attendanceEnabled={attendanceEnabled}
+              attendanceBusy={attendanceBusyId === row.registration_id}
+              onToggleAttendance={() => void toggleAttendance(row)}
               onConfirm={() => void review(row, "confirmed")}
               onReject={() => {
                 setRejectTarget(row);
@@ -347,6 +472,9 @@ export function PaymentReview({ events }: { events: HyroxEvent[] }) {
               key={row.registration_id}
               row={row}
               busy={busyId === row.registration_id}
+              attendanceEnabled={attendanceEnabled}
+              attendanceBusy={attendanceBusyId === row.registration_id}
+              onToggleAttendance={() => void toggleAttendance(row)}
               onConfirm={() => void review(row, "confirmed")}
               onReject={() => {
                 setRejectTarget(row);
@@ -457,12 +585,19 @@ export function PaymentReview({ events }: { events: HyroxEvent[] }) {
 function ReviewCard({
   row,
   busy,
+  attendanceEnabled,
+  attendanceBusy,
+  onToggleAttendance,
   onConfirm,
   onReject,
   onZoom,
 }: {
-  row: HyroxAdminRegistrationRow;
+  row: RowWithAttendance;
   busy: boolean;
+  /** null = 探測中；false = migration 未跑（點名 disabled＋小字） */
+  attendanceEnabled: boolean | null;
+  attendanceBusy: boolean;
+  onToggleAttendance: () => void;
   onConfirm: () => void;
   onReject: () => void;
   onZoom: (v: { url: string; label: string }) => void;
@@ -564,6 +699,55 @@ function ReviewCard({
             >
               <X size={15} /> 拒絕
             </button>
+          </div>
+
+          {/* 出席點名（站主：邊個真係嚟到）。390 獨立一行，避免擠爆操作列 */}
+          <div className="mt-2 flex flex-wrap items-center gap-2 border-t border-[var(--line-fine)] pt-2">
+            {attendanceEnabled === false ? (
+              <>
+                <button
+                  type="button"
+                  disabled
+                  className="inline-flex min-h-11 w-full items-center justify-center gap-1.5 rounded border border-white/15 bg-white/[0.03] px-4 text-sm text-white/35 sm:w-auto"
+                >
+                  <UserCheck size={15} />
+                  {row.attended_at ? "已出席" : "點名"}
+                </button>
+                <span className="text-[11px] text-white/45">出席功能未啟用</span>
+              </>
+            ) : row.attended_at ? (
+              <button
+                type="button"
+                onClick={onToggleAttendance}
+                disabled={attendanceBusy}
+                aria-pressed
+                aria-label={`取消 ${name} 的出席點名`}
+                title="點一下可撤回點名"
+                className="inline-flex min-h-11 w-full items-center justify-center gap-1.5 rounded border border-emerald-500/50 bg-emerald-500/15 px-4 text-sm font-bold text-emerald-300 transition hover:bg-emerald-500/25 disabled:opacity-60 sm:w-auto"
+              >
+                {attendanceBusy ? (
+                  <Loader2 size={15} className="animate-spin" />
+                ) : (
+                  <UserCheck size={15} />
+                )}
+                已出席
+              </button>
+            ) : (
+              <button
+                type="button"
+                onClick={onToggleAttendance}
+                disabled={attendanceBusy || attendanceEnabled === null}
+                aria-label={`為 ${name} 點名出席`}
+                className="inline-flex min-h-11 w-full items-center justify-center gap-1.5 rounded border border-white/20 bg-white/[0.03] px-4 text-sm text-white/75 transition hover:border-white/40 hover:text-white disabled:opacity-60 sm:w-auto"
+              >
+                {attendanceBusy ? (
+                  <Loader2 size={15} className="animate-spin" />
+                ) : (
+                  <UserCheck size={15} />
+                )}
+                點名
+              </button>
+            )}
           </div>
         </div>
       </div>
