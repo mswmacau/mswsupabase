@@ -227,8 +227,11 @@ export async function GET(request: Request) {
       csvCell(PAYMENT_STATUS_LABEL[r.payment_status] ?? r.payment_status),
       textCell(r.disclaimer_accepted_at ? macauDateTime(r.disclaimer_accepted_at) : "未同意"),
       textCell(macauDateTime(r.created_at)),
-      // 未跑 migration 時整欄顯示「—」（讀不到 ≠ 未出席，不可寫成「未出席」）
-      csvCell(!attendanceAvailable ? "—" : r.attended_at ? "已出席" : "未出席"),
+      // 未跑 migration 時整欄顯示「—」（讀不到 ≠ 未點名，不可寫成「未點名」）。
+      // 有欄位時：有值 → 「已出席」；null → 「未點名」
+      // （v1 不區分「未點名」與「已標記缺席」——統計上一律當未出席計算，
+      //   所以 CSV 用「未點名」這個中性字，不寫「未出席」以免看起來像已標記過）
+      csvCell(!attendanceAvailable ? "—" : r.attended_at ? "已出席" : "未點名"),
     ]);
 
     const csv = toCsv([header, ...body]);

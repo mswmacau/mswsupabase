@@ -27,6 +27,14 @@
 --                否則付費活動的出席率永遠被未付款者拉低，失去意義。
 --   no-show    = confirmed − attended（可由前端自行相減，不另回鍵）
 --
+--   【v1 的語意取捨】attended_at = null 同時代表「未點名」與「已標記缺席」
+--   （撤回點名時兩欄一起清空，資料上分不出來）。團隊決定 v1 **不加第三態**
+--   （要再改 DDL，成本不值），因此：
+--     · 統計：未點名一律當**未出席**計算（實際意義就是「沒來」）
+--     · UI／CSV 文案：一律顯示「未點名」，不寫「未出席」——
+--       避免看起來像管理員已經標記過
+--   日後若要精確區分，加一個 attendance_marked boolean 或 status 列舉即可。
+--
 -- 【與 migration-hyrox-analytics.sql 的關係】
 --   本檔 §3 是那支函式的**升級版**：簽名完全不變
 --   （analytics_hyrox_monthly(p_limit int default 12) returns jsonb），
@@ -49,7 +57,8 @@ alter table public.event_registrations
   add column if not exists attended_by uuid references public.profiles(id) on delete set null;
 
 comment on column public.event_registrations.attended_at is
-  '實際到場點名時間（null = 未點名，不是「未出席」——兩者要靠 attended_by 與否＋後台操作區分）';
+  '實際到場點名時間。null = 未點名（v1 不區分「未點名」與「已標記缺席」，'
+  '統計上一律當未出席計算；UI/CSV 對 null 一律顯示「未點名」）';
 comment on column public.event_registrations.attended_by is
   '點名的管理員 id（誰標的）；管理員帳號被刪除時設 null，不連累報名紀錄';
 
@@ -232,7 +241,8 @@ $$;
 
 comment on function public.analytics_hyrox_monthly(int) is
   'HYROX 月度彙總（管理員限定）：報名數／確認數／確認率／收入分／回頭會員數與率／'
-  '出席數／出席率。出席率分母為 confirmed（已付款確認）；空資料回 {months:[]}';
+  '出席數／出席率。出席率分母為 confirmed（已付款確認）；'
+  '未點名（attended_at is null）一律當未出席計算（實際意義＝沒來）；空資料回 {months:[]}';
 
 revoke all on function public.analytics_hyrox_monthly(int) from public, anon;
 grant execute on function public.analytics_hyrox_monthly(int) to authenticated;
