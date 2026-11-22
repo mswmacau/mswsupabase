@@ -638,3 +638,86 @@ export interface MyRaceEntry {
 export interface MyRaceRegistration extends RaceRegistration {
   entries: MyRaceEntry[];
 }
+
+/* =============================================================
+ * HYROX 完賽排行榜（migration-hyrox-results.sql）
+ *
+ * 資料層：hyrox_divisions（類別參考表）／hyrox_results（提交列）／
+ *         hyrox_results_public（公開榜檢視，只有必要欄位）
+ * ============================================================= */
+
+/**
+ * 比賽類別（hyrox_divisions 一列）。
+ * 只回 is_active 的（停用類別不出現在前台；後台要管理停用類別時
+ * 另走 admin 端點，查詢層刻意過濾）。
+ */
+export interface HyroxDivision {
+  code: string;
+  label: string;
+  /** 每隊人數：1 單人 / 2 雙人 / 4 四人；決定隊伍欄位是否必填 */
+  team_size: number;
+  sort_order: number;
+  is_active: boolean;
+}
+
+/**
+ * 公開榜一列（hyrox_results_public 檢視）。
+ * 這是匿名訪客看得到的全部欄位——沒有 user_id／電話／email／截圖路徑
+ * （migration §3 的欄位白名單，程式端不可再撈底表補欄位）。
+ */
+export interface HyroxResultBoardRow {
+  id: string;
+  division_code: string;
+  division_label: string;
+  team_size: number;
+  race_name: string;
+  race_date: string;
+  /** 完賽秒數（顯示時前端格式化為 HH:MM:SS） */
+  finish_seconds: number;
+  team_name: string | null;
+  /** 隊友姓名（自由文字，由提交者填；單人類別為 []） */
+  teammates: string[];
+  display_name: string | null;
+  /** 不可逆公開代號（與里程榜同一演算法，非 user_id） */
+  public_code: string;
+}
+
+/** 會員自己的完賽提交一列（getMyHyroxResults；含審核備註，只回本人） */
+export interface MyHyroxResultRow {
+  id: string;
+  division_code: string;
+  division_label: string;
+  race_name: string;
+  race_date: string;
+  finish_seconds: number;
+  team_name: string | null;
+  teammates: string[];
+  note: string | null;
+  status: "pending" | "approved" | "rejected";
+  admin_note: string | null;
+  created_at: string;
+}
+
+/**
+ * 後台名單一列（GET /api/admin/hyrox/results）。
+ * 這是全站唯一會出現「提交者姓名」的完賽榜端點，只有管理員讀得到。
+ */
+export interface HyroxAdminResultRow {
+  id: string;
+  display_name: string | null;
+  division_code: string;
+  division_label: string;
+  race_name: string;
+  race_date: string;
+  finish_seconds: number;
+  /** server 格式化好的 HH:MM:SS，前端不再算 */
+  finish_label: string;
+  team_name: string | null;
+  teammates: string[];
+  note: string | null;
+  status: "pending" | "approved" | "rejected";
+  admin_note: string | null;
+  created_at: string;
+  /** 完賽截圖的 signed URL（私有桶，1 小時；後台專用） */
+  proof_url: string | null;
+}

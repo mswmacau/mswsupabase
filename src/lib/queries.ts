@@ -35,11 +35,14 @@ import type {
   Coupon,
   Event,
   EventPhoto,
+  HyroxDivision,
   HyroxEvent,
   HyroxPastEvent,
   HyroxRegistration,
+  HyroxResultBoardRow,
   LeaderRow,
   MonthlyStat,
+  MyHyroxResultRow,
   NextSessionInfo,
   PointTransaction,
   Profile,
@@ -2053,22 +2056,26 @@ function monthParts(month: string): { year: number; month: number } | null {
   return { year: Number(matched[1]), month: Number(matched[2]) };
 }
 
-/** 「等你處理」四張卡的數字 */
+/** 「等你處理」五張卡的數字 */
 export interface AdminTodoCounts {
   pendingRuns: number | null;
   pendingCheckins: number | null;
   pendingRedemptions: number | null;
   pendingHyroxPayments: number | null;
+  /** 待審核的完賽成績（hyrox_results.status='pending'）。
+   *  migration 未跑時表不存在 → null（徽章顯示「–」，與其他分頁同處理）。 */
+  pendingHyroxResults: number | null;
 }
 
 /**
- * 首頁區塊 1「等你處理」：四個待辦數字。
+ * 首頁區塊 1「等你處理」：五個待辦數字。
  *
- * 狀態值域（寫死在四支查詢裡，改了要同步 schema）：
+ * 狀態值域（寫死在五支查詢裡，改了要同步 schema）：
  *   run_submissions.status      pending | approved | rejected
  *   training_checkins.status    pending | approved | rejected
  *   reward_redemptions.status   pending_approval | pending | completed | cancelled
  *   event_registrations         payment_status = pending_review 且 status = registered
+ *   hyrox_results.status        pending | approved | rejected
  */
 export async function getAdminTodoCounts(): Promise<AdminTodoCounts> {
   const supabase = await createClient();
@@ -2078,10 +2085,11 @@ export async function getAdminTodoCounts(): Promise<AdminTodoCounts> {
       pendingCheckins: null,
       pendingRedemptions: null,
       pendingHyroxPayments: null,
+      pendingHyroxResults: null,
     };
   }
 
-  const [runs, checkins, redemptions, hyrox] = await Promise.all([
+  const [runs, checkins, redemptions, hyrox, hyroxResults] = await Promise.all([
     supabase
       .from("run_submissions")
       .select("id", { count: "exact", head: true })
@@ -2099,6 +2107,10 @@ export async function getAdminTodoCounts(): Promise<AdminTodoCounts> {
       .select("id", { count: "exact", head: true })
       .eq("status", "registered")
       .eq("payment_status", "pending_review"),
+    supabase
+      .from("hyrox_results")
+      .select("id", { count: "exact", head: true })
+      .eq("status", "pending"),
   ]);
 
   return {
@@ -2106,6 +2118,10 @@ export async function getAdminTodoCounts(): Promise<AdminTodoCounts> {
     pendingCheckins: countOrNull(checkins),
     pendingRedemptions: countOrNull(redemptions),
     pendingHyroxPayments: countOrNull(hyrox),
+    // 完賽成績表不存在（migration 未跑）是預期狀態不是 bug：
+    // 靜默回 null（不走 countOrNull——那個會在 dev 模式印 console.error，
+    // 這裡的降級要求是零 console 輸出），徽章顯示「–」。
+    pendingHyroxResults: hyroxResults.error ? null : (hyroxResults.count ?? null),
   };
 }
 
@@ -2484,4 +2500,131 @@ export async function getAdminQuickStats(): Promise<{
       : Number(statsResult.data.total_km);
 
   return { totalKm, members: countOrNull(membersResult) };
+}
+
+/* =============================================================
+ * HYROX 完賽排行榜 — supabase/migration-hyrox-results.sql
+ *
+ * 三個查詢的共同紀律（方案 §1.5-⑥ 的降級硬要求）：
+ *   migration 未跑時（表不存在，PostgREST 回 PGRST205 / 42P01 系列），
+ *   一律回 []，不拋錯、不 console.error/warn——完賽榜是「有則顯示」的
+ *   加值內容，不能因為它沒上架就讓 /hyrox 或 /admin 掛掉。
+ *   （logQueryError 只在開發模式印，production 靜默，這裡連它都不用：
+ *    表不存在是預期狀態不是 bug，印出來只會製造噪音。）
+ * ============================================================= */
+
+/** 完賽榜的快取 tag（核可/拒絕端點 revalidateTag 用同一個字串） */
+export const HYROX_RESULTS_TAG = "hyrox-results";
+
+/** 類別參考表的快取 tag（站主在後台改類別後 60 秒內生效） */
+export const HYROX_DIVISIONS_TAG = "hyrox-divisions";
+
+/**
+ * 比賽類別清單（只有 is_active，依 sort_order）。
+ * 公開榜 chips 與提交表單的類別選擇卡都用這一份。
+ */
+export const getHyroxDivisions = unstable_cache(
+  cache(async (): Promise<HyroxDivision[]> => {
+    try {
+      const supabase = anonClient();
+      if (!supabase) return [];
+      const { data } = await supabase
+        .from("hyrox_divisions")
+        .select("code,label,team_size,sort_order,is_active")
+        .eq("is_active", true)
+        .order("sort_order", { ascending: true })
+        .order("code", { ascending: true })
+        .limit(50);
+      return ((data as unknown as HyroxDivision[]) ?? []).map((d) => ({
+        code: d.code,
+        label: d.label,
+        team_size: Number(d.team_size ?? 1),
+        sort_order: Number(d.sort_order ?? 0),
+        is_active: d.is_active !== false,
+      }));
+    } catch {
+      return [];
+    }
+  }),
+  ["hyrox-divisions"],
+  { tags: [HYROX_DIVISIONS_TAG], revalidate: 60 }
+);
+
+/**
+ * 公開榜（hyrox_results_public 檢視；匿名可讀，欄位白名單見 migration §3）。
+ *
+ * @param division 類別代碼（如 "men_open"）；空字串 = 全部類別一起回
+ *   （給「沒指定 ?d= 時的預設顯示」或之後的跨類別用途）。
+ *   排序：finish_seconds 升冪 → id 升冪（同秒時順序穩定，不會每次刷新跳位）。
+ */
+export const getHyroxResultsBoard = unstable_cache(
+  cache(async (division: string): Promise<HyroxResultBoardRow[]> => {
+    try {
+      const supabase = anonClient();
+      if (!supabase) return [];
+      let query = supabase
+        .from("hyrox_results_public")
+        .select(
+          "id,division_code,division_label,team_size,race_name,race_date," +
+            "finish_seconds,team_name,teammates,display_name,public_code"
+        )
+        .order("finish_seconds", { ascending: true })
+        .order("id", { ascending: true })
+        .limit(500);
+      if (division) query = query.eq("division_code", division);
+      const { data } = await query;
+      return ((data as unknown as HyroxResultBoardRow[]) ?? []).map((r) => ({
+        ...r,
+        team_size: Number(r.team_size ?? 1),
+        finish_seconds: Number(r.finish_seconds ?? 0),
+        // jsonb 經 PostgREST 已是陣列；防禦形狀異常（理論上不會發生）
+        teammates: Array.isArray(r.teammates) ? r.teammates : [],
+      }));
+    } catch {
+      return [];
+    }
+  }),
+  ["hyrox-results-board"],
+  { tags: [HYROX_RESULTS_TAG], revalidate: 60 }
+);
+
+/**
+ * 會員自己的完賽提交（含 pending/approved/rejected 與審核備註）。
+ * 走帶 cookie 的 createClient（RLS 只放行本人的列）；刻意不快取——
+ * 提交後刪除／被核可的狀態要即時反映，個人資料也不該進跨請求快取。
+ */
+export async function getMyHyroxResults(userId: string): Promise<MyHyroxResultRow[]> {
+  try {
+    const supabase = await createClient();
+    if (!supabase) return [];
+
+    const { data } = await supabase
+      .from("hyrox_results")
+      .select(
+        "id,division_code,race_name,race_date,finish_seconds,team_name," +
+          "teammates,note,status,admin_note,created_at," +
+          "division:hyrox_divisions(label)"
+      )
+      .eq("user_id", userId)
+      .order("created_at", { ascending: false })
+      .limit(50);
+
+    return ((data as unknown as Array<MyHyroxResultRow & { division?: { label: string | null } | null }>) ?? [])
+      .map((row) => ({
+        id: row.id,
+        division_code: row.division_code,
+        division_label: row.division?.label ?? row.division_code,
+        race_name: row.race_name,
+        race_date: row.race_date,
+        finish_seconds: Number(row.finish_seconds ?? 0),
+        team_name: row.team_name ?? null,
+        teammates: Array.isArray(row.teammates) ? row.teammates : [],
+        note: row.note ?? null,
+        status: row.status,
+        admin_note: row.admin_note ?? null,
+        created_at: row.created_at,
+      }));
+  } catch {
+    return [];
+  }
 }
