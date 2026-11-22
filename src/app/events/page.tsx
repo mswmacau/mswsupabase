@@ -362,21 +362,37 @@ export default async function EventsPage({
   };
 
   /**
-   * 月份切換器可達的月份 = 已發布班表的月份 ∪ 有賽事的月份。
+   * 月份切換器可達的月份 = 已發布班表的月份 ∪ 有賽事的月份 ∪ 有已上架
+   * HYROX 場次的月份。
    *
-   * 兩者**不合併成一個陣列取代 months**：`months` 代表「班表已發布」，
+   * 三者**不合併成一個陣列取代 months**：`months` 代表「班表已發布」，
    * 那個語意仍被下面的 todayPublished / pastMonths / 「本月班表尚未公布」判斷使用。
    * 這裡只是另外算一份「使用者切得到的月份」。
+   *
+   * 【HYROX 月份】資料重用上面已取好的 `hyroxAll`（includeArchived，含
+   * archived），不加新查詢。draft 一律排除；`event_date = null`（日期待定）
+   * 的場次貢獻不了月份，也排除。
    */
   const availableMonths: YearMonth[] = (() => {
     const byKey = new Map<string, YearMonth>();
-    for (const m of months) {
-      const ym = { year: m.year, month: m.month };
+    const add = (year: number, month: number) => {
+      if (!Number.isInteger(year) || !Number.isInteger(month)) return;
+      if (month < 1 || month > 12 || year < 2024 || year > 2100) return;
+      const ym: YearMonth = { year, month };
       byKey.set(monthKeyOf(ym), ym);
+    };
+    for (const m of months) {
+      add(m.year, m.month);
     }
     for (const m of raceMonths) {
-      const ym = { year: m.year, month: m.month };
-      byKey.set(monthKeyOf(ym), ym);
+      add(m.year, m.month);
+    }
+    for (const e of hyroxAll) {
+      if (e.status === "draft" || !e.event_date) continue;
+      add(
+        Number(e.event_date.slice(0, 4)),
+        Number(e.event_date.slice(5, 7))
+      );
     }
     return [...byKey.values()].sort((a, b) =>
       a.year !== b.year ? a.year - b.year : a.month - b.month
@@ -397,16 +413,24 @@ export default async function EventsPage({
 
   const todayPublished = months.some((m) => sameMonth(m, today));
   const todayHasRace = raceMonths.some((m) => sameMonth(m, today));
+  // 當月是否有已上架（非 draft）HYROX 場次：資料重用 hyroxAll，不加新查詢
+  const todayHasHyrox = hyroxAll.some(
+    (e) =>
+      e.status !== "draft" &&
+      e.event_date !== null &&
+      e.event_date.slice(0, 7) === monthKeyOf(today)
+  );
 
   /**
-   * 顯示月份：?y/?m（可達即可）→ 當月（有班表 **或** 有賽事）→ 最新可看月份 → 無。
+   * 顯示月份：?y/?m（可達即可）→ 當月（有班表 **或** 有賽事 **或** 有
+   * HYROX 場次）→ 最新可看月份 → 無。
    *
-   * 舊版是「當月必須已發布班表才顯示」，於是 12 月有賽事時，
+   * 舊版是「當月必須已發布班表才顯示」，於是 12 月有賽事／HYROX 場時，
    * 使用者連進 /events 都看不到（當月未發布 → 直接掉到降級卡）。
    */
   const display: YearMonth | null =
     requestedAvailable ??
-    (todayPublished || todayHasRace ? today : null) ??
+    (todayPublished || todayHasRace || todayHasHyrox ? today : null) ??
     (latest ? { year: latest.year, month: latest.month } : null);
 
   const monthData = display
@@ -433,10 +457,13 @@ export default async function EventsPage({
   const sessionViews: ScheduleSessionView[] = (schedule?.sessions ?? []).map(
     (row) => sessionToView(row, todayISO)
   );
-  // 該月班表未發布時，HYROX 付費場仍然不單獨鋪成日曆（維持既有行為）
-  const hyroxViews: ScheduleSessionView[] = schedule
-    ? hyroxInMonth.map((e) => hyroxToView(e, todayISO, isLoggedIn))
-    : [];
+  // HYROX 付費場：無條件鋪成日曆。舊門檻「班表未發布就不鋪」已無意義——
+  // availableMonths 現在包含只有 HYROX 場次的月份，那種月份班表必然未發布，
+  // 若沿用舊門檻，使用者切得進去卻看到降級卡，等於白做。hyroxInMonth
+  // 本身已過濾 draft 與月份，直接鋪即可。
+  const hyroxViews: ScheduleSessionView[] = hyroxInMonth.map((e) =>
+    hyroxToView(e, todayISO, isLoggedIn)
+  );
   // 賽事：不受「班表是否發布」影響，一律鋪上去（任務 1 + 任務 3）
   const raceViews: ScheduleSessionView[] = raceRows.flatMap((e) =>
     raceToViews(e, todayISO)
@@ -445,10 +472,25 @@ export default async function EventsPage({
   const allViews = sortSessionViews([...sessionViews, ...hyroxViews, ...raceViews]);
 
   /**
-   * 畫月曆的條件：該月有已發布班表，**或**至少有賽事。
-   * 兩者都沒有 → 維持原本的「本月班表尚未公布」降級卡。
+   * 畫月曆的條件：該月有已發布班表，**或**至少有賽事，**或**至少有 HYROX 場次。
+   * 三者都沒有 → 維持原本的「本月班表尚未公布」降級卡。
    */
-  const hasCalendar = Boolean(display && (schedule || raceViews.length > 0));
+  const hasCalendar = Boolean(
+    display && (schedule || raceViews.length > 0 || hyroxViews.length > 0)
+  );
+
+  /**
+   * 該月的「內容字」：有班表 → 空字（「共 N 場」）；否則依內容組成決定——
+   * 只有賽事 → 「賽事」（沿用既有字眼，race-only 月份不回歸）；
+   * 含 HYROX 場次（無論有無賽事）→ 「活動」（戶外 HYROX 是付費訓練場，
+   * 不是比賽，寫「賽事」會說謊）。
+   * 用在切換器下的場次計數、月份標題後綴與「目前顯示」橫幅。
+   */
+  const contentWord = schedule
+    ? ""
+    : hyroxViews.length > 0
+      ? "活動"
+      : "賽事";
 
   const days =
     display && hasCalendar
@@ -617,7 +659,7 @@ export default async function EventsPage({
                 {!display
                   ? "待館方公布"
                   : hasCalendar
-                    ? `共 ${totalCount} 場${schedule ? "" : "賽事"}`
+                    ? `共 ${totalCount} 場${contentWord}`
                     : "本月班表尚未公布"}
               </div>
             </div>
@@ -662,9 +704,9 @@ export default async function EventsPage({
             <div className="mt-5 flex flex-wrap items-center gap-x-3 gap-y-1 border-l-2 border-vital bg-vital/[0.07] px-4 py-2.5 text-sm text-white/75">
               <span className="font-semibold text-white">
                 目前顯示 {formatMonthTitle(display.year, display.month)}
-                {schedule ? "班表" : "賽事"}
+                {schedule ? "班表" : contentWord}
               </span>
-              {todayPublished || todayHasRace ? (
+              {todayPublished || todayHasRace || todayHasHyrox ? (
                 <Link
                   href={monthHref(today)}
                   scroll={false}
@@ -680,9 +722,9 @@ export default async function EventsPage({
             </div>
           )}
 
-          {/* 該月班表未發布、但有賽事 → 月曆照畫，但要講清楚「這裡只有賽事」，
-              不然使用者會以為課程被取消了。 */}
-          {display && !schedule && raceViews.length > 0 && (
+          {/* 該月班表未發布、但有賽事或 HYROX 場次 → 月曆照畫，但要講清楚
+              「這裡沒有課程」，不然使用者會以為課程被取消了。 */}
+          {display && !schedule && (raceViews.length > 0 || hyroxViews.length > 0) && (
             <div
               className="mt-5 flex flex-wrap items-center gap-x-3 gap-y-1 border-l-2 px-4 py-2.5 text-sm text-white/75"
               style={{
@@ -694,7 +736,7 @@ export default async function EventsPage({
                 {formatMonthTitle(display.year, display.month)}班表尚未公布
               </span>
               <span className="text-white/55">
-                以下只顯示已排定的賽事，課程班表待館方公布。
+                以下只顯示已排定的{contentWord}，課程班表待館方公布。
               </span>
             </div>
           )}
@@ -710,8 +752,8 @@ export default async function EventsPage({
                 legend={legend}
                 classesByColor={classesByColor}
                 todayISO={todayISO}
-                // 該月沒有班表、只有賽事時，標題寫「賽事」才不會說謊
-                headingSuffix={schedule ? "班表" : "賽事"}
+                // 該月沒有班表時，標題後綴依內容組成（賽事／活動）才不會說謊
+                headingSuffix={schedule ? "班表" : contentWord}
               />
             </div>
           ) : (
