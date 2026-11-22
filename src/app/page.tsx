@@ -829,6 +829,9 @@ export default async function HomePage() {
               legend={legend}
               classesByColor={classesByColor}
               todayISO={todayISO}
+              /* 首頁月曆是摘要：手機議程只列「今天及之後」，避免 39 行把首頁拉長 3 屏。
+                 桌面 grid 不受影響（一律整月）；/events 不傳，維持整月可回看歷史。 */
+              fromTodayOnly
             />
           </div>
         ) : (

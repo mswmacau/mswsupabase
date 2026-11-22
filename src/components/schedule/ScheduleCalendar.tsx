@@ -56,6 +56,7 @@ export function ScheduleCalendar({
   todayISO,
   compact = false,
   headingSuffix = "班表",
+  fromTodayOnly = false,
 }: {
   year: number;
   month: number;
@@ -77,6 +78,17 @@ export function ScheduleCalendar({
    * 因為那時的月曆上真的一堂課都沒有，寫「班表」是錯的。
    */
   headingSuffix?: string;
+  /**
+   * 手機議程只列「今天及之後」的日子（預設 false = 整月）。
+   *
+   * 為什麼要有這個開關：首頁的月曆是**摘要**，會員打開最想看「接下來有咩」；
+   * `/events` 是完整月曆頁，需要回看歷史，所以不傳（維持整月）。
+   * 這樣兩邊都合理，而且不需要任何新文案。
+   *
+   * ⚠️ 只影響手機議程清單；平板／桌面的月曆 grid **一律整月**，
+   * 不會因為這個 prop 少畫格子。
+   */
+  fromTodayOnly?: boolean;
 }) {
   /** 第二層：哪一場被打開（有值時開單場詳情面板） */
   const [selected, setSelected] = useState<ScheduleSessionView | null>(null);
@@ -87,9 +99,13 @@ export function ScheduleCalendar({
    * 手機議程清單的資料：只留「本月且有場次」的日子。
    * `days` 本身含前後補格（inMonth = false），那些是給 grid 排版用的，
    * 議程清單列出來只會多出一堆跨月空日。
+   * `fromTodayOnly`（首頁）再把已過去的日子濾走；日期是 ISO 字串，可直接比大小。
    */
   const agendaDays = days.filter(
-    (day) => day.inMonth && day.sessions.length > 0
+    (day) =>
+      day.inMonth &&
+      day.sessions.length > 0 &&
+      (!fromTodayOnly || day.date >= todayISO)
   );
 
   /** 這個月有沒有賽事：決定要不要在圖例裡補一項「比賽」 */
@@ -176,37 +192,46 @@ export function ScheduleCalendar({
           只列有場次的日子；整月冇場次時，上面的空狀態已經講清楚。
           純靜態 markup（server render 出嚟就有），關掉 JS 都讀得到全部場次名。 */}
       <div className="mt-5 md:hidden">
-        <ol
-          aria-label={`${formatMonthTitle(year, month)}${headingSuffix}`}
-          className="border-t border-white/10"
-        >
-          {agendaDays.map((day) => (
-            <li key={day.date} className="border-b border-white/10 py-3">
-              <div className="flex items-center gap-2">
-                <h4
-                  className={`text-sm font-bold tracking-tight ${
-                    day.isToday ? "text-vital-bright" : "text-white/85"
-                  }`}
-                >
-                  {formatDayLong(day.date)}
-                </h4>
-                {day.isToday && (
-                  <span className="shrink-0 text-[9px] font-semibold uppercase tracking-[0.16em] text-vital-bright">
-                    今天
-                  </span>
-                )}
-              </div>
+        {agendaDays.length === 0 ? (
+          /* 只有「本月有場次、但今日之後再沒有」（首頁 fromTodayOnly）才會走到這裡；
+             整月完全冇場次是上面那個全域空狀態，不會重複。
+             沿用元件本來就有嘅同一句文案，不新增字。 */
+          <p className="border border-dashed border-white/15 bg-white/[0.02] px-4 py-3 text-sm text-white/60">
+            本月暫無場次，班表更新後會出現在這裡。
+          </p>
+        ) : (
+          <ol
+            aria-label={`${formatMonthTitle(year, month)}${headingSuffix}`}
+            className="border-t border-white/10"
+          >
+            {agendaDays.map((day) => (
+              <li key={day.date} className="border-b border-white/10 py-3">
+                <div className="flex items-center gap-2">
+                  <h4
+                    className={`text-sm font-bold tracking-tight ${
+                      day.isToday ? "text-vital-bright" : "text-white/85"
+                    }`}
+                  >
+                    {formatDayLong(day.date)}
+                  </h4>
+                  {day.isToday && (
+                    <span className="shrink-0 text-[9px] font-semibold uppercase tracking-[0.16em] text-vital-bright">
+                      今天
+                    </span>
+                  )}
+                </div>
 
-              <ul className="mt-2 space-y-1.5">
-                {day.sessions.map((session) => (
-                  <li key={`${session.kind}-${session.id}-${session.date}`}>
-                    <AgendaRow session={session} onSelect={openSession} />
-                  </li>
-                ))}
-              </ul>
-            </li>
-          ))}
-        </ol>
+                <ul className="mt-2 space-y-1.5">
+                  {day.sessions.map((session) => (
+                    <li key={`${session.kind}-${session.id}-${session.date}`}>
+                      <AgendaRow session={session} onSelect={openSession} />
+                    </li>
+                  ))}
+                </ul>
+              </li>
+            ))}
+          </ol>
+        )}
       </div>
 
       {/* ================= 平板／桌面（≥768）：月曆 grid =================
