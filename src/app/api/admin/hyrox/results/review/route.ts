@@ -72,8 +72,9 @@ export async function POST(request: Request) {
     /* --- admin_note：reject 必填（契約 ④）；approve 選填 --- */
     const adminNote =
       typeof body.admin_note === "string" ? body.admin_note.trim().slice(0, ADMIN_NOTE_MAX) : "";
-    if (action === "reject" && adminNote === "") {
-      return jsonValidation({ admin_note: "請填寫拒絕原因。" });
+    // 前端要求 ≥2 字；後端必須同口徑，否則「1 字」能繞過前端直接打到 API
+    if (action === "reject" && adminNote.length < 2) {
+      return jsonValidation({ admin_note: "請填寫拒絕原因（至少 2 個字）。" });
     }
 
     /* --- 讀出現況（稽核摘要要 before；順便判 404／409）--- */

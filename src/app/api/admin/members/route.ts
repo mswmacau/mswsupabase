@@ -41,9 +41,11 @@
  */
 
 import { NextResponse } from "next/server";
+import { revalidatePath, revalidateTag } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { isSupabaseConfigured } from "@/lib/supabase/env";
 import { createAdminClient, isServiceRoleConfigured } from "@/lib/supabase/admin";
+import { HYROX_RESULTS_TAG } from "@/lib/queries";
 import {
   isUuid,
   jsonBadJson,
@@ -641,6 +643,12 @@ export async function PATCH(request: Request) {
       }
       const saved = (flagData ?? {}) as { is_test?: boolean };
       testFlagSaved = saved.is_test === true;
+
+      /* 公開榜快取（tag hyrox-results）不會因為改 is_test 自己失效：
+       * 把帳號標成測試 → 成績要立刻從公開榜消失；取消標記 → 要立刻出現。
+       * 只清這個 tag，不影響其他頁。 */
+      revalidateTag(HYROX_RESULTS_TAG, { expire: 60 });
+      revalidatePath("/hyrox/results");
     }
 
     /* ---------- 第四段：總里程更正（前幾段都成功後才執行） ----------
@@ -841,6 +849,10 @@ async function purgeMemberViaRpc(
       "delete",
       `永久刪除會員 ${userId}（RPC admin_purge_member，含 auth 使用者）。`
     );
+    /* 刪帳號會 cascade 刪掉他的 hyrox_results：公開榜必須立刻失效，
+     * 否則「已刪除的成績」最多還會公開 60 秒（QA 實測到的殘留）。 */
+    revalidateTag(HYROX_RESULTS_TAG, { expire: 60 });
+    revalidatePath("/hyrox/results");
     return jsonOk({ data: { deleted: true }, message: "已永久刪除會員。" });
   }
 

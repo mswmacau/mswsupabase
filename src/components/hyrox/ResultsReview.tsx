@@ -22,6 +22,7 @@ import { useRouter } from "next/navigation";
 import {
   AlertCircle,
   Check,
+  Download,
   ExternalLink,
   Loader2,
   RefreshCw,
@@ -237,16 +238,27 @@ export function ResultsReview() {
             );
           })}
         </div>
-        <button
-          type="button"
-          onClick={() => void fetchRows(status)}
-          disabled={loading}
-          aria-busy={loading}
-          className="btn-base btn-ghost min-h-11 px-3 py-2 text-sm disabled:opacity-60"
-        >
-          {loading ? <Loader2 size={16} className="animate-spin" /> : <RefreshCw size={16} />}
-          重新整理
-        </button>
+        <div className="flex w-full flex-wrap gap-2 sm:w-auto">
+          <button
+            type="button"
+            onClick={() => void fetchRows(status)}
+            disabled={loading}
+            aria-busy={loading}
+            className="btn-base btn-ghost min-h-11 flex-1 px-3 py-2 text-sm disabled:opacity-60 sm:flex-none"
+          >
+            {loading ? <Loader2 size={16} className="animate-spin" /> : <RefreshCw size={16} />}
+            重新整理
+          </button>
+          {/* §5-12 匯出 CSV（管理端完賽榜）。純 <a download>，不經 fetch+blob
+              （iOS Safari 會吃掉 blob 下載）；不受目前狀態篩選影響，一律匯出全部。 */}
+          <a
+            href="/api/admin/hyrox/results/export?type=board"
+            download
+            className="btn-base btn-ghost min-h-11 flex-1 px-3 py-2 text-sm sm:flex-none"
+          >
+            <Download size={16} /> 匯出 CSV
+          </a>
+        </div>
       </div>
 
       <p className="text-xs leading-relaxed text-white/60">

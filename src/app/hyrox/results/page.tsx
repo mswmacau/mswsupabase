@@ -29,6 +29,7 @@ import {
   getMyHyroxResults,
 } from "@/lib/queries";
 import { ResultSubmitForm } from "@/components/hyrox/ResultSubmitForm";
+import { ChipScroller } from "@/components/hyrox/ChipScroller";
 import {
   MyHyroxResults,
   type MyResultRow,
@@ -99,11 +100,8 @@ export default async function HyroxResultsPage({
 
       {/* ===== 類別 chips（橫向滑動；無 JS 也可切換的 ?d= 連結） ===== */}
       <section className="container-msw">
-        <div
-          role="group"
-          aria-label="比賽類別"
-          className="flex gap-2 overflow-x-auto pb-1"
-        >
+        {/* ChipScroller：390 上用 ?d= 直入時把當前類別捲進畫面（純增強，無 JS 不影響） */}
+        <ChipScroller>
           {divisions.map((dv) => {
             const isActive = active?.code === dv.code;
             return (
@@ -121,7 +119,7 @@ export default async function HyroxResultsPage({
               </Link>
             );
           })}
-        </div>
+        </ChipScroller>
       </section>
 
       <div className="container-msw mt-8 grid gap-8 lg:grid-cols-3 lg:gap-10">
