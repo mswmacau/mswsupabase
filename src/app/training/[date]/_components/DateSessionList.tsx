@@ -92,7 +92,19 @@ export function DateSessionList({
   /** 今天之後才可報名；已過的日子只顯示狀態，不給報名入口 */
   isPast: boolean;
 }) {
-  const [phase, setPhase] = useState<Phase>("loading");
+  /**
+   * 報名狀態只查班表堂：HYROX／賽事不走站內報名。
+   * 若當日只有 HYROX／賽事（ids 為空），**不要**打 `ids=` 的空請求：
+   * API 會回 400，畫面就會誤顯示「無法取得你的報名狀態」＋重試鈕。
+   * 所以初始 phase 直接按「有沒有班表堂」決定，effect 亦據此跳過。
+   */
+  const classIds = sessions
+    .filter((s) => s.kind === "class")
+    .map((s) => s.id)
+    .join(",");
+  const hasClassSessions = classIds !== "";
+
+  const [phase, setPhase] = useState<Phase>(hasClassSessions ? "loading" : "ready");
   const [slow, setSlow] = useState(false);
   const [authenticated, setAuthenticated] = useState(false);
   const [mine, setMine] = useState<Record<string, string>>({});
@@ -125,6 +137,11 @@ export function DateSessionList({
   }, []);
 
   useEffect(() => {
+    // 當日只有 HYROX／賽事（沒有班表堂）→ 冇報名狀態可查。
+    // 直接不打請求：`ids=` 空字串會讓 API 回 400，畫面就會冒出
+    // 「無法取得你的報名狀態」的假錯誤。phase 已在 useState 初始化為 ready。
+    if (!hasClassSessions) return;
+
     const controller = new AbortController();
     abortRef.current = controller;
 
@@ -133,12 +150,7 @@ export function DateSessionList({
       if (aliveRef.current) setSlow(true);
     }, 3000);
 
-    // 報名狀態只查班表堂：HYROX／賽事不走站內報名，id 混進去也不會有結果，
-    // 但會把查詢字串白胖一圈（手機上多幾十 bytes 沒必要）。
-    const ids = sessions
-      .filter((s) => s.kind === "class")
-      .map((s) => s.id)
-      .join(",");
+    const ids = classIds;
 
     (async () => {
       try {
@@ -174,7 +186,9 @@ export function DateSessionList({
       window.clearTimeout(slowTimer);
       controller.abort();
     };
-  }, [sessions, attempt]);
+    // 依賴用「已展開的 id 字串」而不是 sessions 陣列：
+    // server 每次 render 都會給新的陣列參考，用陣列會讓這個請求多跑幾次。
+  }, [classIds, hasClassSessions, attempt]);
 
   const act = useCallback(
     async (sessionId: string, action: "join" | "leave") => {

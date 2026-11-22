@@ -310,7 +310,6 @@ export default async function TrainingDatePage({
   const views = [...sessions.map(toView), ...extra].sort((a, b) =>
     (a.startTime ?? "99:99").localeCompare(b.startTime ?? "99:99")
   );
-  const classCount = sessions.length;
   const hasNonClass = extra.length > 0;
   const todayISO = macauTodayISO();
   const isPast = date < todayISO;
