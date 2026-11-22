@@ -711,7 +711,9 @@ function ReviewCard({
                   className="inline-flex min-h-11 w-full items-center justify-center gap-1.5 rounded border border-white/15 bg-white/[0.03] px-4 text-sm text-white/35 sm:w-auto"
                 >
                   <UserCheck size={15} />
-                  {row.attended_at ? "已出席" : "點名"}
+                  {/* 未啟用時顯示「狀態」不是「動作」：依團隊拍板
+                      null 一律寫「未點名」（v1 不區分已標記缺席），與 CSV 同口徑 */}
+                  {row.attended_at ? "已出席" : "未點名"}
                 </button>
                 <span className="text-[11px] text-white/45">出席功能未啟用</span>
               </>
