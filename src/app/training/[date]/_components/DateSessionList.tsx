@@ -9,11 +9,18 @@ import {
   Clock,
   Loader2,
   MapPin,
+  Ticket,
   User,
   Users,
   X,
 } from "lucide-react";
-import { colorHex } from "@/components/schedule/schedule-utils";
+import {
+  PAID_HEX,
+  RACE_HEX,
+  RACE_LABEL,
+  colorHex,
+} from "@/components/schedule/schedule-utils";
+import { feeLabel } from "@/components/hyrox/shared";
 
 /**
  * 日期頁的當日場次清單 + 報名／取消。
@@ -24,17 +31,30 @@ import { colorHex } from "@/components/schedule/schedule-utils";
  *   只有本人看得到的資料，留給這裡在 mount 後打一次
  *   `GET /api/training/checkins?ids=…` 自己拿，頁面本體維持可快取。
  *
+ * 三種列（kind）：
+ *   "class"  班表堂 —— 報名／取消走這裡的 client 邏輯（原有行為，一行不改）。
+ *   "hyrox"  HYROX 付費場 —— 不走站內報名，CTA 連結由 server 給
+ *            （已結束 → 查看活動回顧；未結束 → 登入後報名；已登入的會員
+ *             會被登入頁直接導去 /hyrox/register?event=<id>，所以不用讀
+ *             profile，頁面維持可快取）。
+ *   "race"   賽事 —— 只展示、不報名（CTA：查看賽事／查看賽事回顧）。
+ *   樣式全部沿用堂課列的卡片（時間／名稱／地點），徽章與 CTA 顏色照
+ *   月曆詳情面板（SessionDetailPanel）同一套：付費＝橙、賽事＝洋紅。
+ *
  * 三個邊界（本專案鐵律）：
  *   載入中：按鈕一律 disabled，並顯示「查詢報名狀態…」；超過 3 秒改文案，
  *           不要讓使用者只看到一個轉圈。
  *   錯誤：  明確寫出「無法取得報名狀態」＋重試鈕，不靜默失敗。
- *   空狀態：當日無場次時這個元件根本不會被 render（空狀態由 page.tsx 負責）。
+ *   空狀態：當日無場次時這個元件根本不會被 render（空狀態由 page.tsx 負責，
+ *           而且要「堂課＋HYROX＋賽事全部都沒有」才會成立）。
  *
  * 取消機制：fetch 掛 AbortController，元件卸載時 abort，避免卸載後 setState。
  */
 
 export type DatedSessionView = {
   id: string;
+  /** "class" = 班表堂；"hyrox" = HYROX 付費場；"race" = 賽事（只展示不報名） */
+  kind: "class" | "hyrox" | "race";
   title: string;
   /** 'HH:MM' */
   startTime: string | null;
@@ -50,6 +70,12 @@ export type DatedSessionView = {
   colorKey: string | null;
   /** 課程類別中文（力量／HYROX／技巧…）；舊資料為 null */
   categoryLabel: string | null;
+  /** kind = "hyrox" / "race" 的 CTA 連結（堂課為 null，走站內報名） */
+  cta: { label: string; href: string } | null;
+  /** HYROX 付費場＝true（CTA 用 btn-vital、徽章用付費橙） */
+  paid: boolean;
+  /** 報名費（分）；null = 免費／未定 */
+  feeCents: number | null;
 };
 
 /** 查詢狀態的機器狀態 */
@@ -107,7 +133,12 @@ export function DateSessionList({
       if (aliveRef.current) setSlow(true);
     }, 3000);
 
-    const ids = sessions.map((s) => s.id).join(",");
+    // 報名狀態只查班表堂：HYROX／賽事不走站內報名，id 混進去也不會有結果，
+    // 但會把查詢字串白胖一圈（手機上多幾十 bytes 沒必要）。
+    const ids = sessions
+      .filter((s) => s.kind === "class")
+      .map((s) => s.id)
+      .join(",");
 
     (async () => {
       try {
@@ -216,15 +247,26 @@ export function DateSessionList({
         {sessions.map((session) => {
           const status = mine[session.id] ?? null;
           const isBusy = busy === session.id;
+          const isClass = session.kind === "class";
+          const isRace = session.kind === "race";
           const timeText =
             session.startTime && session.endTime
               ? `${session.startTime}–${session.endTime}`
               : session.startTime ?? "時間待公布";
-          const accent = colorHex(session.colorKey);
+          // 徽章／左側色條的顏色：堂課用課程色票，HYROX 用付費橙，賽事用洋紅
+          //（同月曆詳情面板 SessionDetailPanel 的 sessionAccentHex 語意）
+          const accent = isRace
+            ? RACE_HEX
+            : session.kind === "hyrox"
+              ? PAID_HEX
+              : colorHex(session.colorKey);
+          // 費用列：HYROX 一律顯示（fee=0 → feeLabel 會寫「免費」）；
+          // 賽事只在真的有填報名費時顯示（null 硬寫「免費」是造假）
+          const showFee = session.kind === "hyrox" || (isRace && session.feeCents !== null);
 
           return (
             <li
-              key={session.id}
+              key={`${session.kind}-${session.id}`}
               className="relative overflow-hidden border border-white/10 bg-ink-soft/70 p-5 z-raise md:p-6"
             >
               <span
@@ -237,9 +279,23 @@ export function DateSessionList({
                 <h3 className="min-w-0 text-lg font-black tracking-tight text-white">
                   {session.title}
                 </h3>
-                {session.categoryLabel && (
-                  <span className="shrink-0 border border-white/15 px-2 py-0.5 text-[10px] font-bold uppercase tracking-[0.18em] text-white/60">
-                    {session.categoryLabel}
+                {isClass ? (
+                  session.categoryLabel && (
+                    <span className="shrink-0 border border-white/15 px-2 py-0.5 text-[10px] font-bold uppercase tracking-[0.18em] text-white/60">
+                      {session.categoryLabel}
+                    </span>
+                  )
+                ) : (
+                  // HYROX／賽事徽章：沿用詳情面板的付費橙／賽事洋紅樣式
+                  <span
+                    className="shrink-0 border px-2 py-0.5 text-[10px] font-bold tracking-[0.18em]"
+                    style={{
+                      color: accent,
+                      borderColor: `color-mix(in srgb, ${accent} 45%, transparent)`,
+                      backgroundColor: `color-mix(in srgb, ${accent} 12%, transparent)`,
+                    }}
+                  >
+                    {isRace ? RACE_LABEL : "付費場次"}
                   </span>
                 )}
               </div>
@@ -249,20 +305,30 @@ export function DateSessionList({
                   <Clock size={15} className="shrink-0 text-vital-bright" aria-hidden />
                   <span className="tnum">{timeText}</span>
                 </span>
-                <span className="flex min-w-0 items-center gap-2">
-                  <Users size={15} className="shrink-0 text-vital-bright" aria-hidden />
-                  {/* 讀不到報名數就只講總名額，絕不把「不知道」畫成 0 */}
-                  {session.remaining !== null && session.capacity !== null ? (
-                    <span>
-                      剩餘 {session.remaining} 個名額
-                      <span className="text-white/45">（共 {session.capacity} 人）</span>
-                    </span>
-                  ) : session.capacity !== null ? (
-                    <span>名額 {session.capacity} 人</span>
-                  ) : (
-                    <span>名額未定</span>
-                  )}
-                </span>
+                {showFee && (
+                  <span className="flex items-center gap-2">
+                    <Ticket size={15} className="shrink-0 text-vital-bright" aria-hidden />
+                    {feeLabel(session.feeCents)}
+                  </span>
+                )}
+                {/* 賽事沒有名額欄（raceToView capacity 一律 null），
+                    硬畫「名額未定」是把「不知道」寫成假資料，整列不渲染 */}
+                {!isRace && (
+                  <span className="flex min-w-0 items-center gap-2">
+                    <Users size={15} className="shrink-0 text-vital-bright" aria-hidden />
+                    {/* 讀不到報名數就只講總名額，絕不把「不知道」畫成 0 */}
+                    {session.remaining !== null && session.capacity !== null ? (
+                      <span>
+                        剩餘 {session.remaining} 個名額
+                        <span className="text-white/45">（共 {session.capacity} 人）</span>
+                      </span>
+                    ) : session.capacity !== null ? (
+                      <span>名額 {session.capacity} 人</span>
+                    ) : (
+                      <span>名額未定</span>
+                    )}
+                  </span>
+                )}
                 {session.coachName && (
                   <span className="flex min-w-0 items-center gap-2">
                     <User size={15} className="shrink-0 text-vital-bright" aria-hidden />
@@ -284,17 +350,31 @@ export function DateSessionList({
               </div>
 
               <div className="mt-5">
-                <SessionActionArea
-                  phase={phase}
-                  isPast={isPast}
-                  authenticated={authenticated}
-                  status={status}
-                  busy={isBusy}
-                  busyAny={busyAny}
-                  loginHref={loginHref}
-                  onJoin={() => act(session.id, "join")}
-                  onLeave={() => act(session.id, "leave")}
-                />
+                {isClass ? (
+                  <SessionActionArea
+                    phase={phase}
+                    isPast={isPast}
+                    authenticated={authenticated}
+                    status={status}
+                    busy={isBusy}
+                    busyAny={busyAny}
+                    loginHref={loginHref}
+                    onJoin={() => act(session.id, "join")}
+                    onLeave={() => act(session.id, "leave")}
+                  />
+                ) : (
+                  // HYROX／賽事的 CTA：顏色同詳情面板（付費＝btn-vital、賽事＝btn-cobalt）
+                  session.cta && (
+                    <Link
+                      href={session.cta.href}
+                      className={`btn-base btn-slab min-h-11 w-full text-sm sm:w-auto ${
+                        session.paid ? "btn-vital" : "btn-cobalt"
+                      }`}
+                    >
+                      {session.cta.label} <ArrowRight size={16} aria-hidden />
+                    </Link>
+                  )
+                )}
               </div>
             </li>
           );

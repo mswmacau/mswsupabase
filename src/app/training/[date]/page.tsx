@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { cache } from "react";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import {
@@ -8,11 +9,14 @@ import {
   ChevronRight,
 } from "lucide-react";
 import {
+  getRaceEventsForMonth,
   getSessionsByDate,
   isRealISODate,
   shiftISODate,
+  type CalendarRaceRow,
   type DatedSessionRow,
 } from "@/lib/queries";
+import { anonClient } from "@/lib/supabase/anon";
 import {
   WEEKDAY_LABELS,
   isoWeekdayIndex,
@@ -33,11 +37,19 @@ import { DateSessionList, type DatedSessionView } from "./_components/DateSessio
  *   - 合法但當日沒有場次 → **正常渲染**（空狀態 + 前後日導覽 + 回月曆），
  *     刻意不 404：使用者從月曆點進來一個沒有課的日子，看到 404 會以為網站壞了。
  *
+ * 當日內容 = 班表堂 ∪ HYROX 付費場 ∪ 賽事（2026-12 修復）：
+ *   月曆格連結指向這一頁，但月曆格上有的東西（HYROX／賽事）這裡看不到，
+ *   會員點進來只見「當日無場次」——等於月曆給了一個死胡同。所以這頁的
+ *   場次清單要把三種都算進去，「當日無場次」只在真的什麼都沒有的日子出現。
+ *
  * 渲染策略：ISR `revalidate = 60`。
  *   不 force-dynamic（這一頁的內容對所有人一樣，沒有理由每次重算），
  *   也不在 build 時枚舉所有日期（那會把未來幾年的空白日都預先產生成靜態頁）。
  *   「我的報名狀態」屬於個人資料，交給 client 元件另外查
  *   （原因見 `_components/DateSessionList.tsx` 開頭說明）。
+ *   ⚠️ 因此這頁**不能**用讀 cookie 的 createClient()（含
+ *   `getHyroxEvents({ includeArchived: true })`——它內部就是用它），
+ *   HYROX 查詢改走頁內 anonClient（見 getHyroxEventsForDate）。
  */
 
 export const revalidate = 60;
@@ -87,6 +99,7 @@ function timeRange(start: string | null, end: string | null): string | null {
 function toView(row: DatedSessionRow): DatedSessionView {
   return {
     id: row.id,
+    kind: "class",
     title: row.class_name ?? row.title,
     startTime: row.start_time ? row.start_time.slice(0, 5) : null,
     endTime: row.end_time ? row.end_time.slice(0, 5) : null,
@@ -100,8 +113,138 @@ function toView(row: DatedSessionRow): DatedSessionView {
     categoryLabel: row.class_category
       ? CATEGORY_LABEL[row.class_category] ?? null
       : null,
+    // 班表堂走站內報名（DateSessionList 的 SessionActionArea），不用外部 CTA
+    cta: null,
+    paid: false,
+    feeCents: null,
   };
 }
+
+/* =====================================================================
+ * 當日的 HYROX 付費場與賽事（2026-11-22 補）
+ *
+ * 為什麼要在這一頁另外查，而不重用 getHyroxEvents()／月曆的資料：
+ *   · 本頁是 ISR（revalidate = 60），getHyroxEvents() 內部用 createClient()
+ *     讀 cookie → 會把整頁打成動態渲染，失去快取的好處。
+ *   · 所以這裡用 anonClient 直接查，過濾口徑與 /events 月曆保持一致
+ *     （HYROX：狀態非 draft；賽事：open/closed/photos，由查詢條件擋）。
+ *   · 任何查詢失敗一律回 []（少一列不能讓日頁 500）。
+ * ===================================================================== */
+
+type HyroxDayRow = {
+  id: string;
+  title: string;
+  start_time: string | null;
+  end_time: string | null;
+  location: string | null;
+  fee_cents: number | null;
+  status: string;
+};
+
+const getHyroxEventsForDate = cache(
+  async (date: string): Promise<HyroxDayRow[]> => {
+    const supabase = anonClient();
+    if (!supabase) return [];
+    const { data, error } = await supabase
+      .from("events")
+      .select("id,title,start_time,end_time,location,fee_cents,status")
+      // 與 /events 月曆同口徑：published（現行）＋ archived（往期回顧）
+      .eq("series", "hyrox")
+      .eq("event_date", date)
+      .in("status", ["published", "archived"])
+      .order("start_time", { ascending: true });
+    if (error || !data) return [];
+    return data as unknown as HyroxDayRow[];
+  }
+);
+
+const getRacesForDate = cache(
+  async (date: string): Promise<CalendarRaceRow[]> => {
+    const year = Number(date.slice(0, 4));
+    const month = Number(date.slice(5, 7));
+    const rows = await getRaceEventsForMonth(year, month);
+    return rows.filter((r) => {
+      const lastDay =
+        r.end_date && r.end_date > r.event_date ? r.end_date : r.event_date;
+      // 多日賽事：每一天都算「當日有賽事」
+      return r.event_date <= date && date <= lastDay;
+    });
+  }
+);
+
+/** HYROX 付費場 → 日頁列。CTA 照月曆詳情面板：已結束看回顧、未結束去報名 */
+function hyroxDayToView(row: HyroxDayRow, isPast: boolean): DatedSessionView {
+  const finished = isPast || row.status === "archived";
+  const registerHref = `/hyrox/register?event=${row.id}`;
+  return {
+    id: row.id,
+    kind: "hyrox",
+    title: row.title,
+    startTime: row.start_time ? row.start_time.slice(0, 5) : null,
+    endTime: row.end_time ? row.end_time.slice(0, 5) : null,
+    coachName: null,
+    location: row.location,
+    capacity: null,
+    remaining: null,
+    taken: null,
+    status: finished ? "closed" : "open",
+    colorKey: null,
+    categoryLabel: null,
+    cta: finished
+      ? { label: "查看活動回顧", href: `/hyrox/${row.id}` }
+      : {
+          // 本頁不讀 cookie，不知道是否已登入 → 一律先導去登入，
+          // 登入頁會把人送回 /hyrox/register?event=…（既有行為）
+          label: "登入後報名",
+          href: `/login?next=${encodeURIComponent(registerHref)}`,
+        },
+    paid: true,
+    feeCents: row.fee_cents,
+  };
+}
+
+/** 賽事 → 日頁列（只展示不報名，報名入口在賽事頁） */
+function raceDayToView(row: CalendarRaceRow, isPast: boolean): DatedSessionView {
+  const finished =
+    isPast || row.status === "closed" || row.status === "photos";
+  return {
+    id: row.id,
+    kind: "race",
+    title: row.title,
+    startTime: row.start_time ? row.start_time.slice(0, 5) : null,
+    endTime: row.end_time ? row.end_time.slice(0, 5) : null,
+    coachName: null,
+    location: row.location,
+    capacity: null,
+    remaining: null,
+    taken: null,
+    status: finished ? "closed" : "open",
+    colorKey: null,
+    categoryLabel: "賽事",
+    cta: {
+      label: finished ? "查看賽事回顧" : "查看賽事",
+      href: `/races/${row.id}`,
+    },
+    paid: false,
+    feeCents: row.fee_cents,
+  };
+}
+
+/** 當日「非班表堂」的活動（HYROX＋賽事），同一請求內只查一次 */
+const getExtraViewsForDate = cache(
+  async (date: string): Promise<DatedSessionView[]> => {
+    const todayISO = macauTodayISO();
+    const isPast = date < todayISO;
+    const [hyroxRows, raceRows] = await Promise.all([
+      getHyroxEventsForDate(date),
+      getRacesForDate(date),
+    ]);
+    return [
+      ...hyroxRows.map((r) => hyroxDayToView(r, isPast)),
+      ...raceRows.map((r) => raceDayToView(r, isPast)),
+    ];
+  }
+);
 
 /**
  * 分享與 SEO：標題帶日期與課程名，描述帶場次摘要。
@@ -119,27 +262,37 @@ export async function generateMetadata({
   }
 
   const sessions = await getSessionsByDate(raw);
+  const extra = await getExtraViewsForDate(raw);
   const fullDate = formatFullDate(raw);
 
-  if (sessions.length === 0) {
+  if (sessions.length === 0 && extra.length === 0) {
     return {
       title: `${fullDate}｜當日無場次`,
-      description: `${fullDate} 目前沒有已排定的定期訓練場次。`,
+      description: `${fullDate} 目前沒有已排定的活動。`,
     };
   }
 
-  const titles = [...new Set(sessions.map((s) => s.class_name ?? s.title))];
-  const summary = sessions
-    .map((s) => {
+  // 班表堂、HYROX 付費場、賽事都算「當日活動」——標題要把三種名字都帶上
+  const titles = [
+    ...new Set([
+      ...sessions.map((s) => s.class_name ?? s.title),
+      ...extra.map((e) => e.title),
+    ]),
+  ];
+  const summary = [
+    ...sessions.map((s) => {
       const name = s.class_name ?? s.title;
       const time = timeRange(s.start_time, s.end_time);
       return time ? `${time} ${name}` : name;
-    })
-    .join("、");
+    }),
+    ...extra.map((e) =>
+      e.startTime ? `${e.startTime} ${e.title}` : e.title
+    ),
+  ].join("、");
 
   return {
     title: `${fullDate}｜${titles.join("、")}`,
-    description: `${fullDate} 共 ${sessions.length} 場定期訓練：${summary}。看當日場次、教練、地點與名額，直接報名。`,
+    description: `${fullDate} 共 ${sessions.length + extra.length} 場活動：${summary}。`,
   };
 }
 
@@ -152,7 +305,13 @@ export default async function TrainingDatePage({
   const date = parseDateParam(raw);
 
   const sessions = await getSessionsByDate(date);
-  const views = sessions.map(toView);
+  const extra = await getExtraViewsForDate(date);
+  // 三種合併後按開始時間排序（沒有時間的排最後）；同時間維持班表堂優先
+  const views = [...sessions.map(toView), ...extra].sort((a, b) =>
+    (a.startTime ?? "99:99").localeCompare(b.startTime ?? "99:99")
+  );
+  const classCount = sessions.length;
+  const hasNonClass = extra.length > 0;
   const todayISO = macauTodayISO();
   const isPast = date < todayISO;
   const isToday = date === todayISO;
@@ -160,7 +319,7 @@ export default async function TrainingDatePage({
   const prevDate = shiftISODate(date, -1);
   const nextDate = shiftISODate(date, 1);
   const { main: fullDateMain, week: fullDateWeek } = splitFullDate(date);
-  const sessionLabel = `${sessions.length} 場`;
+  const sessionLabel = `${views.length} 場`;
 
   return (
     <div className="relative">
@@ -202,9 +361,12 @@ export default async function TrainingDatePage({
                 )}
               </div>
               <p className="mt-3 text-sm text-white/65">
-                {sessions.length > 0
-                  ? `當日共 ${sessionLabel}定期訓練。時間、教練、地點與名額都在下面，可直接報名。`
-                  : "當日沒有排定的定期訓練。"}
+                {views.length === 0
+                  ? "當日沒有排定的活動。"
+                  : hasNonClass
+                    ? // 有 HYROX／賽事時不能寫「定期訓練都不收費／可直接報名」那類假話
+                      `當日共 ${sessionLabel}活動。時間、地點與名額都在下面。`
+                    : `當日共 ${sessionLabel}定期訓練。時間、教練、地點與名額都在下面，可直接報名。`}
               </p>
             </div>
 
@@ -248,7 +410,7 @@ export default async function TrainingDatePage({
               當日無場次
             </h2>
             <p className="mx-auto mt-2 max-w-md text-sm leading-relaxed text-white/65">
-              這一天沒有排定的定期訓練。可以往前後日找找看，或回月曆看整個月的班表。
+              這一天沒有排定的活動。可以往前後日找找看，或回月曆看整個月的班表。
             </p>
             <div className="mt-6 flex flex-col items-stretch justify-center gap-3 sm:flex-row sm:items-center">
               <Link
