@@ -31,9 +31,10 @@ import {
 import { ResultSubmitForm } from "@/components/hyrox/ResultSubmitForm";
 import {
   MyHyroxResults,
-  formatFinish,
   type MyResultRow,
 } from "@/components/hyrox/MyHyroxResults";
+// 純格式化函式：必須來自非 "use client" 模組，否則 server 呼叫會拋錯
+import { formatFinish } from "@/lib/hyrox-format";
 import "../../public-ui.css";
 
 export const dynamic = "force-dynamic";

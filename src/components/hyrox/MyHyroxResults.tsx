@@ -15,6 +15,7 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { CheckCircle2, Clock3, Loader2, Trash2, XCircle } from "lucide-react";
 import { deleteJson, FetchError } from "@/lib/fetch-json";
+import { formatFinish } from "@/lib/hyrox-format";
 
 /** 本人一列提交的最小形狀（結構相容 getMyHyroxResults 的回列） */
 export interface MyResultRow {
@@ -28,15 +29,6 @@ export interface MyResultRow {
   admin_note: string | null;
 }
 
-function pad2(n: number) {
-  return String(n).padStart(2, "0");
-}
-
-/** 秒 → HH:MM:SS（榜的顯示格式，server 端同一演算法） */
-export function formatFinish(seconds: number): string {
-  const s = Math.max(0, Math.floor(seconds));
-  return `${pad2(Math.floor(s / 3600))}:${pad2(Math.floor((s % 3600) / 60))}:${pad2(s % 60)}`;
-}
 
 /** 狀態徽章三態（§1.6：待審核／已確認／已拒絕） */
 function StatusBadge({ status }: { status: MyResultRow["status"] }) {
