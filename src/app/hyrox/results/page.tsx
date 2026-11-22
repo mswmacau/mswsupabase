@@ -56,14 +56,46 @@ export default async function HyroxResultsPage({
   const dParam = Array.isArray(params.d) ? params.d[0] : params.d;
 
   const divisions = await getHyroxDivisions();
-  // ?d= 無效（停用／不存在）時退回第一個類別，不出空白頁
-  const active =
-    divisions.find((x) => x.code === dParam) ?? divisions[0] ?? null;
 
-  const [profile, board] = await Promise.all([
+  /**
+   * 一次抓「全部類別」的已核可成績（同一支查詢、同一個 cache tag
+   * hyrox-results，60 秒），用途有三：
+   *   1. chips 上的筆數（每類別已確認幾筆）
+   *   2. 沒帶 ?d= 時，預設挑「有資料」的類別（優化 M3）
+   *   3. 選定類別的榜體（直接 filter，排序已由查詢層保證）
+   * 只在這裡查一次，避免「先猜類別再查該類別」造成兩次查詢。
+   */
+  const [profile, allRows] = await Promise.all([
     getCurrentProfile(),
-    active ? getHyroxResultsBoard(active.code) : Promise.resolve([]),
+    getHyroxResultsBoard(""),
   ]);
+
+  /** 每類別已核可筆數 */
+  const countByDivision = new Map<string, number>();
+  for (const row of allRows) {
+    countByDivision.set(row.division_code, (countByDivision.get(row.division_code) ?? 0) + 1);
+  }
+
+  /**
+   * 預設類別：?d= 合法就用它；否則挑**已核可成績最多**的類別
+   * （並列時按 divisions 的 sort_order，divisions 本身已排序）；
+   * 全部為空 → 退回第一個（維持原本行為）。
+   */
+  const busiest =
+    divisions.length > 0
+      ? divisions.reduce((best, cur) =>
+          (countByDivision.get(cur.code) ?? 0) > (countByDivision.get(best.code) ?? 0)
+            ? cur
+            : best
+        )
+      : null;
+  const active =
+    divisions.find((x) => x.code === dParam) ?? busiest ?? divisions[0] ?? null;
+
+  const board = active
+    ? allRows.filter((row) => row.division_code === active.code)
+    : [];
+
   const mine: MyResultRow[] = profile
     ? await getMyHyroxResults(profile.id)
     : [];
@@ -104,18 +136,34 @@ export default async function HyroxResultsPage({
         <ChipScroller>
           {divisions.map((dv) => {
             const isActive = active?.code === dv.code;
+            const count = countByDivision.get(dv.code) ?? 0;
             return (
               <Link
                 key={dv.code}
                 href={`/hyrox/results?d=${dv.code}`}
                 aria-current={isActive ? "true" : undefined}
-                className={`stat-figure min-h-11 shrink-0 px-4 py-2.5 text-sm transition ${
+                aria-label={`${dv.label}，${count} 筆已確認成績`}
+                className={`stat-figure flex min-h-11 shrink-0 items-center gap-1.5 px-4 py-2.5 text-sm transition ${
                   isActive
                     ? "slab bg-vital text-white"
                     : "text-white/60 hover:text-white"
                 }`}
               >
                 {dv.label}
+                {/* 該類別已核可筆數（新文案格式，站主已授權「照建議」）：
+                    0 筆用弱色，避免八個 chips 全部搶眼 */}
+                <span
+                  aria-hidden
+                  className={`tnum text-xs font-bold ${
+                    isActive
+                      ? "text-white/80"
+                      : count > 0
+                        ? "text-vital-bright"
+                        : "text-white/30"
+                  }`}
+                >
+                  {count}
+                </span>
               </Link>
             );
           })}

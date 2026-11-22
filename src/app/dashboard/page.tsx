@@ -13,6 +13,8 @@ import {
 } from "lucide-react";
 import { createClient, getCurrentProfile } from "@/lib/supabase/server";
 import {
+  getHyroxEvents,
+  getMyHyroxRegistrations,
   getUserCheckins,
   getUserCoupons,
   getUserMonthKm,
@@ -27,7 +29,9 @@ import { CancelRegistrationButton } from "@/app/races/_components/CancelRegistra
 import { getMyRaceRegistrations } from "@/lib/races";
 import { getRewardsEnabled } from "@/lib/rewards";
 import { RULES } from "@/lib/config";
-import { currentMonth, formatDate, formatKm, monthLabel } from "@/lib/utils";
+import { currentMonth, formatDate, formatKm, monthLabel, todayISO, weekdayLabel } from "@/lib/utils";
+import { PaymentBadge } from "@/components/hyrox/PaymentBadge";
+import { eventDateValue, feeLabel, pickNextEvent } from "@/components/hyrox/shared";
 
 export const dynamic = "force-dynamic";
 
@@ -75,6 +79,18 @@ export default async function DashboardPage() {
     getRewardsEnabled(),
     getMyRaceRegistrations(profile.id),
   ]);
+
+  /* HYROX 卡（優化 M1）：下一場戶外場次＋我的報名狀態。
+     與 /hyrox 主頁同一組查詢（published 場次有快取；我的報名只讀本人）。 */
+  const [hyroxEvents, myHyroxRegs] = await Promise.all([
+    getHyroxEvents(),
+    getMyHyroxRegistrations(profile.id),
+  ]);
+  const nextHyrox = pickNextEvent(hyroxEvents, todayISO());
+  const myHyroxReg = nextHyrox
+    ? (myHyroxRegs.find((r) => r.event_id === nextHyrox.id) ?? null)
+    : null;
+  const nextHyroxDate = eventDateValue(nextHyrox?.event_date);
   const t = pages.dashboard;
 
   /* 賽事名稱與日期：getMyRaceRegistrations 只回報名本身，賽事資訊要另外查。
@@ -494,6 +510,118 @@ export default async function DashboardPage() {
               })}
             </ul>
           )}
+        </div>
+
+        {/* HYROX 戶外場（優化 M1）：下一場＋我的報名狀態＋完賽榜入口。
+            390 卡片式單欄；所有可點元素 ≥44px。 */}
+        <div className="clip-notch-br card-dark z-raise mt-4 p-5 md:p-7" data-hyrox-card="">
+          <div className="flex flex-wrap items-baseline justify-between gap-3">
+            <div className="flex min-w-0 items-center gap-3">
+              <span className="clip-slab flex h-10 w-10 flex-none items-center justify-center bg-cobalt/20 text-accent-blue">
+                <CalendarDays size={18} />
+              </span>
+              <h2 className="min-w-0 text-lg font-black tracking-tight">
+                HYROX 戶外訓練
+              </h2>
+            </div>
+            <Link
+              href="/hyrox"
+              className="inline-flex min-h-11 flex-none items-center gap-1 text-sm font-semibold text-accent-blue transition hover:text-white"
+            >
+              所有場次 <ArrowRight size={15} />
+            </Link>
+          </div>
+
+          {nextHyrox ? (
+            <div className="mt-4 space-y-3">
+              <div className="flex flex-wrap items-center gap-2">
+                <span className="slab inline-flex items-center gap-1.5 border border-vital/50 bg-vital/90 px-3 py-1 text-[11px] font-bold text-white">
+                  <CalendarDays size={13} />
+                  {nextHyroxDate
+                    ? `${formatDate(nextHyroxDate)}（週${weekdayLabel(nextHyroxDate)}）`
+                    : "日期待定"}
+                </span>
+                {myHyroxReg && <PaymentBadge status={myHyroxReg.payment_status} />}
+              </div>
+
+              <p className="min-w-0 break-words text-sm font-bold text-white/90">
+                {nextHyrox.title}
+              </p>
+
+              <dl className="grid grid-cols-1 gap-x-6 gap-y-1.5 text-sm text-white/65 sm:grid-cols-3">
+                <div className="flex min-w-0 items-baseline gap-2">
+                  <dt className="flex-none text-xs uppercase tracking-[0.16em] text-white/40">
+                    時間
+                  </dt>
+                  <dd className="min-w-0 break-words text-white/80">
+                    {[nextHyrox.start_time, nextHyrox.end_time].filter(Boolean).join(" – ") ||
+                      "待公布"}
+                  </dd>
+                </div>
+                <div className="flex min-w-0 items-baseline gap-2">
+                  <dt className="flex-none text-xs uppercase tracking-[0.16em] text-white/40">
+                    地點
+                  </dt>
+                  <dd className="min-w-0 break-words text-white/80">
+                    {nextHyrox.location ?? "待公布"}
+                  </dd>
+                </div>
+                <div className="flex min-w-0 items-baseline gap-2">
+                  <dt className="flex-none text-xs uppercase tracking-[0.16em] text-white/40">
+                    費用
+                  </dt>
+                  <dd className="min-w-0 break-words text-white/80">
+                    {feeLabel(nextHyrox.fee_cents ?? 5000)}
+                  </dd>
+                </div>
+              </dl>
+
+              <div className="flex flex-wrap gap-2 pt-1">
+                {myHyroxReg ? (
+                  <Link
+                    href="/hyrox/register"
+                    className="btn-base btn-ghost btn-slab min-h-11 w-full text-sm sm:w-auto"
+                  >
+                    查看我的報名 <ArrowRight size={15} />
+                  </Link>
+                ) : nextHyroxDate ? (
+                  <Link
+                    href="/hyrox/register"
+                    className="btn-base btn-vital btn-slab min-h-11 w-full text-sm sm:w-auto"
+                  >
+                    立即報名 <ArrowRight size={15} />
+                  </Link>
+                ) : (
+                  <Link
+                    href="/hyrox"
+                    className="btn-base btn-ghost btn-slab min-h-11 w-full text-sm sm:w-auto"
+                  >
+                    查看詳情 <ArrowRight size={15} />
+                  </Link>
+                )}
+              </div>
+            </div>
+          ) : (
+            <div className="slab mt-4 border border-dashed border-white/15 px-4 py-8 text-center">
+              <p className="text-sm text-white/70">暫未公布下一場 HYROX</p>
+              <Link
+                href="/hyrox"
+                className="btn-base btn-ghost btn-slab mt-4 inline-flex min-h-11 px-5 text-sm"
+              >
+                查看 HYROX <ArrowRight size={15} />
+              </Link>
+            </div>
+          )}
+
+          <div className="mt-4 border-t border-[var(--line-fine)] pt-3">
+            <Link
+              href="/hyrox/results"
+              className="inline-flex min-h-11 items-center gap-1.5 text-sm font-semibold text-white/70 transition hover:text-white"
+            >
+              <Trophy size={15} className="text-vital-bright" />
+              查看完賽排行榜 <ArrowRight size={15} />
+            </Link>
+          </div>
         </div>
 
         {/* ===== 紀錄區：節奏式排版 ===== */}

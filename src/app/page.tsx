@@ -1,7 +1,7 @@
 import type { CSSProperties, ReactNode } from "react";
 import { Fragment } from "react";
 import Link from "next/link";
-import { ArrowRight } from "lucide-react";
+import { ArrowRight, Trophy } from "lucide-react";
 import { BrandIntro } from "@/components/BrandIntro";
 /* 首頁圖片輪播：資料由後台 /admin/slides 維護（表 public.home_slides） */
 import { SlideCarousel } from "@/components/home/SlideCarousel";
@@ -11,11 +11,15 @@ import {
   getCachedMonthlyLeaderboard,
   getCachedSiteStats,
   getClassNamesByColor,
+  getHyroxEvents,
+  getRaceEventsForMonth,
   getScheduleLegend,
   getScheduleMonth,
   getSiteBlocks,
   getSiteContent,
   getSiteTheme,
+  shiftISODate,
+  type CalendarRaceRow,
 } from "@/lib/queries";
 import { ScheduleCalendar } from "@/components/schedule/ScheduleCalendar";
 import {
@@ -23,7 +27,11 @@ import {
   macauTodayISO,
   sessionRowToView,
   sortSessionViews,
+  type ScheduleCta,
+  type ScheduleSessionView,
+  type ScheduleStatus,
 } from "@/components/schedule/schedule-utils";
+import type { HyroxEvent } from "@/lib/types";
 import { RULES } from "@/lib/config";
 import type { BlockId, SiteBlock } from "@/lib/content";
 import { publicAssetUrl } from "@/lib/assets";
@@ -97,6 +105,129 @@ function fxDelay(seconds: number): CSSProperties {
   return { "--fx-d": `${seconds}s` } as CSSProperties;
 }
 
+/* =====================================================================
+ * 首頁月曆要併入 HYROX 付費場與賽事（站主 2026-11-22）
+ *
+ * 站主原話：「日曆，請你主頁的也要是完整版，而且日曆中我看不到 hyrox
+ * 比賽的顯示，請修正」。
+ * 所以首頁月曆不再只有班表堂，而是與 /events 同一個口徑：
+ *   班表堂（training_sessions）
+ *   ∪ HYROX 付費場（events.series = 'hyrox'）
+ *   ∪ 賽事（events.series = 'race'，多日賽事每天各一格）
+ *
+ * 【為什麼把 /events 的兩個函式複製過來】
+ *   本輪禁區是「不改 /events」。若抽成共用模組，就必須同時改 /events 的
+ *   import 與呼叫點，超出範圍。下面兩支是 `src/app/events/page.tsx` 的
+ *   `hyroxToView` / `raceToViews` **鏡像**：CTA 文案、顏色語意、多日展開規則
+ *   必須一致。⚠️ 日後改動 /events 那兩支時，請同步改這裡（反之亦然），
+ *   否則首頁與活動頁的月曆會各講一套。
+ * ===================================================================== */
+
+/**
+ * HYROX 付費場次 → 月曆格要的形狀（鏡像 /events 的 hyroxToView）。
+ *
+ * CTA 分三種（/hyrox/register 只認「下一個 upcoming 場次」，不讀 ?event=）：
+ *   已過期 → 看場次詳情 /hyrox/[id]
+ *   未登入 → /login?next=/hyrox/register?event=<id>（登入後回到報名頁）
+ *   已登入 → /hyrox/register?event=<id>
+ */
+function hyroxHomeToView(
+  event: HyroxEvent,
+  todayISO: string,
+  isLoggedIn: boolean
+): ScheduleSessionView {
+  const date = event.event_date ?? "";
+  const isPast = date !== "" && date < todayISO;
+  const registerHref = `/hyrox/register?event=${event.id}`;
+
+  let cta: ScheduleCta | null;
+  if (isPast) {
+    // 已結束的付費場：不給報名 CTA，改成回顧頁（該頁自己會寫「已結束」）
+    cta = { label: "查看活動回顧", href: `/hyrox/${event.id}` };
+  } else if (isLoggedIn) {
+    cta = { label: "立即報名", href: registerHref };
+  } else {
+    cta = {
+      label: "登入後報名",
+      href: `/login?next=${encodeURIComponent(registerHref)}`,
+    };
+  }
+
+  return {
+    id: event.id,
+    kind: "hyrox",
+    title: event.title,
+    date,
+    startTime: event.start_time ? event.start_time.slice(0, 5) : null,
+    endTime: event.end_time ? event.end_time.slice(0, 5) : null,
+    colorKey: null,
+    coachName: null,
+    location: event.location ?? null,
+    capacity: event.capacity ?? null,
+    status: "open",
+    paid: true,
+    feeCents: event.fee_cents ?? null,
+    cta,
+  };
+}
+
+/**
+ * 賽事 → 月曆格要的形狀（鏡像 /events 的 raceToViews）。
+ *
+ * 【多日賽事每一天各產生一筆】11/20–11/22 的賽事要在三個格子都出現，
+ * 只標第一天會讓人以為 21、22 號沒事。三筆的 id 相同，所以月曆的
+ * React key 一定要帶 `date`（ScheduleCalendar 用 `${kind}-${id}-${date}`）。
+ *
+ * 【CTA 只有兩種，都不導向報名】已結束（以**最後一天**判斷）→ 查看賽事回顧；
+ * 未結束 → 查看賽事。兩者都連 /races/[id]。
+ *
+ * 【paid 一律 false】`paid` 的語意是「HYROX 付費場」，會影響「需付費」徽章
+ * 與付費統計；賽事不是付費場，不能混進去。
+ */
+function raceHomeToViews(
+  event: CalendarRaceRow,
+  todayISO: string
+): ScheduleSessionView[] {
+  const start = event.event_date;
+  if (!start) return [];
+
+  // end_date 早於 event_date（或等於）都視為單日賽事，不讓髒資料把日期倒著展開
+  const end = event.end_date && event.end_date > start ? event.end_date : start;
+  const ended = end < todayISO;
+
+  const cta: ScheduleCta = ended
+    ? { label: "查看賽事回顧", href: `/races/${event.id}` }
+    : { label: "查看賽事", href: `/races/${event.id}` };
+
+  const status: ScheduleStatus = event.status === "open" ? "open" : "closed";
+
+  const views: ScheduleSessionView[] = [];
+  let cursor = start;
+  // 上限 60 天：end_date 若被打成 2099 年，也不至於把整個月曆灌爆
+  for (let i = 0; i < 60; i += 1) {
+    views.push({
+      id: event.id,
+      kind: "race",
+      title: event.title,
+      date: cursor,
+      startTime: event.start_time ? event.start_time.slice(0, 5) : null,
+      endTime: event.end_time ? event.end_time.slice(0, 5) : null,
+      colorKey: null,
+      coachName: null,
+      location: event.location ?? null,
+      capacity: null,
+      status,
+      paid: false,
+      feeCents: event.fee_cents ?? null,
+      cta,
+    });
+    if (cursor >= end) break;
+    cursor = shiftISODate(cursor, 1);
+  }
+
+  return views;
+}
+
 /**
  * T-5：hero 描述改讀 DB 單一字串（site_content.hero.desc）。
  * 基線將月度目標公里數以 font-semibold text-white 強調（原本喺 JSX
@@ -134,17 +265,29 @@ export default async function HomePage() {
       getPromoRace(),
     ]);
 
-  /* ---------- 首頁「本月場次」日曆（B4 版本 1）----------
-   * 站主要求「主頁同活動頁都可以放」：首頁放精簡版，讓第一次進站的人不用
+  /* ---------- 首頁「本月場次」日曆（B4 版本 1 → 2026-11 完整版）----------
+   * 站主要求「主頁同活動頁都可以放」：首頁放日曆，讓第一次進站的人不用
    * 先找到「活動」頁才看得到班表。
-   * 資料全部走 /events 同一批 cached getter，所以兩邊的月份、圖例、顏色
-   * 不會各講一套。
+   * 資料全部走 /events 同一批 cached getter（HYROX 亦同一個查詢函式），
+   * 所以兩邊的月份、圖例、顏色、HYROX／賽事內容不會各講一套。
+   *
+   * 2026-11 站主：「主頁的也要是完整版，而且日曆中我看不到 hyrox 比賽」：
+   *   ① 移除 compact（圖例全文、手機 pill 改完整標籤）
+   *   ② 併入 HYROX 付費場與賽事（見上面的 hyroxHomeToView / raceHomeToViews）
    */
   const todayISO = macauTodayISO();
-  const [availableMonths, legend, classesByColor] = await Promise.all([
+  const [
+    availableMonths,
+    legend,
+    classesByColor,
+    // 含 archived（往期回顧場），draft 在下面過濾掉，不能外洩。
+    // 首頁是 force-dynamic，用得到讀 cookie 的版本；/events 亦係同一支。
+    hyroxAll,
+  ] = await Promise.all([
     getAvailableMonths(),
     getScheduleLegend(),
     getClassNamesByColor(),
+    getHyroxEvents({ includeArchived: true }),
   ]);
 
   /** 優先顯示「含今天」的已發布月份，沒有就退回最新已發布月份 */
@@ -158,20 +301,55 @@ export default async function HomePage() {
   const latestPublished =
     availableMonths.length > 0 ? availableMonths[availableMonths.length - 1] : null;
   const scheduleMonth = thisMonthPublished ?? latestPublished;
-  const homeSchedule = scheduleMonth
-    ? await getScheduleMonth(scheduleMonth.year, scheduleMonth.month)
+
+  // 班表與賽事都要「顯示月份」才查得到，所以兩支並行、放喺 months 之後
+  const monthQueries = scheduleMonth
+    ? await Promise.all([
+        getScheduleMonth(scheduleMonth.year, scheduleMonth.month),
+        getRaceEventsForMonth(scheduleMonth.year, scheduleMonth.month),
+      ])
     : null;
-  const homeDays =
-    scheduleMonth && homeSchedule
-      ? buildMonthDays({
-          year: scheduleMonth.year,
-          month: scheduleMonth.month,
-          sessions: sortSessionViews(
-            homeSchedule.sessions.map((row) => sessionRowToView(row, todayISO))
-          ),
-          todayISO,
-        })
-      : [];
+  const homeSchedule = monthQueries ? monthQueries[0] : null;
+  const monthRaces: CalendarRaceRow[] = monthQueries ? monthQueries[1] : [];
+
+  const scheduleMonthKey = scheduleMonth
+    ? `${scheduleMonth.year}-${String(scheduleMonth.month).padStart(2, "0")}`
+    : null;
+
+  /**
+   * 當月要畫上日曆的 HYROX 場次。過濾口徑與 /events 的 hyroxInMonth 完全一致：
+   * 排除 draft、必須有 event_date、且屬於顯示月份（含 archived）。
+   */
+  const hyroxInMonth = scheduleMonthKey
+    ? hyroxAll.filter(
+        (e) =>
+          e.status !== "draft" &&
+          e.event_date !== null &&
+          e.event_date.slice(0, 7) === scheduleMonthKey
+      )
+    : [];
+
+  const classViews: ScheduleSessionView[] = homeSchedule
+    ? homeSchedule.sessions.map((row) => sessionRowToView(row, todayISO))
+    : [];
+  const hyroxViews: ScheduleSessionView[] = hyroxInMonth.map((e) =>
+    // 首頁有 profile，所以 CTA 可以照登入狀態分岔（同 /events 一樣）
+    hyroxHomeToView(e, todayISO, Boolean(profile))
+  );
+  // 賽事不受「班表是否發布」影響，一律鋪上去；跨月賽事由
+  // getRaceEventsForMonth 的多日展開保證，buildMonthDays 只會把當月的日子排進格。
+  const raceViews: ScheduleSessionView[] = monthRaces.flatMap((e) =>
+    raceHomeToViews(e, todayISO)
+  );
+
+  const homeDays = scheduleMonth
+    ? buildMonthDays({
+        year: scheduleMonth.year,
+        month: scheduleMonth.month,
+        sessions: sortSessionViews([...classViews, ...hyroxViews, ...raceViews]),
+        todayISO,
+      })
+    : [];
 
   /* 2026-11：hero 右欄（含「下一場定期訓練」卡與倒數）已下架——場次資訊在
      下方「本月場次」日曆與 /training 已有，屬重複。倒數目標時刻
@@ -618,11 +796,12 @@ export default async function HomePage() {
   );
 
   /**
-   * 「本月場次」——首頁版日曆（B4 版本 1）。
+   * 「本月場次」——首頁版日曆。
    *
    * 站主原話：「主頁同活動頁面都可以放，請你兩個版本都做俾我睇」。
-   * 首頁這一版走精簡密度（compact）：手機只留月曆格 + 顏色短條，
-   * 圖例全文與說明留給 /events，避免首頁高度失控。
+   * 2026-11 站主再指示：「主頁的也要是**完整版**，而且日曆中我看不到
+   * hyrox 比賽的顯示」→ 已移除 compact，並併入 HYROX 付費場與賽事
+   * （資料組裝見上方 hyroxHomeToView / raceHomeToViews）。
    *
    * 位置（站主 2026-02 指定）：緊接在統計帶之後、排行榜之前，
    * 由 render 端的 scheduleAfterId 插入。色帶用 band-0：前一塊統計帶是
@@ -650,7 +829,6 @@ export default async function HomePage() {
               legend={legend}
               classesByColor={classesByColor}
               todayISO={todayISO}
-              compact
             />
           </div>
         ) : (
@@ -662,6 +840,27 @@ export default async function HomePage() {
         <div className="mt-6">
           <Link href="/events" className="btn-base btn-ghost btn-slab min-h-11">
             看完整班表與顏色對照 <ArrowRight size={16} />
+          </Link>
+        </div>
+
+        {/* 完賽排行榜入口（站主 2026-11-22：「放到主頁」）。
+            放「本月場次」之後、同一色帶內，不新增 band（避免與下一塊
+            band-1 連成一片）；文案用既有字串（/hyrox 入口卡同一組），
+            不發明新文案。 */}
+        <div className="mt-8 card-dark flex flex-col gap-4 p-5 sm:flex-row sm:items-center sm:justify-between md:p-6">
+          <div className="min-w-0">
+            <p className="flex items-center gap-2 text-[11px] font-bold uppercase tracking-[0.22em] text-white/45">
+              <Trophy size={14} /> Results
+            </p>
+            <h3 className="mt-2 break-words text-lg font-black tracking-tight md:text-xl">
+              HYROX 完賽排行榜
+            </h3>
+          </div>
+          <Link
+            href="/hyrox/results"
+            className="btn-base btn-vital btn-slab min-h-11 w-full flex-none sm:w-auto"
+          >
+            查看完賽排行榜 <ArrowRight size={16} />
           </Link>
         </div>
       </div>

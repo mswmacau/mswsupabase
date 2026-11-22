@@ -391,6 +391,9 @@ export const DEFAULT_NAV: SiteNav = {
       ],
     },
     { href: "/leaderboard", label: "排行榜", visible: true },
+    // 站主 2026-11-22：「完賽榜放到主選單」。與里程榜並列，
+    // 但語意不同（里程 vs 完賽時間），所以是獨立一項而不是排行榜的子項。
+    { href: "/hyrox/results", label: "完賽榜", visible: true },
     { href: "/coaches", label: "教練團隊", visible: true },
     { href: "/pricing", label: "收費與會籍", visible: true },
   ],
@@ -546,6 +549,8 @@ export const NAV_HREFS: readonly string[] = [
   "/training",
   "/run",
   "/leaderboard",
+  // 完賽榜（站主要求放主選單；HYROX 家族，榜身仍是 /hyrox/results 單頁）
+  "/hyrox/results",
   "/coaches",
   "/pricing",
 ];
