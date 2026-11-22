@@ -36,7 +36,7 @@ import {
   Users,
   Wallet,
 } from "lucide-react";
-import { formatRaceDate, getRace } from "../_data";
+import { formatRaceDate, getRace, getRaceAlbumLinks } from "../_data";
 import { RaceStatusPill } from "../_components/RaceStatusPill";
 /* 公開頁視覺語彙（觸控 44 / 卡片三級 / 白圈 focus） */
 import "../../public-ui.css";
@@ -134,6 +134,7 @@ export async function generateMetadata({
 export default async function RacePage({ params }: PageProps) {
   const { slug } = await params;
   const race = await getRace(slug);
+  const albumLinks = race ? await getRaceAlbumLinks(race.id) : [];
   if (!race) notFound();
 
   const dateLabel = formatRaceDate(race);
@@ -306,6 +307,33 @@ export default async function RacePage({ params }: PageProps) {
               <ExternalLink size={15} aria-hidden />
               <span className="sr-only">（另開新視窗）</span>
             </a>
+          )}
+
+          {/* 更多相簿（event_album_links；主相簿按鈕零改動，其下的按鈕列）。
+              一律外開新視窗——主流雲相簿的 X-Frame-Options 都擋 iframe，
+              嵌入只會得到空白框（方案 §3.1 定案）。無連結 → 整段零渲染。 */}
+          {race.status === "photos" && albumLinks.length > 0 && (
+            <div className="mt-4">
+              <p className="text-xs font-bold uppercase tracking-[0.18em] text-white/45">
+                更多相簿
+              </p>
+              <ul className="mt-3 flex flex-wrap gap-2">
+                {albumLinks.map((link) => (
+                  <li key={link.id} className="min-w-0">
+                    <a
+                      href={link.url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="slab inline-flex min-h-11 max-w-full items-center gap-1.5 border border-white/15 bg-white/[0.03] px-4 py-2 text-sm text-white/80 transition hover:border-white/40 hover:text-white"
+                    >
+                      <span className="min-w-0 truncate">{link.label}</span>
+                      <ExternalLink size={13} aria-hidden className="flex-none" />
+                      <span className="sr-only">（另開新視窗）</span>
+                    </a>
+                  </li>
+                ))}
+              </ul>
+            </div>
           )}
         </div>
       </div>

@@ -511,6 +511,45 @@ export const getRace = cache(async (slug: string): Promise<Race | null> => {
   return { ...race, stats, schedule };
 });
 
+/** 「更多相簿」一列（event_album_links；方案 §3.2 相簿多連結） */
+export type RaceAlbumLink = {
+  id: string;
+  url: string;
+  /** 按鈕文字，如「攝影師 A」（管理端命名，1–40 字） */
+  label: string;
+};
+
+/**
+ * 該場賽事的相簿連結清單（sort_order 升冪，0–5 筆）。
+ *
+ * 前台只渲染外開按鈕（雲相簿的 X-Frame-Options 全擋 iframe，方案 §3.1
+ * 定案不做嵌入）。主相簿 events.album_url 的大按鈕不動，這是它下面的
+ * 「更多相簿」按鈕列。
+ *
+ * 降級同本檔慣例：表未建（migration 未跑）／任何錯誤 → []，
+ * 按鈕列整段不渲染（驗收：console 0 error、無 JS 前台零殘缺）。
+ */
+export const getRaceAlbumLinks = cache(
+  async (eventId: string): Promise<RaceAlbumLink[]> => {
+    if (!eventId) return [];
+    const supabase = anonClient();
+    if (!supabase) return [];
+    try {
+      const { data } = await supabase
+        .from("event_album_links")
+        .select("id,url,label")
+        .eq("event_id", eventId)
+        .order("sort_order", { ascending: true })
+        .limit(5);
+      return ((data as unknown as RaceAlbumLink[]) ?? []).filter(
+        (l) => typeof l.url === "string" && /^https?:\/\//.test(l.url)
+      );
+    } catch {
+      return [];
+    }
+  }
+);
+
 /**
  * 報名表需要的「賽事層」付款資訊（不屬於公開頁的 Race 型別，故意另開一支）。
  *

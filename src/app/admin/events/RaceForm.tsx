@@ -41,6 +41,7 @@ import {
   X,
 } from "lucide-react";
 import { deleteJson, patchJson, postJson } from "@/lib/fetch-json";
+import { AlbumLinksEditor } from "./AlbumLinksEditor";
 import {
   RACE_STATUS_OPTIONS,
   deadlineApiToInput,
@@ -586,6 +587,18 @@ export function RaceForm({ mode, race, onClose, onSaved }: RaceFormProps) {
                     />
                     <FieldError message={fields.album_label} />
                   </div>
+
+                  {/* 更多相簿連結（F-08）：主相簿欄位零改動，其下的按鈕列。
+                      只有編輯模式才渲染——連結需要 event_id（與組別同一條紀律）。
+                      新增模式顯示指路文字。 */}
+                  {isEdit && race ? (
+                    <AlbumLinksEditor eventId={race.id} />
+                  ) : (
+                    <p className="mt-3 rounded-xl border border-dashed border-white/15 px-4 py-3 text-xs leading-relaxed text-white/55">
+                      存檔後可為這場賽事加「更多相簿」連結（最多 5 筆，
+                      相片模式時顯示在主相簿按鈕下面）。
+                    </p>
+                  )}
                 </div>
               </div>
             )}
