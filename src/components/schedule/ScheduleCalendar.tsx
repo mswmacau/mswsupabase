@@ -9,6 +9,7 @@ import {
   RACE_HEX,
   RACE_LABEL,
   WEEKDAY_LABELS,
+  formatDayLong,
   formatDayShort,
   formatMonthTitle,
   sessionAccentHex,
@@ -21,28 +22,27 @@ import type { ScheduleLegendItem } from "@/lib/types";
 const MAX_PILLS_DESKTOP = 3;
 /** 平板 pill 更窄，只放 2 個 */
 const MAX_PILLS_TABLET = 2;
-/** 手機每格最多幾條顏色短條 */
-const MAX_BARS_MOBILE = 3;
 
 /**
- * 班表日曆 —— **所有斷點都是月曆**（7 欄 × 5–6 列），只調整密度。
+ * 班表日曆 —— **兩個斷點，兩種形態**。
  *
  * 客戶原話：「不要週檢視，要用月曆放進手機（現況），如果看不到，上方可以說明
  * 顏色所代表的活動，並且後台同步」
+ * 2026-11 站主補一句：「手機介面是首要」——手機要睇得出邊日有 HYROX／比賽。
  *
- *   桌面（≥1024）  格子顯示 pill：`19:00 街健基礎力量`，最多 3 個，超過 +N
- *   平板（768–1023）pill 只顯示時間 + 課名、字縮小，最多 2 個，超過 +N
- *   手機（<768）   格子至少 56px 高；每場只畫一條高 4px、滿格的顏色短條，
- *                  不寫任何文字；超過 3 場顯示 +N。
+ *   平板／桌面（≥768）月曆 grid（7 欄 × 5–6 列），只調整密度：
+ *     桌面（≥1024）    格子顯示 pill：`19:00 街健基礎力量`，最多 3 個，超過 +N
+ *     平板（768–1023） pill 只顯示時間 + 課名、字縮小，最多 2 個，超過 +N
  *
- * 點擊行為三個斷點一致：整格都有一層 inset-0 的按鈕，點格子任何非 pill 的位置
- * （含 `+N`）→ 開當日場次清單；pill 本身（z-20）→ 直接開單場詳情。
+ *   手機（<768）      改為**當月議程清單**：逐日一個日期標題，下面逐行
+ *                     `19:30–21:00 完整場次名 [付費場次／比賽]`，每行可點開詳情。
  *
- * 手機不放課名的原因很實際：390 寬 ÷ 7 欄 ≈ 52px，任何課名都會被截成
- * 「街健基…」這種看不懂的東西。顏色短條 + 上方圖例才是能讀的版本。
+ * 為什麼手機唔再畫 42 格：390 寬 ÷ 7 欄 ≈ 52px，格內任何課名都會被截成
+ * 「街健基…」，只能靠顏色短條 + 圖例去猜；站主實測回饋「睇唔出邊日有 HYROX／比賽」。
+ * 議程清單讓場次名完整可讀，代價是沒有「一屏看完整個月」的版面感——
+ * 站主已明確選了可讀性。
  *
- * 手機不橫向捲動：7 欄等寬、每個容器 min-w-0、日期數字 13px，
- * 390 寬下 scrollWidth === clientWidth。
+ * 點擊行為兩個斷點一致：每行 → 同一個 `openSession()` → 同一個詳情面板。
  *
  * 場次資料（含 HYROX 付費場次）由 Server Component 攤平成 ScheduleSessionView 後傳入，
  * 這裡只管畫與互動，不碰資料庫、不做日期計算以外的業務判斷。
@@ -82,6 +82,15 @@ export function ScheduleCalendar({
   const [selected, setSelected] = useState<ScheduleSessionView | null>(null);
 
   const hasAnySession = days.some((day) => day.inMonth && day.sessions.length > 0);
+
+  /**
+   * 手機議程清單的資料：只留「本月且有場次」的日子。
+   * `days` 本身含前後補格（inMonth = false），那些是給 grid 排版用的，
+   * 議程清單列出來只會多出一堆跨月空日。
+   */
+  const agendaDays = days.filter(
+    (day) => day.inMonth && day.sessions.length > 0
+  );
 
   /** 這個月有沒有賽事：決定要不要在圖例裡補一項「比賽」 */
   const hasRaceDay = days.some(
@@ -159,8 +168,52 @@ export function ScheduleCalendar({
         </p>
       )}
 
-      {/* ================= 月曆（全斷點共用，只調密度） ================= */}
-      <div className="mt-5 min-w-0">
+      {/* ================= 手機（<768）：當月議程清單 =================
+          站主 2026-11：「手機介面是首要」「睇唔出邊日有 HYROX／比賽」。
+          42 格 grid 在 390 寬每格只有 ~52px，放唔落場次名，所以手機改成
+          逐日議程：日期標題 + 每場一行（時間、完整場次名、狀態徽章），
+          每行點開同一個詳情面板（onSelect → openSession）。
+          只列有場次的日子；整月冇場次時，上面的空狀態已經講清楚。
+          純靜態 markup（server render 出嚟就有），關掉 JS 都讀得到全部場次名。 */}
+      <div className="mt-5 md:hidden">
+        <ol
+          aria-label={`${formatMonthTitle(year, month)}${headingSuffix}`}
+          className="border-t border-white/10"
+        >
+          {agendaDays.map((day) => (
+            <li key={day.date} className="border-b border-white/10 py-3">
+              <div className="flex items-center gap-2">
+                <h4
+                  className={`text-sm font-bold tracking-tight ${
+                    day.isToday ? "text-vital-bright" : "text-white/85"
+                  }`}
+                >
+                  {formatDayLong(day.date)}
+                </h4>
+                {day.isToday && (
+                  <span className="shrink-0 text-[9px] font-semibold uppercase tracking-[0.16em] text-vital-bright">
+                    今天
+                  </span>
+                )}
+              </div>
+
+              <ul className="mt-2 space-y-1.5">
+                {day.sessions.map((session) => (
+                  <li key={`${session.kind}-${session.id}-${session.date}`}>
+                    <AgendaRow session={session} onSelect={openSession} />
+                  </li>
+                ))}
+              </ul>
+            </li>
+          ))}
+        </ol>
+      </div>
+
+      {/* ================= 平板／桌面（≥768）：月曆 grid =================
+          版面與改動前完全一致（只在外層加了 hidden md:block）。
+          手機專用的顏色短條與「賽」字徽章已移除：它們掛在 md:hidden，
+          而整個 grid 在手機已經不渲染，屬不可能再出現的死碼。 */}
+      <div className="mt-5 hidden min-w-0 md:block">
         <div
           className="grid min-w-0 grid-cols-7 border-l border-t border-white/10"
           role="group"
@@ -179,8 +232,6 @@ export function ScheduleCalendar({
           ))}
 
           {days.map((day) => {
-            const extraBars = Math.max(day.sessions.length - MAX_BARS_MOBILE, 0);
-
             /**
              * 賽事（kind = "race"）在這一格的處理。
              *
@@ -189,9 +240,8 @@ export function ScheduleCalendar({
              *   · 完整名稱由 pill（平板以上）與賽事頁承接
              *
              * `raceOnly`：這天只有賽事、沒有任何課堂或 HYROX 付費場時，
-             * 整格直接連到賽事頁。手機的顏色短條是 aria-hidden 的純裝飾、
-             * 沒有 pill 可點，若不改連結，390 用戶點下去只會看到
-             * `/training/[date]` 的「當日無場次」，等於無法從月曆走到賽事。
+             * 整格直接連到賽事頁。手機已改為議程清單，但平板（768–1023）
+             * 仍然是 grid，這條規則要繼續生效。
              */
             const firstRace = day.sessions.find((s) => s.kind === "race") ?? null;
             const hasRace = firstRace !== null;
@@ -250,38 +300,11 @@ export function ScheduleCalendar({
                   >
                     {Number(day.date.slice(8, 10))}
                   </span>
-                  {/* 手機：賽事只放單字「賽」。格子約 50px 寬、可用 ~36px，
-                      日期數字約 16px，剩下的寬度放 9px 字 + 2px padding 剛好（實測 14×12px）。
-                      刻意不寫「比賽」兩字，會把格子撐爆。
-                      桌面（md 以上）改由下方 pill 上的「比賽」徽章表示，這裡收起來。 */}
-                  {hasRace && day.inMonth && (
-                    <span
-                      aria-hidden
-                      className="ml-auto shrink-0 rounded-[2px] px-[2px] text-[9px] font-black leading-[12px] md:hidden"
-                      style={{ backgroundColor: RACE_HEX, color: "#0f0f0f" }}
-                    >
-                      賽
-                    </span>
-                  )}
+                  {/* 賽事徽章：平板以上由 pill 上的「比賽」／「賽」表示，
+                      日期列這裡不再重複畫（手機版已改為議程清單，場次名直接寫出來）。 */}
                   {day.isToday && (
                     <span className="hidden text-[9px] font-semibold uppercase tracking-[0.16em] text-vital-bright md:inline">
                       今天
-                    </span>
-                  )}
-                </div>
-
-                {/* ---------- 手機：顏色短條，不顯示文字 ---------- */}
-                <div className="mt-1 space-y-[2px] md:hidden" aria-hidden>
-                  {day.sessions.slice(0, MAX_BARS_MOBILE).map((session) => (
-                    <span
-                      key={`${session.kind}-${session.id}-${session.date}`}
-                      className="block h-1 w-full rounded-[1px]"
-                      style={{ backgroundColor: sessionAccentHex(session) }}
-                    />
-                  ))}
-                  {extraBars > 0 && (
-                    <span className="block text-[9px] font-semibold leading-none text-white/45">
-                      +{extraBars}
                     </span>
                   )}
                 </div>
@@ -349,6 +372,87 @@ export function ScheduleCalendar({
         onClose={closePanel}
       />
     </div>
+  );
+}
+
+/**
+ * 手機議程清單的一行：時間 + **完整場次名** + 狀態徽章。
+ *
+ * 同 SessionPill 的分工：
+ *   · SessionPill 是「格子裡的小標籤」（平板／桌面），寬度有限，課名會 truncate；
+ *   · AgendaRow 是「清單項」（手機），站主要求睇得出邊場係 HYROX／比賽，
+ *     所以場次名不截斷（`break-words` 必要時換行），徽章寫成文字
+ *     （付費場次／比賽／已取消），不靠顏色分辨。
+ *
+ * 觸控：`min-h-11` = 44px 起跳，符合本專案的手機目標尺寸。
+ * 點擊 → 同一個 `onSelect` → 同一個詳情面板（不另做一套）。
+ *
+ * 註：剩餘名額唔喺呢一行顯示——`ScheduleSessionView` 冇 remaining／taken
+ * 欄位（座位數只存在於 `session_seats` 檢視，由日期頁自己查），
+ * 要加就得改資料層，本輪禁區。
+ */
+function AgendaRow({
+  session,
+  onSelect,
+}: {
+  session: ScheduleSessionView;
+  onSelect: (session: ScheduleSessionView) => void;
+}) {
+  const cancelled = session.status === "cancelled";
+  const isRace = session.kind === "race";
+  const accent = sessionAccentHex(session);
+  // 議程有位置寫完整時間段，唔止開始時間
+  const time =
+    session.startTime && session.endTime
+      ? `${session.startTime}–${session.endTime}`
+      : session.startTime ?? "待定";
+
+  const badge = (color: string, text: string) => (
+    <span
+      className="shrink-0 border px-1.5 py-0.5 text-[10px] font-bold"
+      style={{
+        color,
+        borderColor: `color-mix(in srgb, ${color} 45%, transparent)`,
+        backgroundColor: `color-mix(in srgb, ${color} 12%, transparent)`,
+      }}
+    >
+      {text}
+    </span>
+  );
+
+  return (
+    <button
+      type="button"
+      onClick={() => onSelect(session)}
+      aria-label={`${formatDayShort(session.date)} ${time} ${session.title}${
+        isRace ? "，比賽" : ""
+      }${session.paid ? "，付費場次" : ""}${cancelled ? "，已取消" : ""}，看詳情`}
+      className="flex min-h-11 w-full cursor-pointer flex-wrap items-center gap-x-3 gap-y-1 px-3 py-2 text-left transition hover:bg-white/[0.06] focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-vital-bright"
+      style={{
+        backgroundColor: cancelled
+          ? "color-mix(in srgb, #9ca3af 8%, transparent)"
+          : `color-mix(in srgb, ${accent} 14%, transparent)`,
+        borderLeft: `3px solid ${accent}`,
+      }}
+    >
+      <span
+        className={`shrink-0 text-[11px] font-semibold tabular-nums ${
+          cancelled ? "text-white/40 line-through" : "text-white/80"
+        }`}
+      >
+        {time}
+      </span>
+      <span
+        className={`min-w-0 flex-1 break-words text-sm font-semibold ${
+          cancelled ? "text-white/40 line-through" : "text-white"
+        }`}
+      >
+        {session.title}
+      </span>
+      {isRace && !cancelled && badge(RACE_HEX, RACE_LABEL)}
+      {session.paid && !cancelled && badge(PAID_HEX, "付費場次")}
+      {cancelled && badge("#9ca3af", "已取消")}
+    </button>
   );
 }
 
