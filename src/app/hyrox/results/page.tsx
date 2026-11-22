@@ -165,7 +165,7 @@ export default async function HyroxResultsPage({
                         ) : (
                           <Medal size={12} />
                         )}
-                        Rank {podium.indexOf(row) + 1}
+                        第 {podium.indexOf(row) + 1} 名
                       </p>
                       <BoardName row={row} big />
                       <p className="stat-figure tnum mt-3 break-words text-2xl font-black text-white md:text-3xl">
