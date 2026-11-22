@@ -262,6 +262,48 @@ export function deleteTrainingSession(id: string) {
 }
 
 /* =============================================================
+ * 批量生成（POST action:"batch"）
+ * ============================================================= */
+
+/**
+ * 批量生成一整個月的固定星期場次。
+ *
+ * 契約（與白客同步）：
+ *   { action:"batch", year, month, weekdays:[0–6], class_id, start_time, end_time,
+ *     status, capacity, location, coach_name, note, include_past }
+ *   → { ok:true, created, skipped, dates:[], skipped_dates:[] }
+ *
+ * weekdays 用 JS getDay() 的 0=日…6=六；後端已存在的同日期同時段會略過，
+ * 前端不判斷重複（skipped 由後端回）。
+ */
+export interface BatchResult {
+  created: number;
+  skipped: number;
+  dates: string[];
+  skipped_dates: string[];
+}
+
+export function batchCreateSessions(body: {
+  year: number;
+  month: number;
+  weekdays: number[];
+  class_id: string;
+  start_time: string;
+  end_time: string;
+  status: SessionStatus;
+  capacity: number | null;
+  location: string;
+  coach_name: string;
+  note: string;
+  include_past: boolean;
+}) {
+  return trainingRequest<BatchResult>("/api/admin/training/sessions", {
+    method: "POST",
+    body: { action: "batch", ...body },
+  });
+}
+
+/* =============================================================
  * 顏色圖例（supabase/migration-schedule-legend.sql）
  * ============================================================= */
 

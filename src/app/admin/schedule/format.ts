@@ -39,6 +39,19 @@ export function currentMacauMonth(): { year: number; month: number } {
   return { year: Number(y), month: Number(m) };
 }
 
+/**
+ * 澳門當下的日期字串 'YYYY-MM-DD'（批量生成「不要生成過去的日期」用）。
+ * 與 currentMacauMonth 同一個時區來源；en-CA 的日期格式剛好是 YYYY-MM-DD。
+ */
+export function macauTodayISO(): string {
+  return new Intl.DateTimeFormat("en-CA", {
+    timeZone: MACAU_TZ,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).format(new Date());
+}
+
 /** 年月加減 n 個月（可能超出 2024–2100，呼叫端自行判斷） */
 export function shiftMonth(
   base: { year: number; month: number },

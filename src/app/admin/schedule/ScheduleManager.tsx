@@ -27,7 +27,14 @@
  */
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { AlertTriangle, CalendarPlus, Database, Loader2, RotateCw } from "lucide-react";
+import {
+  AlertTriangle,
+  CalendarDays,
+  CalendarPlus,
+  Database,
+  Loader2,
+  RotateCw,
+} from "lucide-react";
 import { AdminError, AdminNotice, ConfirmDialog } from "@/components/admin/ui";
 import {
   copyTrainingMonth,
@@ -45,6 +52,7 @@ import {
   type YearMonth,
 } from "./api";
 import { dateGroupLabel, macauMonthDay, pad2, shiftMonth, timeRange } from "./format";
+import { BatchGenerateDialog } from "./BatchGenerateDialog";
 import { LegendEditor } from "./LegendEditor";
 import { MonthBar } from "./MonthBar";
 import { SessionFormDialog } from "./SessionFormDialog";
@@ -90,6 +98,8 @@ export function ScheduleManager({
   const [deleteError, setDeleteError] = useState<string | null>(null);
   const [unpublishOpen, setUnpublishOpen] = useState(false);
   const [copyOpen, setCopyOpen] = useState(false);
+  /** 批量生成對話框（站主：一次過生成一四六） */
+  const [batchOpen, setBatchOpen] = useState(false);
 
   const monthKey = useMemo(
     () => `${cursor.year}-${pad2(cursor.month)}`,
@@ -436,19 +446,34 @@ export function ScheduleManager({
             共 {sessions?.length ?? 0} 場
           </span>
         </h3>
-        <button
-          type="button"
-          onClick={() => {
-            setActionError(null);
-            setDialog({ mode: "create" });
-          }}
-          disabled={classes.length === 0}
-          title={classes.length === 0 ? "課程主檔還是空的，暫時無法排班" : undefined}
-          className="inline-flex min-h-11 shrink-0 items-center gap-1.5 rounded-full bg-vital px-4 py-2 text-sm font-semibold text-white transition hover:bg-vital-bright disabled:cursor-not-allowed disabled:opacity-55 md:min-h-0"
-        >
-          <CalendarPlus size={15} />
-          新增場次
-        </button>
+        <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row sm:items-center">
+          <button
+            type="button"
+            onClick={() => {
+              setActionError(null);
+              setBatchOpen(true);
+            }}
+            disabled={classes.length === 0}
+            title={classes.length === 0 ? "課程主檔還是空的，暫時無法排班" : undefined}
+            className="inline-flex min-h-11 w-full shrink-0 items-center justify-center gap-1.5 rounded-full border border-white/20 px-4 py-2 text-sm font-semibold text-white/85 transition hover:border-white/40 hover:text-white disabled:cursor-not-allowed disabled:opacity-55 sm:w-auto"
+          >
+            <CalendarDays size={15} />
+            批量生成
+          </button>
+          <button
+            type="button"
+            onClick={() => {
+              setActionError(null);
+              setDialog({ mode: "create" });
+            }}
+            disabled={classes.length === 0}
+            title={classes.length === 0 ? "課程主檔還是空的，暫時無法排班" : undefined}
+            className="inline-flex min-h-11 w-full shrink-0 items-center justify-center gap-1.5 rounded-full bg-vital px-4 py-2 text-sm font-semibold text-white transition hover:bg-vital-bright disabled:cursor-not-allowed disabled:opacity-55 sm:w-auto md:min-h-0"
+          >
+            <CalendarPlus size={15} />
+            新增場次
+          </button>
+        </div>
       </div>
 
       {classes.length === 0 && !classesError && (
@@ -491,6 +516,22 @@ export function ScheduleManager({
             月份切換與發布仍可使用；場次列表請按上面的「重試」。
           </span>
         </p>
+      )}
+
+      {batchOpen && (
+        <BatchGenerateDialog
+          classes={classes}
+          displayedMonth={cursor}
+          onClose={() => setBatchOpen(false)}
+          onGenerated={(message, month) => {
+            setNotice(message);
+            // 生成的月份可能不是目前檢視的月份：切過去才看得到結果
+            if (month.year !== cursor.year || month.month !== cursor.month) {
+              setCursor(month);
+            }
+            refreshAll();
+          }}
+        />
       )}
 
       {dialog && (
