@@ -91,6 +91,21 @@ export async function POST(request: Request) {
     const body = await readJson(request);
     if (!body) return jsonBadJson();
 
+    // 【P1-1】必填鍵齊備檢查 —— 必須在 normalizeTheme 之前。
+    // normalizeTheme(body, DEFAULT_THEME) 的語義是「缺的補預設」，
+    // 所以空 body `{}` 會被補成完整出廠主題再整包 upsert ——
+    // 站主改過的品牌名、配色、字體、圖片路徑會不可回復地消失，且回 200。
+    // 前端（SettingsForm）送的是完整 SiteTheme（{...form}），不會誤傷；
+    // 注意 logo_path / hero_bg_path 允許值為 null，但**鍵必須存在**。
+    const bodyRecord = body as Record<string, unknown>;
+    const missingTopKeys = Object.keys(DEFAULT_THEME).filter((k) => !(k in bodyRecord));
+    if (missingTopKeys.length > 0) {
+      return jsonValidation(
+        Object.fromEntries(missingTopKeys.map((k) => [k, "缺少此欄位。"])),
+        "設定不完整，為避免以預設值覆寫既有設定，此次儲存已取消。請重新載入頁面後再試。"
+      );
+    }
+
     // 1) 欄位驗證（缺的補預設，髒的一律退回，不是硬塞進 DB）
     const normalized = normalizeTheme(body, DEFAULT_THEME);
     if (!normalized.ok) return jsonValidation(normalized.fields);
@@ -128,8 +143,12 @@ export async function POST(request: Request) {
     if (error) return jsonInternal("POST /api/admin/site-settings upsert", error);
 
     // 5) DB 成功後才清舊圖：best-effort
+    //    【P1-1】加「新值非 null 才刪舊檔」——
+    //    若 next[k] 是 null（使用者清空、或上游誤送預設值），刪掉舊檔等於
+    //    把使用者可能要救回的圖片永久刪除。寧可留一個孤兒檔案（storage 成本幾乎為零），
+    //    也不要在「不確定是否真的要換」的情況下刪掉實體檔案。
     const toRemove = (["logo_path", "hero_bg_path"] as const).filter(
-      (k) => old[k] && old[k] !== next[k]
+      (k) => old[k] && next[k] !== null && old[k] !== next[k]
     );
     if (toRemove.length > 0) {
       const { error: rmErr } = await supabase.storage

@@ -107,6 +107,22 @@ export async function POST(request: Request) {
     const body = await readJson(request);
     if (!body) return jsonBadJson();
 
+    // 【P1-1】必填鍵齊備檢查 —— 必須在 normalizeContent 之前。
+    // normalizeContent(body, DEFAULT_CONTENT) 的語義是「缺的補預設」，
+    // 所以空 body `{}` 會被補成完整出廠值再整包 upsert ——
+    // 那不是「儲存」，而是「靜默覆寫成出廠值」：站主改過的文案會不可回復地消失，
+    // 而且 HTTP 還回 200「已儲存」，他不會知道出了事。
+    // 前端（ContentManager 的 useSectionSave）本來就送完整 SiteContent，
+    // 所以這個檢查不會誤傷正常操作；缺鍵只可能來自壞掉的呼叫端或手動 curl。
+    const bodyRecord = body as Record<string, unknown>;
+    const missingKeys = Object.keys(DEFAULT_CONTENT).filter((k) => !(k in bodyRecord));
+    if (missingKeys.length > 0) {
+      return jsonValidation(
+        Object.fromEntries(missingKeys.map((k) => [k, "缺少此區塊。"])),
+        "內容不完整，為避免以預設值覆寫既有內容，此次儲存已取消。請重新載入頁面後再試。"
+      );
+    }
+
     // 1) 欄位驗證（缺的補預設，髒的一律退回，不是硬塞進 DB）
     const normalized = normalizeContent(body, DEFAULT_CONTENT);
     if (!normalized.ok) return jsonValidation(normalized.fields);
