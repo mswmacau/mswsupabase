@@ -1418,6 +1418,12 @@ notify pgrst, 'reload schema';
 -- --   supabase/migration-event-attendance.sql      （analytics_hyrox_monthly）
 --
 -- -- 5.2 刪掉守衛函式（可留可刪；留著無害，但沒有任何函式會呼叫它）
+-- --
+-- -- ⚠️ 本段全部是註解，不會執行。
+-- --    要確認「本檔有幾處真正會執行的刪除語句」，請排除註解行再數：
+-- --      grep -n "drop function" supabase/migration-admin-levels-rpc.sql | grep -v ':--'
+-- --    預期只剩 1 行：§3.3b 的 do 區塊（admin_list_members 3 參數版）。
+-- --    直接 grep -c 會把本段註解也算進去，那不是真的刪除。
 -- drop function if exists public.require_module(text, boolean);
 --
 -- -- 5.3 讓 PostgREST 重載
