@@ -83,7 +83,10 @@ export const PATH_MODULE: Record<string, AdminModule> = {
   "/admin/review": "review",
   "/admin/points": "points",
   "/admin/coupons": "points",
-  "/admin/checkins": "points",
+  // 簽到確認頁的按鈕打 /api/admin/review-checkin（守衛 = review），
+  // 不是 points。此頁已被 /admin/review?tab=checkins 吸收、僅保留舊書籤，
+  // 但模組歸屬仍要與實際守衛一致，否則日後 points≠review 時會「進得去、按不了」。
+  "/admin/checkins": "review",
   "/admin/monthly": "points",
   // 跑步審核：內容屬於「待審核」，與 /admin/review 同一個工作流
   "/admin/runs": "review",
