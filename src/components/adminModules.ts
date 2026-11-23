@@ -85,10 +85,16 @@ export const PATH_MODULE: Record<string, AdminModule> = {
   "/admin/coupons": "points",
   "/admin/checkins": "points",
   "/admin/monthly": "points",
+  // 跑步審核：內容屬於「待審核」，與 /admin/review 同一個工作流
+  "/admin/runs": "review",
+  // 訓練場次（唯讀）：班表的唯讀檢視
+  "/admin/sessions": "schedule",
   "/admin/rewards": "rewards",
   "/admin/redemptions": "commerce",
   "/admin/merchants": "commerce",
-  "/admin/point-rules": "commerce",
+  // 積分規則的 API 是 authorizeModule("points")，頁面就跟著歸 points；
+  // 之前歸 commerce 會造成「commerce=none 但 points=full 的人看不到這頁」
+  "/admin/point-rules": "points",
   "/admin/content": "content",
   "/admin/slides": "slides",
   "/admin/coaches": "coaches",
