@@ -876,14 +876,19 @@ export function MemberManager({
           readOnly={readOnly}
           canManageAdminLevel={!readOnly}
           onAdminLevelChanged={(memberId, level) => {
-            // 即時回寫列表那一列：不必整頁 reload，也不會出現「列表說非管理員、
-            // 抽屜說第二級」的矛盾
+            /*
+             * 即時回寫列表那一列（level 是後端回的 data.admin_level）：
+             *   2    → role='admin'、admin_level=2
+             *   1    → role='admin'、admin_level=1
+             *   null → 取消管理員：role 也會被後端改回 'member'
+             * 不再用「送出的請求值」推，避免與後端實際結果不一致。
+             */
             setMembers((prev) =>
               prev.map((row) =>
                 row.member_id === memberId
                   ? {
                       ...row,
-                      role: level === 0 ? row.role : "admin",
+                      role: level === null ? "member" : "admin",
                       admin_level: level,
                     }
                   : row

@@ -111,7 +111,7 @@ export function MemberDrawer({
   /** 只有第一級能改別人的管理員級別（第二級自己看不到這一區） */
   canManageAdminLevel?: boolean;
   /** 改完級別即時回寫列表那一列，不必整頁 reload */
-  onAdminLevelChanged?: (memberId: string, level: number) => void;
+  onAdminLevelChanged?: (memberId: string, level: number | null) => void;
 }) {
   const panelRef = useRef<HTMLDivElement>(null);
   const [detail, setDetail] = useState<MemberDetail | null>(null);
@@ -150,9 +150,22 @@ export function MemberDrawer({
         setLevelError(message);
         return;
       }
-      setLevelOverride(next);
+      /*
+       * 以**後端回傳的 data.admin_level** 為準，不用送出的值推：
+       *   送 2  → 回 2
+       *   送 0  → 回 null（取消管理員）
+       * 白客 4a1aaef 修好了這裡的語義（原本用 ?? 會把 null 當「沒帶」而回頭
+       * 讀舊值，碰巧結果正確但很脆弱）。回傳缺欄位時才退回送出的值。
+       */
+      const savedRaw = body !== null && typeof body === "object"
+        ? (body as { data?: { admin_level?: number | null } }).data?.admin_level
+        : undefined;
+      const savedLevel: number | null =
+        savedRaw === null ? null : typeof savedRaw === "number" ? savedRaw : next === 0 ? null : next;
+
+      setLevelOverride(savedLevel);
       setLevelConfirm(null);
-      onAdminLevelChanged?.(member.member_id, next);
+      onAdminLevelChanged?.(member.member_id, savedLevel);
     } catch {
       setLevelError("網路錯誤，請稍後再試。");
     } finally {
