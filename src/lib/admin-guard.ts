@@ -38,7 +38,23 @@ export type AdminAuthResult =
  * 本來就沒有任何分級資料，等於「分級未啟用」，可接受。
  * ============================================================= */
 
-/** 後台模組名（必須與 SQL 的 case 分支逐字一致） */
+/**
+ * 後台模組名（必須與 SQL 的 case 分支逐字一致）
+ *
+ * ⚠️ 新增／改變後台路由的模組歸屬時，**必須同一支 PR 同步更新兩個地方**：
+ *    · src/app/admin/_components/adminModules.ts 的 PATH_MODULE（側欄與頁面 canView）
+ *    · 本檔 authorizeModule / assertModuleAccess 的呼叫端（API 守衛）
+ * 兩者不一致會出現「頁面看得到、按了 403」或反之。
+ *
+ * 這輪曾出現 3 次錯歸屬（point-rules / checkins / runs+sessions），全部靠
+ * 「頁面實際打哪支 API × 該 API 的守衛模組」比對才發現 —— 單看頁面名稱看不出來
+ * （/admin/checkins 聽起來像簽到管理，實際是 review 工作流；
+ *   /admin/point-rules 聽起來像兌換，實際屬 points）。
+ *
+ * 反向提醒：有些頁面沒有對應 API（server component 直查 DB，例如 /admin/runs、
+ * /admin/audit-log），那些頁面的模組守衛**只有 canView 一層**（RLS 只認 is_admin()），
+ * 所以 PATH_MODULE 對它們是唯一防線，改動時要格外小心。
+ */
 export type AdminModule =
   | "analytics"
   | "schedule"
