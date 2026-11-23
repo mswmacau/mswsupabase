@@ -2,6 +2,9 @@ import Link from "next/link";
 import { ArrowRight, CalendarRange, Info } from "lucide-react";
 import { getAllSessions } from "@/lib/queries";
 import { formatDate, todayISO, weekdayLabel } from "@/lib/utils";
+import { getAdminAccess } from "@/app/admin/_components/adminAccess";
+import { AdminDeniedCard } from "@/app/admin/_components/AdminDeniedCard";
+import { MODULE_LABELS, canView } from "@/components/adminModules";
 
 export const metadata = { title: "訓練場次（唯讀）" };
 export const dynamic = "force-dynamic";
@@ -31,6 +34,13 @@ export const dynamic = "force-dynamic";
  * `/admin/*` 的權限由 src/app/admin/layout.tsx 與 RLS 把關。
  */
 export default async function AdminSessionsPage() {
+  /* 兩級管理員：none 模組直接給拒訪卡。
+     訓練場次（唯讀）頁：其 API 走 schedule 守衛，頁面也歸 schedule */
+  const access = await getAdminAccess();
+  if (!canView(access, "schedule")) {
+    return <AdminDeniedCard moduleLabel={MODULE_LABELS.schedule} />;
+  }
+
   const sessions = await getAllSessions(60);
   // 一律用澳門時間（src/lib/utils.ts:1-10 的專案紀律）。
   // 原本寫 new Date().toISOString().slice(0,10) 是 UTC，澳門時間 00:00-08:00

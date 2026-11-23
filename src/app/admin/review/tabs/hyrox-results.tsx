@@ -1,6 +1,7 @@
 import { ShieldAlert } from "lucide-react";
 import { isSupabaseConfigured } from "@/lib/supabase/env";
 import { ResultsReview } from "@/components/hyrox/ResultsReview";
+import { getAdminAccess } from "@/app/admin/_components/adminAccess";
 
 /**
  * /admin/review?tab=hyrox-results — 待審核中心的「完賽成績」分頁（F-05）
@@ -12,7 +13,16 @@ import { ResultsReview } from "@/components/hyrox/ResultsReview";
  * 空狀態降級（§1.5-⑥）：migration 未跑時 API 回 400 SCHEMA_OUTDATED，
  * client 顯示「目前沒有待審核的完賽成績。」的空名單，不 500。
  */
-export default function HyroxResultsTab() {
+export default async function HyroxResultsTab() {
+  /*
+   * 匯出按鈕的可見性跟「本頁能不能寫」一致（review），不是看 events。
+   * 白客已把三支 /api/admin/hyrox/results* 的守衛改歸 review（與本頁同模組），
+   * 所以「看得到的按鈕一定按得動」在任何級別配置下都成立。
+   * read / none 一律不渲染（不是 disabled——不留一顆永遠按不動的灰按鈕）。
+   */
+  const access = await getAdminAccess();
+  const canExport = access.review === "full";
+
   if (!isSupabaseConfigured) {
     return (
       <div className="card-dark p-6">
@@ -32,7 +42,7 @@ export default function HyroxResultsTab() {
         核對完賽截圖與成績；核可後即時上榜（完賽排行榜 60 秒內更新）。
         拒絕要填原因，會員會看到。
       </p>
-      <ResultsReview />
+      <ResultsReview canExport={canExport} />
     </div>
   );
 }

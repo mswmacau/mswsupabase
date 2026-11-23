@@ -2,6 +2,9 @@ import Link from "next/link";
 import { getPointsPerKm, getSubmissionsByStatus } from "@/lib/queries";
 import { RunReviewCard } from "../_components/RunReviewCard";
 import { MovedNotice } from "../_components/MovedNotice";
+import { getAdminAccess } from "@/app/admin/_components/adminAccess";
+import { AdminDeniedCard } from "@/app/admin/_components/AdminDeniedCard";
+import { MODULE_LABELS, canView } from "@/components/adminModules";
 
 export const metadata = { title: "跑步審核" };
 export const dynamic = "force-dynamic";
@@ -29,6 +32,13 @@ export default async function AdminRunsPage({
 }: {
   searchParams: Promise<{ status?: string }>;
 }) {
+  /* 兩級管理員：none 模組直接給拒訪卡。
+     跑步審核頁（無 API 可守：資料由 server component 直查，run_submissions 的 RLS 只認 is_admin()，不認模組）→ 頁面 canView 是唯一應用層防線 */
+  const access = await getAdminAccess();
+  if (!canView(access, "review")) {
+    return <AdminDeniedCard moduleLabel={MODULE_LABELS.review} />;
+  }
+
   const { status } = await searchParams;
   const active = (["pending", "approved", "rejected"].includes(status ?? "")
     ? status

@@ -1,4 +1,7 @@
 import { SectionTabNav } from "../_components/SectionTabNav";
+import { getAdminAccess } from "@/app/admin/_components/adminAccess";
+import { AdminDeniedCard } from "@/app/admin/_components/AdminDeniedCard";
+import { MODULE_LABELS, canView } from "@/components/adminModules";
 import { getAdminTodoCounts } from "@/lib/queries";
 import RunsTab from "./tabs/runs";
 import CheckinsTab from "./tabs/checkins";
@@ -46,6 +49,12 @@ export default async function AdminReviewPage({
 }: {
   searchParams: Promise<{ tab?: string }>;
 }) {
+  /* 兩級管理員：review 是 none 時直接給拒訪卡（連待辦筆數都不查） */
+  const access = await getAdminAccess();
+  if (!canView(access, "review")) {
+    return <AdminDeniedCard moduleLabel={MODULE_LABELS.review} />;
+  }
+
   const { tab } = await searchParams;
   const active: TabKey = (TAB_KEYS as readonly string[]).includes(tab ?? "")
     ? (tab as TabKey)

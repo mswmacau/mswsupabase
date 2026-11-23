@@ -107,7 +107,7 @@ async function fetchList(
   }
 }
 
-export function ResultsReview() {
+export function ResultsReview({ canExport = true }: { canExport?: boolean }) {
   const router = useRouter();
 
   const [status, setStatus] = useState<StatusFilter>("pending");
@@ -250,14 +250,18 @@ export function ResultsReview() {
             重新整理
           </button>
           {/* §5-12 匯出 CSV（管理端完賽榜）。純 <a download>，不經 fetch+blob
-              （iOS Safari 會吃掉 blob 下載）；不受目前狀態篩選影響，一律匯出全部。 */}
-          <a
-            href="/api/admin/hyrox/results/export?type=board"
-            download
-            className="btn-base btn-ghost min-h-11 flex-1 px-3 py-2 text-sm sm:flex-none"
-          >
-            <Download size={16} /> 匯出 CSV
-          </a>
+              （iOS Safari 會吃掉 blob 下載）；不受目前狀態篩選影響，一律匯出全部。
+              只有 review=full 才渲染：匯出端點的守衛與本頁同屬 review 模組，
+              read / none 時按下去必定 403，所以直接不顯示（不留灰按鈕）。 */}
+          {canExport ? (
+            <a
+              href="/api/admin/hyrox/results/export?type=board"
+              download
+              className="btn-base btn-ghost min-h-11 flex-1 px-3 py-2 text-sm sm:flex-none"
+            >
+              <Download size={16} /> 匯出 CSV
+            </a>
+          ) : null}
         </div>
       </div>
 
