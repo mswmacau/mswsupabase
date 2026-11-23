@@ -29,6 +29,18 @@ import {
   jsonValidation,
 } from "@/lib/api";
 
+/**
+ * DB 的 admin_level 是 smallint（check 約束只允許 1/2/null），但 TS 從
+ * supabase-js 拿到的是 `number | null`。這裡收窄成契約型別；
+ * 遇到不該存在的值（例如 3）回 undefined —— 當成「沒有這一欄」，
+ * 比硬塞一個非法值讓前端顯示錯誤級別安全。
+ */
+function toAdminLevel(value: unknown): 1 | 2 | null | undefined {
+  if (value === 1 || value === 2) return value;
+  if (value === null) return null;
+  return undefined;
+}
+
 type MemberRow = {
   member_id: string;
   display_name: string | null;
@@ -151,6 +163,27 @@ export async function GET(
 
     const detail = (data ?? null) as MemberDetail | null;
     if (!detail) return jsonNotFound("找不到這位會員。");
+
+    // 【P2-2】admin_level 直查 profiles —— 權威來源，不依賴 RPC migration。
+    // 詳情頁的 RPC admin_get_member 要等站主貼 migration-admin-levels-rpc.sql
+    // 才會回這一欄，但 profiles.admin_level 這一列早就存在（已貼的第一支）。
+    // 42703（欄位不存在）→ 保持 undefined，讓前端顯示「migration 未跑」。
+    {
+      const { data: levelRow, error: levelError } = await supabase
+        .from("profiles")
+        .select("admin_level")
+        .eq("id", memberId)
+        .maybeSingle();
+      if (!levelError && levelRow) {
+        detail.admin_level = toAdminLevel(
+          (levelRow as { admin_level?: unknown }).admin_level
+        );
+      } else if (levelError && levelError.code !== "42703") {
+        console.warn(
+          `[api] GET /api/admin/members/[id] admin_level 補讀失敗：code=${levelError.code ?? "-"}`
+        );
+      }
+    }
 
     return jsonOk({
       data: {

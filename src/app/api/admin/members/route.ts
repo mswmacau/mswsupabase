@@ -62,6 +62,18 @@ import {
 } from "@/lib/api";
 import { writeAuditLog } from "@/lib/audit";
 
+/**
+ * DB 的 admin_level 是 smallint（check 約束只允許 1/2/null），但 TS 從
+ * supabase-js 拿到的是 `number | null`。這裡收窄成契約型別；
+ * 遇到不該存在的值（例如 3）回 undefined —— 當成「沒有這一欄」，
+ * 比硬塞一個非法值讓前端顯示錯誤級別安全。
+ */
+function toAdminLevel(value: unknown): 1 | 2 | null | undefined {
+  if (value === 1 || value === 2) return value;
+  if (value === null) return null;
+  return undefined;
+}
+
 type MemberRow = {
   member_id: string;
   display_name: string | null;
@@ -335,6 +347,38 @@ export async function GET(request: Request) {
         // 只寫 server log：列表本身已經拿到了，旗標退回 false 不該讓整頁失敗
         console.warn(
           `[api] GET /api/admin/members is_test 補讀失敗：code=${flagError.code ?? "-"}`
+        );
+      }
+    }
+
+    // 【P2-2】admin_level：profiles 直查是權威來源，不依賴 RPC migration。
+    // admin_list_members 的 returns table 要等站主貼 migration-admin-levels-rpc.sql
+    // 才會多這一欄；但 profiles.admin_level 這「列」在已貼的
+    // migration-admin-levels.sql 就已存在。
+    // 若等 RPC，站主推了程式碼卻看不到級別，會以為壞了。
+    // 成本：一次 in(...) 查詢（10 列可忽略）；RPC 有值也覆蓋，不一致以 profiles 為準。
+    // 42703（欄位真的不存在＝migration 完全沒跑）→ 保持 undefined，
+    // 前端據此顯示「migration 未跑」提示（那時提示才是誠實的）。
+    if (rows.length > 0) {
+      const ids = rows.map((row) => row.member_id).filter(Boolean);
+      const { data: levels, error: levelError } = await supabase
+        .from("profiles")
+        .select("id, admin_level")
+        .in("id", ids);
+      if (!levelError && Array.isArray(levels)) {
+        const byId = new Map<string, number | null>();
+        for (const rec of levels as { id: string; admin_level?: number | null }[]) {
+          // 用 has() 區分「查到 null」與「沒查到」，不能靠 get() 的回傳值判斷
+          byId.set(rec.id, rec.admin_level ?? null);
+        }
+        for (const row of rows) {
+          if (byId.has(row.member_id)) {
+            row.admin_level = toAdminLevel(byId.get(row.member_id));
+          }
+        }
+      } else if (levelError && levelError.code !== "42703") {
+        console.warn(
+          `[api] GET /api/admin/members admin_level 補讀失敗：code=${levelError.code ?? "-"}`
         );
       }
     }
