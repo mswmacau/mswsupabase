@@ -84,11 +84,20 @@ function memberName(member: MemberRow): string {
 export function MemberManager({
   initialMemberId = null,
   initialAction = null,
+  readOnly = false,
 }: {
   /** 深連結：進來就要打開的會員（來自 /admin/review 的「更正里程」） */
   initialMemberId?: string | null;
   /** 深連結：`"correct-km"` 時連更正對話框一起開 */
   initialAction?: "correct-km" | null;
+  /**
+   * 第二級管理員的「唯讀」模式（members 模組 = read）。
+   * 唯讀時：只保留「檢視」，其餘寫入入口（編輯／積分／密碼／驗證／
+   * 停用／測試帳號／刪除／新增會員／級別調整）一律不渲染。
+   * 為什麼用「不渲染」而不是 disabled：站主要求「唔好等按落去才 403」，
+   * 而且一排灰按鈕在手機上很佔位。
+   */
+  readOnly?: boolean;
 } = {}) {
   const [query, setQuery] = useState("");
   const [search, setSearch] = useState("");
@@ -415,10 +424,16 @@ export function MemberManager({
           <button
             type="button"
             onClick={() => setCreateOpen(true)}
-            disabled={!hasServiceRole}
-            aria-label="新增會員"
+            disabled={!hasServiceRole || readOnly}
+            aria-label={readOnly ? "唯讀權限，無法新增會員" : "新增會員"}
+            title={
+              readOnly
+                ? "唯讀權限，無法新增會員"
+                : hasServiceRole
+                  ? undefined
+                  : "未設定服務金鑰，無法新增帳號"
+            }
             aria-describedby={hasServiceRole ? undefined : "service-role-hint"}
-            title={hasServiceRole ? undefined : "未設定服務金鑰，無法新增帳號"}
             className="btn-base btn-cobalt min-h-11 w-full justify-center px-4 py-2 text-sm sm:w-auto"
           >
             <Plus size={16} /> 新增會員
@@ -579,6 +594,8 @@ export function MemberManager({
                       <CardAction onClick={() => setDrawerMember(member)}>
                         <Eye size={14} /> 檢視
                       </CardAction>
+                      {readOnly ? null : (
+                      <>
                       <CardAction onClick={() => setEditMember(member)}>
                         <Pencil size={14} /> 編輯
                       </CardAction>
@@ -623,6 +640,8 @@ export function MemberManager({
                       >
                         <Trash2 size={14} /> 刪除
                       </CardAction>
+                      </>
+                      )}
                     </div>
                   </div>
                 )}
@@ -749,6 +768,8 @@ export function MemberManager({
                       >
                         <Eye size={15} />
                       </IconAction>
+                      {readOnly ? null : (
+                      <>
                       <IconAction
                         label={`編輯 ${memberName(member)}`}
                         onClick={() => setEditMember(member)}
@@ -803,6 +824,8 @@ export function MemberManager({
                       >
                         <Trash2 size={15} />
                       </IconAction>
+                      </>
+                      )}
                     </div>
                   </td>
                 </tr>
@@ -850,6 +873,23 @@ export function MemberManager({
       {drawerMember && (
         <MemberDrawer
           member={drawerMember}
+          readOnly={readOnly}
+          canManageAdminLevel={!readOnly}
+          onAdminLevelChanged={(memberId, level) => {
+            // 即時回寫列表那一列：不必整頁 reload，也不會出現「列表說非管理員、
+            // 抽屜說第二級」的矛盾
+            setMembers((prev) =>
+              prev.map((row) =>
+                row.member_id === memberId
+                  ? {
+                      ...row,
+                      role: level === 0 ? row.role : "admin",
+                      admin_level: level,
+                    }
+                  : row
+              )
+            );
+          }}
           onClose={() => setDrawerMember(null)}
           onEdit={(member) => {
             setDrawerMember(null);

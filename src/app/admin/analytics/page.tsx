@@ -35,6 +35,9 @@ import type {
   RunMonthlyData,
   SessionAttendanceData,
 } from "./types";
+import { AdminDeniedCard } from "@/app/admin/_components/AdminDeniedCard";
+import { getAdminAccess } from "@/app/admin/_components/adminAccess";
+import { canView, MODULE_LABELS } from "@/components/adminModules";
 
 export const metadata = { title: "數據分析" };
 export const dynamic = "force-dynamic";
@@ -64,6 +67,10 @@ export default async function AdminAnalyticsPage({
 }: {
   searchParams: Promise<{ days?: string }>;
 }) {
+  /* 兩級管理員：none 模組直接給拒訪卡（server 端 early return，不查資料、不閃現） */
+  const access = await getAdminAccess();
+  if (!canView(access, "analytics")) return <AdminDeniedCard moduleLabel={MODULE_LABELS.analytics} />;
+
   // P3-3（T-28 驗收）：頁級早退——非管理員（含未連接 Supabase，requireAdmin()
   // 同樣回 null）不再觸發八支分析 RPC，避免每次訪問白跑八次資料庫往返。
   // 早退方式照 src/app/admin/layout.tsx 的既有守衛：渲染行內保護頁（不重定向）；

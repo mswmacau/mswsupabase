@@ -1,7 +1,11 @@
 import { createClient } from "@/lib/supabase/server";
 import { isSupabaseConfigured } from "@/lib/supabase/env";
 import { AuditLogCards } from "./AuditLogCards";
+import { SummaryText } from "./SummaryText";
 import { AuditLogPager } from "./AuditLogPager";
+import { AdminDeniedCard } from "@/app/admin/_components/AdminDeniedCard";
+import { getAdminAccess } from "@/app/admin/_components/adminAccess";
+import { canView, MODULE_LABELS as ACCESS_MODULE_LABELS } from "@/components/adminModules";
 
 export const metadata = { title: "操作紀錄" };
 export const dynamic = "force-dynamic";
@@ -118,6 +122,10 @@ export default async function AdminAuditLogPage({
 }: {
   searchParams: Promise<{ page?: string }>;
 }) {
+  /* 兩級管理員：none 模組直接給拒訪卡（server 端 early return，不查資料、不閃現） */
+  const access = await getAdminAccess();
+  if (!canView(access, "audit")) return <AdminDeniedCard moduleLabel={ACCESS_MODULE_LABELS.audit} />;
+
   if (!isSupabaseConfigured) {
     return (
       <div className="space-y-6">
@@ -207,9 +215,9 @@ export default async function AdminAuditLogPage({
             rows={rows.map((r) => ({
               id: r.id,
               time: formatMacauDateTime(r.created_at),
-              actor: r.profile
-                ? r.profile.display_name ?? "未具名會員"
-                : "已刪除的會員",
+              actor: `操作人：${
+                r.profile ? r.profile.display_name ?? "未具名會員" : "已刪除的會員"
+              }`,
               module: moduleLabel(r.module),
               action: actionLabel(r.action),
               summary: r.summary,
@@ -238,6 +246,7 @@ export default async function AdminAuditLogPage({
                     {formatMacauDateTime(r.created_at)}
                   </td>
                   <td className="py-3 pr-4 whitespace-nowrap text-white/75">
+                    操作人：
                     {r.profile
                       ? r.profile.display_name ?? "未具名會員"
                       : "已刪除的會員"}
@@ -246,7 +255,9 @@ export default async function AdminAuditLogPage({
                   <td className="py-3 pr-4 whitespace-nowrap text-white/75">
                     {actionLabel(r.action)}
                   </td>
-                  <td className="py-3 pr-4 text-white/85">{r.summary}</td>
+                  <td className="py-3 pr-4 text-white/85">
+                    <SummaryText text={r.summary} />
+                  </td>
                 </tr>
               ))}
             </tbody>

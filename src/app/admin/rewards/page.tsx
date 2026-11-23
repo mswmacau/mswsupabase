@@ -2,6 +2,9 @@ import { createClient } from "@/lib/supabase/server";
 import { isSupabaseConfigured } from "@/lib/supabase/env";
 import { RewardsManager } from "./RewardsManager";
 import type { MerchantOption, RewardRow } from "./types";
+import { getAdminAccess } from "@/app/admin/_components/adminAccess";
+import { isReadOnly } from "@/components/adminModules";
+import { ReadOnlyNotice } from "@/app/admin/_components/ReadOnlyNotice";
 
 export const metadata = { title: "禮品管理" };
 export const dynamic = "force-dynamic";
@@ -14,6 +17,10 @@ export const dynamic = "force-dynamic";
  * 取數失敗時顯示可讀提示，不讓整頁 500。
  */
 export default async function AdminRewardsPage() {
+  /* 第二級管理員：rewards 是唯讀模組 → 頂部提示 + 不渲染任何寫入入口 */
+  const access = await getAdminAccess();
+  const readOnly = isReadOnly(access, "rewards");
+
   if (!isSupabaseConfigured) {
     return (
       <Shell>
@@ -66,12 +73,18 @@ export default async function AdminRewardsPage() {
 
   return (
     <Shell>
+      {readOnly ? <ReadOnlyNotice /> : null}
+
       {loadError ? (
         <div className="rounded-xl border border-amber-500/40 bg-amber-500/10 px-4 py-3 text-sm text-amber-200">
           禮品資料暫時讀不到，請稍後重新整理；若持續失敗請聯絡技術人員。
         </div>
       ) : (
-        <RewardsManager initialRewards={rewards} merchants={merchants} />
+        <RewardsManager
+          initialRewards={rewards}
+          merchants={merchants}
+          readOnly={readOnly}
+        />
       )}
     </Shell>
   );

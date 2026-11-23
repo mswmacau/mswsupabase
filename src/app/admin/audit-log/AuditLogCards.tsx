@@ -32,6 +32,7 @@
 
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { ChevronDown } from "lucide-react";
+import { SummaryText } from "./SummaryText";
 
 /** 由 server component 算好的人話字串（label 對照表留在 server，不進 client bundle） */
 export interface AuditCardRow {
@@ -111,7 +112,7 @@ function AuditCard({ row }: { row: AuditCardRow }) {
           open ? "block" : "line-clamp-1"
         }`}
       >
-        {row.summary}
+        <SummaryText text={row.summary} />
       </span>
     </>
   );

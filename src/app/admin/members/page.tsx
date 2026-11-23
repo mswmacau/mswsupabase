@@ -1,4 +1,7 @@
 import { MemberManager } from "./MemberManager";
+import { getAdminAccess } from "@/app/admin/_components/adminAccess";
+import { isReadOnly } from "@/components/adminModules";
+import { ReadOnlyNotice } from "@/app/admin/_components/ReadOnlyNotice";
 
 export const metadata = { title: "會員管理" };
 export const dynamic = "force-dynamic";
@@ -24,6 +27,10 @@ export default async function AdminMembersPage({
 }: {
   searchParams: Promise<{ member?: string; action?: string }>;
 }) {
+  /* 第二級管理員：members 是唯讀模組 → 頂部提示 + 所有寫入入口不渲染 */
+  const access = await getAdminAccess();
+  const readOnly = isReadOnly(access, "members");
+
   const params = await searchParams;
   const memberId = (params.member ?? "").trim();
   // 只認得一個動作；其他值一律當「只開抽屜」，不猜使用者意思
@@ -39,7 +46,13 @@ export default async function AdminMembersPage({
         </p>
       </div>
 
-      <MemberManager initialMemberId={memberId || null} initialAction={action} />
+      {readOnly ? <ReadOnlyNotice /> : null}
+
+      <MemberManager
+        initialMemberId={memberId || null}
+        initialAction={action}
+        readOnly={readOnly}
+      />
     </div>
   );
 }

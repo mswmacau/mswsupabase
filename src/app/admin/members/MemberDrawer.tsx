@@ -95,6 +95,9 @@ export function MemberDrawer({
   onAdjustPoints,
   onCorrectKm,
   onResetPassword,
+  readOnly = false,
+  canManageAdminLevel = false,
+  onAdminLevelChanged,
 }: {
   member: MemberRow;
   onClose: () => void;
@@ -103,12 +106,59 @@ export function MemberDrawer({
   /** P1-1：核准跑步提交誤按後，唯一能把 total_km 改回去的入口 */
   onCorrectKm: (member: MemberRow) => void;
   onResetPassword: (member: MemberRow) => void;
+  /** 第二級管理員的唯讀模式：只留「重新載入」，所有寫入入口不渲染 */
+  readOnly?: boolean;
+  /** 只有第一級能改別人的管理員級別（第二級自己看不到這一區） */
+  canManageAdminLevel?: boolean;
+  /** 改完級別即時回寫列表那一列，不必整頁 reload */
+  onAdminLevelChanged?: (memberId: string, level: number) => void;
 }) {
   const panelRef = useRef<HTMLDivElement>(null);
   const [detail, setDetail] = useState<MemberDetail | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [reloadKey, setReloadKey] = useState(0);
+  /** 管理員級別：待確認的目標值（null = 沒有待確認操作） */
+  const [levelConfirm, setLevelConfirm] = useState<number | null>(null);
+  const [levelBusy, setLevelBusy] = useState(false);
+  const [levelError, setLevelError] = useState<string | null>(null);
+  /** 本地覆寫：改完立即反映，不等重新載入 */
+  const [levelOverride, setLevelOverride] = useState<number | null>(null);
+
+  /**
+   * 改管理員級別。PATCH /api/admin/members { userId, admin_level: 0|2 }
+   * 只有第一級能呼叫；API 未實作／未跑 migration 時如實顯示後端訊息，
+   * 不做「假成功」。
+   */
+  async function applyAdminLevel(next: number) {
+    setLevelBusy(true);
+    setLevelError(null);
+    try {
+      const res = await fetch("/api/admin/members", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ userId: member.member_id, admin_level: next }),
+      });
+      const body: unknown = await res.json().catch(() => null);
+      const ok =
+        body !== null && typeof body === "object" && (body as { ok?: boolean }).ok === true;
+      if (!res.ok || !ok) {
+        const message =
+          body !== null && typeof body === "object"
+            ? ((body as { error?: string }).error ?? "伺服器錯誤，請稍後再試。")
+            : "伺服器錯誤，請稍後再試。";
+        setLevelError(message);
+        return;
+      }
+      setLevelOverride(next);
+      setLevelConfirm(null);
+      onAdminLevelChanged?.(member.member_id, next);
+    } catch {
+      setLevelError("網路錯誤，請稍後再試。");
+    } finally {
+      setLevelBusy(false);
+    }
+  }
 
   useOverlay(true, panelRef, onClose);
 
@@ -205,6 +255,86 @@ export function MemberDrawer({
         </div>
 
         {/* ===== 內容 ===== */}
+        {/* ===== 管理員級別（只有第一級看得到這一區） =====
+            級別只影響「能看到哪些後台模組」，不改 role；role 仍是進入後台的
+            總開關。非管理員顯示「非管理員」，第一級顯示「第一級管理員」。 */}
+        {canManageAdminLevel ? (
+          <section className="border-b border-ink-line px-5 py-4">
+            <p className="text-[11px] font-bold uppercase tracking-[0.14em] text-white/45">
+              管理員級別
+            </p>
+            <div className="mt-2 flex flex-wrap items-center gap-2">
+              <span
+                className={`slab border px-2.5 py-1 text-xs font-bold ${
+                  (levelOverride ?? (typeof data.admin_level === "number" ? data.admin_level : 0)) === 2 &&
+                  data.role === "admin"
+                    ? "border-cobalt/50 bg-cobalt/15 text-accent-blue"
+                    : data.role === "admin"
+                      ? "border-vital/50 bg-vital/15 text-vital-bright"
+                      : "border-white/20 bg-white/5 text-white/70"
+                }`}
+              >
+                {data.role !== "admin"
+                  ? "非管理員"
+                  : (levelOverride ??
+                        (typeof data.admin_level === "number" ? data.admin_level : 0)) === 2
+                    ? "第二級管理員"
+                    : "第一級管理員"}
+              </span>
+
+              {levelConfirm === null ? (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setLevelError(null);
+                    setLevelConfirm(
+                      data.role === "admin" ? 0 : 2
+                    );
+                  }}
+                  className="btn-base btn-ghost min-h-11 px-3 py-2 text-xs"
+                >
+                  {data.role === "admin" ? "取消管理員" : "設為第二級管理員"}
+                </button>
+              ) : null}
+            </div>
+
+            {levelConfirm !== null ? (
+              <div className="mt-3 rounded-lg border border-amber-500/40 bg-amber-500/10 px-3 py-2.5">
+                <p className="text-xs leading-relaxed text-amber-100">
+                  {levelConfirm === 2
+                    ? "確定設為第二級管理員？他能進入後台做日常營運，但看不到會員與禮品的修改、也看不到數據分析與網站設定。"
+                    : "確定取消管理員？他會立即失去後台存取權。"}
+                </p>
+                <div className="mt-2 flex flex-wrap gap-2">
+                  <button
+                    type="button"
+                    disabled={levelBusy}
+                    onClick={() => void applyAdminLevel(levelConfirm)}
+                    className="btn-base btn-vital min-h-11 px-3 py-2 text-xs"
+                  >
+                    {levelBusy ? <Loader2 size={14} className="animate-spin" /> : null}
+                    確定
+                  </button>
+                  <button
+                    type="button"
+                    disabled={levelBusy}
+                    onClick={() => setLevelConfirm(null)}
+                    className="btn-base btn-ghost min-h-11 px-3 py-2 text-xs"
+                  >
+                    取消
+                  </button>
+                </div>
+              </div>
+            ) : null}
+
+            {levelError ? (
+              <p role="alert" className="mt-2 text-xs text-red-300">
+                {levelError}
+              </p>
+            ) : null}
+          </section>
+        ) : null}
+
         <div className="flex-1 overflow-y-auto px-5 py-4">
           {loading && !detail ? (
             <div className="space-y-3" aria-busy="true" aria-live="polite">
@@ -361,6 +491,8 @@ export function MemberDrawer({
                 )}
                 重新載入
               </button>
+              {readOnly ? null : (
+              <>
               <button
                 type="button"
                 onClick={() => onAdjustPoints(detail?.member ?? member)}
@@ -388,7 +520,12 @@ export function MemberDrawer({
               >
                 <KeyRound size={14} /> 重設密碼
               </button>
+              </>
+              )}
             </div>
+            {readOnly ? (
+              <span className="text-[11px] text-white/45">唯讀權限</span>
+            ) : (
             <button
               type="button"
               onClick={() => onEdit(detail?.member ?? member)}
@@ -396,6 +533,7 @@ export function MemberDrawer({
             >
               <Pencil size={14} /> 編輯會員
             </button>
+            )}
           </div>
         </div>
       </div>

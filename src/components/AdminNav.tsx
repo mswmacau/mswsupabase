@@ -70,6 +70,12 @@ import { useOverlay } from "@/app/admin/members/useOverlay";
  * （src/app/admin/members/useOverlay.ts）。
  */
 
+import {
+  FULL_ACCESS,
+  PATH_MODULE,
+  type AdminAccess,
+} from "./adminModules";
+
 interface NavItem {
   href: string;
   label: string;
@@ -184,6 +190,22 @@ function PendingBadge({
   );
 }
 
+/**
+ * 唯讀模組的小標：看得到、進得去，但改不了。
+ * 刻意比「待審核」的數字徽章低調 —— 它是一個長期狀態，不是待辦。
+ */
+function ReadOnlyChip() {
+  return (
+    <span
+      className="shrink-0 rounded-full border border-white/15 px-1.5 py-0.5 text-[10px] font-semibold leading-none text-white/45"
+      aria-label="唯讀權限：可查看但不能修改"
+      title="唯讀權限：可查看但不能修改"
+    >
+      唯讀
+    </span>
+  );
+}
+
 function isActive(item: NavItem, pathname: string): boolean {
   return item.exact
     ? pathname === item.href
@@ -194,12 +216,19 @@ const subscribeNoop = () => () => {};
 
 export function AdminNav({
   pendingTotal = null,
+  access = FULL_ACCESS,
 }: {
   /**
    * 「待審核」的總待處理數（四類相加）。
    * null = 任一分項查詢失敗或未連接 DB → 顯示「—」。
    */
   pendingTotal?: number | null;
+  /**
+   * 兩級管理員的模組權限（getAdminAccess）。預設全 full：
+   * 既有呼叫端（含故事書／測試）不傳也不會壞。
+   * none → 該項目整個不渲染；read → 保留但加「唯讀」小標。
+   */
+  access?: AdminAccess;
 }) {
   const pathname = usePathname();
   const [openPath, setOpenPath] = useState<string | null>(null);
@@ -216,6 +245,28 @@ export function AdminNav({
   );
 
   useOverlay(open && mounted, drawerRef, () => setOpenPath(null));
+
+  /**
+   * 依權限過濾後的側欄分組。
+   *
+   * 規則：PATH_MODULE 裡查不到模組的項目（例如「今日工作台 /admin」）
+   * 一律保留 —— 它是登入後的落地頁，沒有任何寫入操作，隱藏它等於讓
+   * 第二級管理員登入後沒有首頁可看。
+   * 整組都被隱藏時，連分組標題一起收掉，免得留下空標題。
+   */
+  const groups = GROUPS.map((group) => ({
+    ...group,
+    items: group.items.filter((item) => {
+      const mod = PATH_MODULE[item.href];
+      return !mod || access[mod] !== "none";
+    }),
+  })).filter((group) => group.items.length > 0);
+
+  /** 唯讀模組的項目要加小標 */
+  const readOnlyFor = (item: NavItem): boolean => {
+    const mod = PATH_MODULE[item.href];
+    return Boolean(mod) && access[mod!] === "read";
+  };
 
   /** 「待審核」項要顯示數字；其他項不顯示 */
   const pendingFor = (item: NavItem): number | null | undefined =>
@@ -270,7 +321,7 @@ export function AdminNav({
               </div>
 
               <nav aria-label="後台選單" className="px-3 pb-10">
-                {GROUPS.map((group) => (
+                {groups.map((group) => (
                   <div key={group.title}>
                     {/* 14 項 × 44px + 6 個標題 ≈ 810px：分組標題收成 pt-3 pb-1，
                         令 390×844 只需極短滾動（20 項時代要滑 1.5 屏） */}
@@ -300,6 +351,7 @@ export function AdminNav({
                               <span className="min-w-0 flex-1 truncate">
                                 {item.label}
                               </span>
+                              {readOnlyFor(item) ? <ReadOnlyChip /> : null}
                               {badge !== undefined ? (
                                 <PendingBadge value={badge} active={active} />
                               ) : null}
@@ -318,7 +370,7 @@ export function AdminNav({
 
       {/* ===== ≥768px：垂直側欄，與手機抽屜共用同一份 GROUPS（含 6 個分組標題） ===== */}
       <nav aria-label="後台選單" className="hidden md:block">
-        {GROUPS.map((group, index) => (
+        {groups.map((group, index) => (
           <div key={group.title}>
             <p
               className={`${GROUP_TITLE_BASE} ${index === 0 ? "" : "pt-1.5"}`}
@@ -347,6 +399,7 @@ export function AdminNav({
                       <span className="min-w-0 flex-1 truncate">
                         {item.label}
                       </span>
+                      {readOnlyFor(item) ? <ReadOnlyChip /> : null}
                       {badge !== undefined ? (
                         <PendingBadge value={badge} active={active} />
                       ) : null}

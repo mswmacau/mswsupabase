@@ -8,6 +8,9 @@ import {
 } from "@/lib/queries";
 import { isSupabaseConfigured } from "@/lib/supabase/env";
 import { ContentManager } from "./ContentManager";
+import { AdminDeniedCard } from "@/app/admin/_components/AdminDeniedCard";
+import { getAdminAccess } from "@/app/admin/_components/adminAccess";
+import { canView, MODULE_LABELS } from "@/components/adminModules";
 
 export const metadata = { title: "網站內容" };
 export const dynamic = "force-dynamic";
@@ -21,6 +24,10 @@ export const dynamic = "force-dynamic";
  * 所以在這裡看到的值就是訪客此刻看到的值。
  */
 export default async function AdminContentPage() {
+  /* 兩級管理員：none 模組直接給拒訪卡（server 端 early return，不查資料、不閃現） */
+  const access = await getAdminAccess();
+  if (!canView(access, "content")) return <AdminDeniedCard moduleLabel={MODULE_LABELS.content} />;
+
   const [content, nav, contact, pages, blocks, seo] = await Promise.all([
     getSiteContent(),
     getSiteNav(),

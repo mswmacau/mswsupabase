@@ -27,9 +27,15 @@ import type { MerchantOption, RewardRow } from "./types";
 export function RewardsManager({
   initialRewards,
   merchants,
+  readOnly = false,
 }: {
   initialRewards: RewardRow[];
   merchants: MerchantOption[];
+  /**
+   * 第二級管理員：禮品是唯讀模組 → 不渲染新增／編輯／上下架，
+   * 只保留瀏覽（站主要求「唔好等按落去才 403」）。
+   */
+  readOnly?: boolean;
 }) {
   const router = useRouter();
   const [rows, setRows] = useState<RewardRow[]>(initialRewards);
@@ -133,6 +139,7 @@ export function RewardsManager({
             )}
             重新整理
           </button>
+          {readOnly ? null : (
           <button
             type="button"
             onClick={() => setCreateOpen(true)}
@@ -140,6 +147,7 @@ export function RewardsManager({
           >
             <Plus size={16} /> 新增禮品
           </button>
+          )}
         </div>
       </div>
 
@@ -215,6 +223,8 @@ export function RewardsManager({
                     </td>
                     <td className="px-3 py-3">
                       <div className="flex justify-end gap-1">
+                        {readOnly ? null : (
+                        <>
                         <IconBtn
                           label={`編輯 ${row.name}`}
                           onClick={() => setEditTarget(row)}
@@ -251,6 +261,8 @@ export function RewardsManager({
                             )}
                           </IconBtn>
                         )}
+                        </>
+                        )}
                       </div>
                     </td>
                   </tr>
@@ -280,6 +292,8 @@ export function RewardsManager({
                   </div>
                 </div>
                 <div className="mt-3 flex flex-wrap justify-end gap-2">
+                  {readOnly ? null : (
+                  <>
                   <button
                     type="button"
                     onClick={() => setEditTarget(row)}
@@ -308,6 +322,8 @@ export function RewardsManager({
                     >
                       <ArrowUpFromLine size={13} /> 上架
                     </button>
+                  )}
+                  </>
                   )}
                 </div>
               </li>

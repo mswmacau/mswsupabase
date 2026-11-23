@@ -1,6 +1,7 @@
 import { redirect } from "next/navigation";
 import { ShieldAlert } from "lucide-react";
 import { AdminNav } from "@/components/AdminNav";
+import { getAdminAccess } from "./_components/adminAccess";
 import { getAdminTodoCounts } from "@/lib/queries";
 import { getCurrentProfile } from "@/lib/supabase/server";
 import { isSupabaseConfigured } from "@/lib/supabase/env";
@@ -53,6 +54,9 @@ where id = (select id from auth.users where email = 'you@example.com');`}
    * 為什麼任一項是 null 就整體顯示「—」：四類相加只有在四類都確定時才有意義，
    * 用已知的三項相加會少報（管理員會漏按）。null 的顯示規則見 AdminNav。
    */
+  /* 兩級管理員：13 模組權限（第二級會收窄；migration 未跑 → 全 full） */
+  const access = await getAdminAccess();
+
   const todos = await getAdminTodoCounts();
   const todoValues = [
     todos.pendingRuns,
@@ -78,7 +82,7 @@ where id = (select id from auth.users where email = 'you@example.com');`}
           <aside className="min-w-0 md:sticky md:top-[5.5rem] md:self-start">
             {/* overflow-y-auto 只在視窗高度 < 760px 時當保險；1440×900 不得觸發 */}
             <div className="card-dark overflow-hidden p-0 md:max-h-[calc(100dvh-5rem)] md:overflow-y-auto md:overscroll-contain md:p-2">
-              <AdminNav pendingTotal={pendingTotal} />
+              <AdminNav pendingTotal={pendingTotal} access={access} />
             </div>
           </aside>
           <div className="min-w-0">{children}</div>

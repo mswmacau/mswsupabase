@@ -28,6 +28,13 @@ export interface MemberRow {
    * 前端一律當 false 處理（`member.is_test === true`），不可假設一定有值。
    */
   is_test?: boolean;
+  /**
+   * 管理員級別（migration 未跑時不存在）：
+   *   0 或 null = 第一級（站主）／非管理員（看 role）
+   *   2         = 第二級管理員
+   * optional：與 is_test 同一個理由，欄位可能不存在。
+   */
+  admin_level?: number | null;
   created_at: string;
   last_sign_in_at: string | null;
   run_count: number | string;
