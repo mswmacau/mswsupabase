@@ -81,6 +81,31 @@ function memberName(member: MemberRow): string {
   return member.display_name?.trim() || member.email || "（未具名會員）";
 }
 
+/**
+ * 管理員級別小標（列表用）。
+ *
+ * 只在真正有級別時渲染：1 → 第一級、2 → 第二級。
+ * `null`（admin 但未設定 / 非管理員）與 `undefined`（migration 未跑）都不渲染——
+ * 列表列的空間寶貴，這種異常態在抽屜裡才有足夠位置說明。
+ * 站主要的是「一眼看出誰是第二級」，所以用與 TestBadge 同等級的視覺重量。
+ */
+function AdminLevelBadge({ level }: { level?: number | null }) {
+  if (level !== 1 && level !== 2) return null;
+  return (
+    <span
+      className={`slab shrink-0 border px-1.5 py-0.5 text-[10px] font-bold leading-none ${
+        level === 2
+          ? "border-cobalt/50 bg-cobalt/15 text-accent-blue"
+          : "border-vital/50 bg-vital/15 text-vital-bright"
+      }`}
+      aria-label={level === 2 ? "第二級管理員" : "第一級管理員"}
+      title={level === 2 ? "第二級管理員" : "第一級管理員"}
+    >
+      {level === 2 ? "第二級" : "第一級"}
+    </span>
+  );
+}
+
 export function MemberManager({
   initialMemberId = null,
   initialAction = null,
@@ -513,6 +538,7 @@ export function MemberManager({
                     >
                       {member.display_name?.trim() || "（未具名會員）"}
                     </span>
+                    <AdminLevelBadge level={member.admin_level} />
                     {member.is_test === true && <TestBadge />}
                     <StatusBadge status={member.status} />
                     <ChevronDown
@@ -728,6 +754,7 @@ export function MemberManager({
                       <span className="min-w-0 truncate font-semibold" title={memberName(member)}>
                         {member.display_name?.trim() || "（未具名會員）"}
                       </span>
+                      <AdminLevelBadge level={member.admin_level} />
                       {member.is_test === true && <TestBadge />}
                     </div>
                     <div className="truncate text-xs text-white/45">

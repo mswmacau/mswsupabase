@@ -307,12 +307,12 @@ export function MemberDrawer({
                   target = 0;
                   actionLabel = "取消管理員";
                 } else if (raw === null) {
-                  label = "未分級（無權限）";
+                  label = "未設定（無權限）";
                   tone = "border-amber-500/50 bg-amber-500/15 text-amber-200";
                   target = 2;
                   actionLabel = "設為第二級管理員";
                   hint =
-                    "他是管理員但未設定級別，後端會擋掉所有模組（fail closed）。請按上面設為第二級，或用 SQL 設定 admin_level。";
+                    "他是管理員但未設定級別，後端會擋掉所有模組（fail closed）。請按上面設為第二級。";
                 } else {
                   // raw === 1，或欄位不存在（undefined，migration 未跑）
                   label = "第一級管理員";

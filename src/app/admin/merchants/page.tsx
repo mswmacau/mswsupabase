@@ -1,6 +1,9 @@
 import { MovedNotice } from "../_components/MovedNotice";
 import { MerchantsManager } from "./MerchantsManager";
 import { loadMerchants } from "./query";
+import { getAdminAccess } from "@/app/admin/_components/adminAccess";
+import { AdminDeniedCard } from "@/app/admin/_components/AdminDeniedCard";
+import { MODULE_LABELS, canView } from "@/components/adminModules";
 
 export const metadata = { title: "商戶管理" };
 export const dynamic = "force-dynamic";
@@ -18,6 +21,13 @@ export const dynamic = "force-dynamic";
  * DB 函式（明文只回一次）。
  */
 export default async function AdminMerchantsPage() {
+  /* 舊路由保留（頂部有「已搬家」橫幅），但仍會渲染真實資料，
+     所以必須先守衛再取數：none → 拒訪卡，連橫幅都不顯示。 */
+  const access = await getAdminAccess();
+  if (!canView(access, "commerce")) {
+    return <AdminDeniedCard moduleLabel={MODULE_LABELS.commerce} />;
+  }
+
   const { merchants, loadError, notConfigured } = await loadMerchants();
 
   return (

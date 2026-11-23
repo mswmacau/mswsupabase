@@ -19,11 +19,21 @@ import { isSupabaseConfigured } from "@/lib/supabase/env";
 import { SectionTabs } from "../_components/SectionTabs";
 import { MovedNotice } from "../_components/MovedNotice";
 import { HyroxAdmin } from "./HyroxAdmin";
+import { getAdminAccess } from "@/app/admin/_components/adminAccess";
+import { AdminDeniedCard } from "@/app/admin/_components/AdminDeniedCard";
+import { MODULE_LABELS, canView } from "@/components/adminModules";
 
 export const metadata = { title: "HYROX 管理" };
 export const dynamic = "force-dynamic";
 
 export default async function AdminHyroxPage() {
+  /* 舊路由保留（頂部有「已搬家」橫幅），但仍會渲染真實資料，
+     所以必須先守衛再取數：none → 拒訪卡，連橫幅都不顯示。 */
+  const access = await getAdminAccess();
+  if (!canView(access, "events")) {
+    return <AdminDeniedCard moduleLabel={MODULE_LABELS.events} />;
+  }
+
   if (!isSupabaseConfigured) {
     return (
       <div className="min-w-0 space-y-5">

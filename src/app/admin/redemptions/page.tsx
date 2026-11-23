@@ -4,6 +4,9 @@ import { RedemptionsView } from "./RedemptionsView";
 import { loadRedemptions, REDEMPTION_STATUSES, type RedemptionStatus } from "./query";
 import { MerchantsManager } from "../merchants/MerchantsManager";
 import { loadMerchants } from "../merchants/query";
+import { getAdminAccess } from "@/app/admin/_components/adminAccess";
+import { AdminDeniedCard } from "@/app/admin/_components/AdminDeniedCard";
+import { MODULE_LABELS, canView } from "@/components/adminModules";
 
 export const metadata = { title: "兌換與商戶" };
 export const dynamic = "force-dynamic";
@@ -31,6 +34,13 @@ export default async function AdminRedemptionsPage({
 }: {
   searchParams: Promise<{ status?: string; q?: string; tab?: string }>;
 }) {
+  /* 舊路由保留（頂部有「已搬家」橫幅），但仍會渲染真實資料，
+     所以必須先守衛再取數：none → 拒訪卡，連橫幅都不顯示。 */
+  const access = await getAdminAccess();
+  if (!canView(access, "commerce")) {
+    return <AdminDeniedCard moduleLabel={MODULE_LABELS.commerce} />;
+  }
+
   const params = await searchParams;
   const tab = params.tab === "merchants" ? "merchants" : "records";
   const status = (REDEMPTION_STATUSES as readonly string[]).includes(params.status ?? "")

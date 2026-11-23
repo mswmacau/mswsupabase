@@ -2,6 +2,9 @@ import { isServiceRoleConfigured } from "@/lib/supabase/admin";
 import { MovedNotice } from "../_components/MovedNotice";
 import { PointRulesForm } from "./PointRulesForm";
 import { loadPointRules } from "./load";
+import { getAdminAccess } from "@/app/admin/_components/adminAccess";
+import { AdminDeniedCard } from "@/app/admin/_components/AdminDeniedCard";
+import { MODULE_LABELS, canView } from "@/components/adminModules";
 
 export const metadata = { title: "積分規則" };
 export const dynamic = "force-dynamic";
@@ -17,6 +20,13 @@ export const dynamic = "force-dynamic";
  * 手動補發一律經 /api/admin/point-rules，由後端呼叫 award_* RPC（含防重複）。
  */
 export default async function AdminPointRulesPage() {
+  /* 舊路由保留（頂部有「已搬家」橫幅），但仍會渲染真實資料，
+     所以必須先守衛再取數：none → 拒訪卡，連橫幅都不顯示。 */
+  const access = await getAdminAccess();
+  if (!canView(access, "points")) {
+    return <AdminDeniedCard moduleLabel={MODULE_LABELS.points} />;
+  }
+
   const { rules, enabled, members, loadError, notConfigured } = await loadPointRules();
 
   return (

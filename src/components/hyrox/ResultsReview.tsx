@@ -107,7 +107,13 @@ async function fetchList(
   }
 }
 
-export function ResultsReview({ canExport = true }: { canExport?: boolean }) {
+/**
+ * canExport 預設 **false**（fail closed）：忘了傳 prop 時寧可少一顆按鈕，
+ * 也不要多一顆「按下去必定 403」的。目前唯一呼叫點
+ * src/app/admin/review/tabs/hyrox-results.tsx 有明確傳
+ * `access.review === "full"`。
+ */
+export function ResultsReview({ canExport = false }: { canExport?: boolean }) {
   const router = useRouter();
 
   const [status, setStatus] = useState<StatusFilter>("pending");
