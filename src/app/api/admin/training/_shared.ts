@@ -23,6 +23,8 @@ import {
   jsonUnauthenticated,
 } from "@/lib/api";
 import { TRAINING_SCHEDULE_TAG } from "@/lib/queries";
+// 兩級管理員：training / sessions 全歸 schedule 模組（見 migration-admin-levels.sql）
+import { assertModuleAccess } from "@/lib/admin-guard";
 
 export type Supabase = NonNullable<Awaited<ReturnType<typeof createClient>>>;
 
@@ -31,7 +33,7 @@ export type Supabase = NonNullable<Awaited<ReturnType<typeof createClient>>>;
  * 成功時回傳 supabase client 與 userId（後者給 writeAuditLog 用）。
  * 模式與 event-registrations / events 等既有路由一致。
  */
-export async function authorizeAdmin(): Promise<
+export async function authorizeAdmin(opts: { write?: boolean } = {}): Promise<
   { supabase: Supabase; userId: string } | { res: Response }
 > {
   if (!isSupabaseConfigured) return { res: jsonNotConfigured() };
@@ -50,6 +52,10 @@ export async function authorizeAdmin(): Promise<
     .eq("id", user.id)
     .maybeSingle();
   if (profile?.role !== "admin") return { res: jsonForbidden() };
+
+  // 兩級管理員：training / sessions 全歸 schedule 模組
+  const denied = await assertModuleAccess(supabase, "schedule", opts);
+  if (denied) return { res: denied };
 
   return { supabase, userId: user.id };
 }

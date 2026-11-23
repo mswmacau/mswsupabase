@@ -27,8 +27,7 @@
  * Owner：白客（backend-engineer）
  */
 
-import { revalidateTag } from "next/cache";
-import { authorizeAdmin } from "@/lib/admin-guard";
+import { revalidateTag } from "next/cache"; import { authorizeModule } from "@/lib/admin-guard";
 import { writeAuditLog } from "@/lib/audit";
 import { RACES_TAG } from "@/lib/races";
 import {
@@ -150,7 +149,7 @@ export function GET() {
  * ============================================================= */
 export async function POST(request: Request) {
   try {
-    const auth = await authorizeAdmin();
+    const auth = await authorizeModule("events", { write: true });
     if (!auth.ok) return auth.res;
     const { supabase, actorId } = auth;
 
@@ -228,7 +227,7 @@ export async function POST(request: Request) {
  * ============================================================= */
 export async function PATCH(request: Request) {
   try {
-    const auth = await authorizeAdmin();
+    const auth = await authorizeModule("events", { write: true });
     if (!auth.ok) return auth.res;
     const { supabase, actorId } = auth;
 
@@ -301,7 +300,7 @@ export async function PATCH(request: Request) {
  * ============================================================= */
 export async function DELETE(request: Request) {
   try {
-    const auth = await authorizeAdmin();
+    const auth = await authorizeModule("events", { write: true });
     if (!auth.ok) return auth.res;
     const { supabase, actorId } = auth;
 

@@ -28,8 +28,7 @@
  * Owner：白客（backend-engineer）
  */
 
-import { revalidatePath } from "next/cache";
-import { authorizeAdmin } from "@/lib/admin-guard";
+import { revalidatePath } from "next/cache"; import { authorizeModule } from "@/lib/admin-guard";
 import { writeAuditLog } from "@/lib/audit";
 import {
   isUuid,
@@ -65,7 +64,7 @@ export const DELETE = GET;
 export async function PATCH(request: Request, ctx: Ctx) {
   try {
     /* ── 越權：第一行就擋 ─────────────────────────────────── */
-    const auth = await authorizeAdmin();
+    const auth = await authorizeModule("events", { write: true });
     if (!auth.ok) return auth.res;
     const { supabase, actorId } = auth;
 

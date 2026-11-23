@@ -36,9 +36,7 @@
  * H6：全支包 try/catch，任何情況都回 JSON；未實作的方法回 405 JSON。
  */
 
-import { revalidatePath, revalidateTag } from "next/cache";
-import type { SupabaseClient } from "@supabase/supabase-js";
-import { authorizeAdmin } from "@/lib/admin-guard";
+import { revalidatePath, revalidateTag } from "next/cache"; import type { SupabaseClient } from "@supabase/supabase-js"; import { authorizeModule } from "@/lib/admin-guard";
 import { writeAuditLog } from "@/lib/audit";
 import { HOME_SLIDES_MAX, HOME_SLIDES_TAG, type HomeSlide } from "@/lib/home-slides";
 import {
@@ -326,7 +324,7 @@ async function countSlides(
  * ============================================================= */
 export async function GET() {
   try {
-    const auth = await authorizeAdmin();
+    const auth = await authorizeModule("slides", { write: false });
     if (!auth.ok) return auth.res;
     const { supabase } = auth;
 
@@ -351,7 +349,7 @@ export async function GET() {
  * ============================================================= */
 export async function POST(request: Request) {
   try {
-    const auth = await authorizeAdmin();
+    const auth = await authorizeModule("slides", { write: true });
     if (!auth.ok) return auth.res;
     const { supabase, actorId } = auth;
 
@@ -665,7 +663,7 @@ export async function POST(request: Request) {
       actorId,
       "home",
       "slides-update",
-      `更新首頁輪播圖（${id}）`
+      `更新首頁輪播圖「${((updated as { title?: string | null }).title ?? "").trim() || "未命名"}」`
     );
 
     return jsonOk({

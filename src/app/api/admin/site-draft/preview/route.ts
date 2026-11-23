@@ -17,6 +17,7 @@
  */
 
 import { draftMode } from "next/headers";
+import { assertModuleAccess } from "@/lib/admin-guard";
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { isSupabaseConfigured } from "@/lib/supabase/env";
@@ -55,6 +56,9 @@ export async function GET(request: Request) {
       .eq("id", user.id)
       .maybeSingle();
     if (profile?.role !== "admin") return jsonForbidden();
+
+    const denied = await assertModuleAccess(supabase, "content", { write: false });
+    if (denied) return denied;
 
     (await draftMode()).enable();
     return NextResponse.redirect(new URL("/preview", request.url));

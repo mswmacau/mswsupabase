@@ -2448,6 +2448,12 @@ export interface AdminRecentAuditRow {
   action: string;
   summary: string;
   profile: { id: string; display_name: string | null } | null;
+  /**
+   * 操作者顯示名稱（由 profile.display_name 攤平）。
+   * 前端要顯示「誰操作」時直接讀這個欄位，不必自己挖 profile。
+   * 帳號已被刪除（actor_id → null）時為 null → 顯示「（已刪除帳號）」。
+   */
+  actor_name: string | null;
 }
 
 /**
@@ -2476,7 +2482,14 @@ export async function getRecentAuditLog(
     return { ok: false, rows: [] };
   }
 
-  return { ok: true, rows: data as unknown as AdminRecentAuditRow[] };
+  return {
+    ok: true,
+    rows: (data as unknown as AdminRecentAuditRow[]).map((row) => ({
+      ...row,
+      // 攤平出 actor_name：前端顯示「誰操作」不必自己挖 profile
+      actor_name: row.profile?.display_name ?? null,
+    })),
+  };
 }
 
 /**

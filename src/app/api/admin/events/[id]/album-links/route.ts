@@ -29,8 +29,7 @@
  * Owner：白客（backend-engineer）
  */
 
-import { revalidatePath, revalidateTag } from "next/cache";
-import { authorizeAdmin } from "@/lib/admin-guard";
+import { revalidatePath, revalidateTag } from "next/cache"; import { authorizeModule } from "@/lib/admin-guard";
 import {
   isUuid,
   jsonConflict,
@@ -78,7 +77,7 @@ export const PATCH = PUT;
 
 export async function GET(request: Request, ctx: Ctx) {
   try {
-    const auth = await authorizeAdmin();
+    const auth = await authorizeModule("events", { write: false });
     if (!auth.ok) return auth.res;
     const { supabase } = auth;
 
@@ -111,7 +110,7 @@ export async function GET(request: Request, ctx: Ctx) {
 
 export async function POST(request: Request, ctx: Ctx) {
   try {
-    const auth = await authorizeAdmin();
+    const auth = await authorizeModule("events", { write: true });
     if (!auth.ok) return auth.res;
     const { supabase } = auth;
 
@@ -207,7 +206,7 @@ export async function POST(request: Request, ctx: Ctx) {
 
 export async function DELETE(request: Request, ctx: Ctx) {
   try {
-    const auth = await authorizeAdmin();
+    const auth = await authorizeModule("events", { write: true });
     if (!auth.ok) return auth.res;
     const { supabase } = auth;
 

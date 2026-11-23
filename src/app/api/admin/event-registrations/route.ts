@@ -45,6 +45,7 @@
  */
 
 import { createClient } from "@/lib/supabase/server";
+import { assertModuleAccess } from "@/lib/admin-guard";
 import { isSupabaseConfigured } from "@/lib/supabase/env";
 import {
   isUuid,
@@ -66,7 +67,7 @@ const MAX_REGISTRATION_SCAN = 2000;
 const MAX_ROSTER = 200;
 
 /** H4：Supabase 設定檢查 → 未登入 401 → 非管理員 403（复刻 site-content） */
-async function authorizeAdmin() {
+async function authorizeAdmin(opts: { write?: boolean } = {}) {
   if (!isSupabaseConfigured) return { res: jsonNotConfigured() } as const;
 
   const supabase = await createClient();
@@ -83,6 +84,9 @@ async function authorizeAdmin() {
     .eq("id", user.id)
     .maybeSingle();
   if (profile?.role !== "admin") return { res: jsonForbidden() } as const;
+
+  const denied = await assertModuleAccess(supabase, "events", opts);
+  if (denied) return { res: denied } as const;
 
   return { supabase } as const;
 }

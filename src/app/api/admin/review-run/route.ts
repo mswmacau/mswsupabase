@@ -1,4 +1,5 @@
 import { revalidatePath } from "next/cache";
+import { assertModuleAccess } from "@/lib/admin-guard";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { createClient } from "@/lib/supabase/server";
 import { isSupabaseConfigured } from "@/lib/supabase/env";
@@ -91,6 +92,9 @@ export async function POST(request: Request) {
       .maybeSingle();
 
     if (profile?.role !== "admin") return jsonForbidden();
+
+    const denied = await assertModuleAccess(supabase, "review", { write: true });
+    if (denied) return denied;
 
     const body = await readJson(request);
     if (!body) return jsonBadJson();

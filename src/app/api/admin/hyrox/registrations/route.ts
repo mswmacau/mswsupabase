@@ -20,15 +20,7 @@
  * Owner：白客（backend-engineer）
  */
 
-import {
-  isUuid,
-  jsonInternal,
-  jsonMethodNotAllowed,
-  jsonNotFound,
-  jsonOk,
-  jsonValidation,
-} from "@/lib/api";
-import { authorizeAdmin } from "@/lib/admin-guard";
+import { isUuid, jsonInternal, jsonMethodNotAllowed, jsonNotFound, jsonOk, jsonValidation, } from "@/lib/api"; import { authorizeModule } from "@/lib/admin-guard";
 import {
   HYROX_SERIES,
   PROOF_BUCKET,
@@ -97,7 +89,7 @@ function isMissingColumn(error: unknown): boolean {
 
 export async function GET(request: Request) {
   try {
-    const auth = await authorizeAdmin();
+    const auth = await authorizeModule("events", { write: false });
     if (!auth.ok) return auth.res;
     const { supabase } = auth;
 

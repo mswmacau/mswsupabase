@@ -20,8 +20,7 @@
  * Owner：白客（backend-engineer）
  */
 
-import { revalidatePath, revalidateTag } from "next/cache";
-import { authorizeAdmin } from "@/lib/admin-guard";
+import { revalidatePath, revalidateTag } from "next/cache"; import { authorizeModule } from "@/lib/admin-guard";
 import { writeAuditLog } from "@/lib/audit";
 import { HYROX_EVENTS_TAG } from "@/lib/queries";
 import {
@@ -78,7 +77,7 @@ const NOTE_MAX = 500;
 
 export async function POST(request: Request) {
   try {
-    const auth = await authorizeAdmin();
+    const auth = await authorizeModule("review", { write: true });
     if (!auth.ok) return auth.res;
     const { supabase, actorId } = auth;
 
@@ -149,14 +148,43 @@ export async function POST(request: Request) {
     }
 
     // 稽核日誌（best-effort，失敗不影響已完成的審核；見 src/lib/audit.ts 的取捨）
+    // 摘要顯示會員與場次名稱，不寫 UUID（站主看不懂 UUID）。
+    // 查名稱失敗時退回 UUID，不影響審核結果。
+    let auditLabel = registrationId;
+    try {
+      const { data: info } = await supabase
+        .from("event_registrations")
+        .select(
+          "profile:profiles!event_registrations_user_id_fkey(display_name,full_name)," +
+            "event:events(title,event_date)"
+        )
+        .eq("id", registrationId)
+        .maybeSingle();
+      const detail = info as unknown as {
+        profile?: { display_name?: string | null; full_name?: string | null } | null;
+        event?: { title?: string | null; event_date?: string | null } | null;
+      } | null;
+      const memberName = (
+        detail?.profile?.full_name ||
+        detail?.profile?.display_name ||
+        ""
+      ).trim();
+      const eventTitle = (detail?.event?.title ?? "").trim();
+      if (memberName || eventTitle) {
+        auditLabel = `${memberName || "未知會員"}${eventTitle ? `（${eventTitle}）` : ""}`;
+      }
+    } catch {
+      /* 退回 UUID */
+    }
+
     await writeAuditLog(
       supabase,
       actorId,
       "hyrox",
       decision,
       decision === "confirmed"
-        ? `HYROX 報名付款審核通過（${registrationId}）`
-        : `HYROX 報名付款審核退回（${registrationId}）`
+        ? `HYROX 報名付款審核通過：${auditLabel}`
+        : `HYROX 報名付款審核退回：${auditLabel}`
     );
 
     // 前台狀態與後台名單／統計都會變

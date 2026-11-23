@@ -1,4 +1,5 @@
 import { revalidatePath } from "next/cache";
+import { assertModuleAccess } from "@/lib/admin-guard";
 import { createClient } from "@/lib/supabase/server";
 import { isSupabaseConfigured } from "@/lib/supabase/env";
 import { writeAuditLog } from "@/lib/audit";
@@ -43,7 +44,7 @@ function clampInt(value: unknown, fallback: number, min: number, max: number): n
   return Math.min(max, Math.max(min, Math.trunc(n)));
 }
 
-async function requireAdmin() {
+async function requireAdmin(opts: { write?: boolean } = {}) {
   if (!isSupabaseConfigured) return { error: jsonNotConfigured() as Response } as const;
 
   const supabase = await createClient();
@@ -61,6 +62,9 @@ async function requireAdmin() {
     .maybeSingle();
   if (profile?.role !== "admin") return { error: jsonForbidden() as Response } as const;
 
+  const denied = await assertModuleAccess(supabase, "coaches", opts);
+  if (denied) return { error: denied as Response } as const;
+
   // actorId 給 admin_audit_log 用：教練資料直接顯示在公開的 /coaches
   // （含頁尾的「關於我們」區塊；/about 已下架為永久轉址，不必再 revalidate）
   return { supabase, actorId: user.id } as const;
@@ -73,7 +77,7 @@ function revalidateCoachPages() {
 
 export async function POST(request: Request) {
   try {
-    const guard = await requireAdmin();
+    const guard = await requireAdmin({ write: true });
     if (guard.error) return guard.error;
     const { supabase, actorId } = guard;
 
@@ -124,19 +128,33 @@ export async function POST(request: Request) {
 
 export async function DELETE(request: Request) {
   try {
-    const guard = await requireAdmin();
+    const guard = await requireAdmin({ write: true });
     if (guard.error) return guard.error;
     const { supabase, actorId } = guard;
 
     const id = new URL(request.url).searchParams.get("id") ?? "";
     if (!id) return jsonValidation({}, "缺少教練 id。");
 
+    // 稽核摘要用教練名稱（不寫 UUID）；查不到就退回通用描述
+    let coachLabel = "未知教練";
+    try {
+      const { data: coachRow } = await supabase
+        .from("coaches")
+        .select("name")
+        .eq("id", id)
+        .maybeSingle();
+      coachLabel =
+        ((coachRow as { name?: string | null } | null)?.name ?? "").trim() || coachLabel;
+    } catch {
+      /* 退回通用描述 */
+    }
+
     const { error } = await supabase.from("coaches").delete().eq("id", id);
     if (error) return jsonDbError("DELETE /api/admin/coaches delete", error);
 
     revalidateCoachPages();
     // 摘要只留 id：刪除後已查不到姓名，硬查一次反而多一次失敗點
-    await writeAuditLog(supabase, actorId, "coaches", "delete", `刪除教練 id=${id}`);
+    await writeAuditLog(supabase, actorId, "coaches", "delete", `刪除教練「${coachLabel}」`);
     return jsonOk({ message: "教練已刪除。" });
   } catch {
     return jsonErr("伺服器錯誤，請稍後再試。", "INTERNAL", 500);

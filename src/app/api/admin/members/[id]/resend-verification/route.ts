@@ -20,6 +20,7 @@
  */
 
 import { NextResponse } from "next/server";
+import { assertModuleAccess } from "@/lib/admin-guard";
 import { createClient } from "@/lib/supabase/server";
 import { isSupabaseConfigured } from "@/lib/supabase/env";
 import { createAdminClient, isServiceRoleConfigured } from "@/lib/supabase/admin";
@@ -54,7 +55,7 @@ function jsonResendFailed(reason: string) {
 }
 
 /** Supabase 設定檢查 → 未登入 401 → 非管理員 403（复刻 /api/admin/members） */
-async function authorizeAdmin() {
+async function authorizeAdmin(opts: { write?: boolean } = {}) {
   if (!isSupabaseConfigured) return { res: jsonNotConfigured() } as const;
 
   const supabase = await createClient();
@@ -71,6 +72,9 @@ async function authorizeAdmin() {
     .eq("id", user.id)
     .maybeSingle();
   if (profile?.role !== "admin") return { res: jsonForbidden() } as const;
+
+  const denied = await assertModuleAccess(supabase, "members", opts);
+  if (denied) return { res: denied } as const;
 
   return { supabase, actorId: user.id } as const;
 }
@@ -91,7 +95,7 @@ export async function POST(
   ctx: { params: Promise<{ id: string }> }
 ) {
   try {
-    const auth = await authorizeAdmin();
+    const auth = await authorizeAdmin({ write: true });
     if ("res" in auth) return auth.res;
     const { supabase, actorId } = auth;
 

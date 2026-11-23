@@ -1,5 +1,5 @@
 import { revalidatePath } from "next/cache";
-import { authorizeAdmin } from "@/lib/admin-guard";
+import { authorizeModule } from "@/lib/admin-guard";
 import { writeAuditLog } from "@/lib/audit";
 import {
   isUuid,
@@ -44,7 +44,7 @@ type PinResult = {
 
 export async function GET() {
   try {
-    const auth = await authorizeAdmin();
+    const auth = await authorizeModule("commerce", { write: false });
     if (!auth.ok) return auth.res;
     const { supabase } = auth;
 
@@ -69,7 +69,7 @@ export async function GET() {
 
 export async function POST(request: Request) {
   try {
-    const auth = await authorizeAdmin();
+    const auth = await authorizeModule("commerce", { write: true });
     if (!auth.ok) return auth.res;
     const { supabase, actorId } = auth;
 

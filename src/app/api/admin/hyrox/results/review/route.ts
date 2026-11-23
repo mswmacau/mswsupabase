@@ -22,7 +22,7 @@
  */
 
 import { revalidatePath, revalidateTag } from "next/cache";
-import { authorizeAdmin } from "@/lib/admin-guard";
+import { authorizeModule } from "@/lib/admin-guard";
 import { writeAuditLog } from "@/lib/audit";
 import { HYROX_RESULTS_TAG } from "@/lib/queries";
 import {
@@ -51,7 +51,7 @@ export const DELETE = GET;
 
 export async function POST(request: Request) {
   try {
-    const auth = await authorizeAdmin();
+    const auth = await authorizeModule("events", { write: true });
     if (!auth.ok) return auth.res;
     const { supabase, actorId } = auth;
 

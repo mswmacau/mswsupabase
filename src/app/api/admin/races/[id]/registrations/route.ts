@@ -35,7 +35,7 @@
  * Owner：白客（backend-engineer）
  */
 
-import { authorizeAdmin } from "@/lib/admin-guard";
+import { authorizeModule } from "@/lib/admin-guard";
 import {
   isUuid,
   jsonInternal,
@@ -121,7 +121,7 @@ export function DELETE() {
 
 export async function GET(request: Request, ctx: Ctx) {
   try {
-    const auth = await authorizeAdmin();
+    const auth = await authorizeModule("events", { write: false });
     if (!auth.ok) return auth.res;
     const { supabase } = auth;
 

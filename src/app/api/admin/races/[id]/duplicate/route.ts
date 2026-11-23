@@ -30,8 +30,7 @@
  * Owner：白客（backend-engineer）
  */
 
-import { revalidateTag } from "next/cache";
-import { authorizeAdmin } from "@/lib/admin-guard";
+import { revalidateTag } from "next/cache"; import { authorizeModule } from "@/lib/admin-guard";
 import { writeAuditLog } from "@/lib/audit";
 import { RACES_TAG, RACE_SERIES } from "@/lib/races";
 import {
@@ -97,7 +96,7 @@ type SourceCategory = {
 
 export async function POST(request: Request, ctx: Ctx) {
   try {
-    const auth = await authorizeAdmin();
+    const auth = await authorizeModule("events", { write: true });
     if (!auth.ok) return auth.res;
     const { supabase, actorId } = auth;
 

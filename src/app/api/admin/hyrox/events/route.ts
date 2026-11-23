@@ -27,9 +27,7 @@
  * Owner：白客（backend-engineer）
  */
 
-import { revalidatePath, revalidateTag } from "next/cache";
-import type { SupabaseClient } from "@supabase/supabase-js";
-import { authorizeAdmin } from "@/lib/admin-guard";
+import { revalidatePath, revalidateTag } from "next/cache"; import type { SupabaseClient } from "@supabase/supabase-js"; import { authorizeModule } from "@/lib/admin-guard";
 import { writeAuditLog } from "@/lib/audit";
 import { HYROX_EVENTS_TAG } from "@/lib/queries";
 import {
@@ -318,7 +316,7 @@ function revalidateHyrox() {
  * ============================================================= */
 export async function GET() {
   try {
-    const auth = await authorizeAdmin();
+    const auth = await authorizeModule("events", { write: false });
     if (!auth.ok) return auth.res;
     const { supabase } = auth;
 
@@ -358,7 +356,7 @@ export async function GET() {
  * ============================================================= */
 export async function POST(request: Request) {
   try {
-    const auth = await authorizeAdmin();
+    const auth = await authorizeModule("events", { write: true });
     if (!auth.ok) return auth.res;
     const { supabase, actorId } = auth;
 
@@ -515,7 +513,7 @@ export async function POST(request: Request) {
  * ============================================================= */
 export async function DELETE(request: Request) {
   try {
-    const auth = await authorizeAdmin();
+    const auth = await authorizeModule("events", { write: true });
     if (!auth.ok) return auth.res;
     const { supabase, actorId } = auth;
 

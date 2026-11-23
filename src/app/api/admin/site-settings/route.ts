@@ -13,6 +13,7 @@
  */
 
 import { revalidatePath, revalidateTag } from "next/cache";
+import { assertModuleAccess } from "@/lib/admin-guard";
 import { createClient } from "@/lib/supabase/server";
 import { isSupabaseConfigured } from "@/lib/supabase/env";
 import { DEFAULT_THEME, normalizeTheme, type SiteTheme } from "@/lib/theme";
@@ -36,7 +37,7 @@ const SITE_ASSETS = "site-assets";
 type Supabase = NonNullable<Awaited<ReturnType<typeof createClient>>>;
 
 /** H4：Supabase 設定檢查 → 未登入 401 → 非管理員 403 */
-async function authorizeAdmin() {
+async function authorizeAdmin(opts: { write?: boolean } = {}) {
   if (!isSupabaseConfigured) return { res: jsonNotConfigured() } as const;
 
   const supabase = await createClient();
@@ -53,6 +54,9 @@ async function authorizeAdmin() {
     .eq("id", user.id)
     .maybeSingle();
   if (profile?.role !== "admin") return { res: jsonForbidden() } as const;
+
+  const denied = await assertModuleAccess(supabase, "theme", opts);
+  if (denied) return { res: denied } as const;
 
   // T-15：actorId 一併回傳（操作日誌的 actor_id = 授權管理員 user.id）
   return { supabase, actorId: user.id } as const;
@@ -80,7 +84,7 @@ async function imageExists(supabase: Supabase, path: string): Promise<boolean> {
  * ============================================================= */
 export async function POST(request: Request) {
   try {
-    const auth = (await authorizeAdmin()) as Authorized;
+    const auth = (await authorizeAdmin({ write: true })) as Authorized;
     if ("res" in auth) return auth.res;
     const { supabase, actorId } = auth;
 
@@ -160,7 +164,7 @@ export async function POST(request: Request) {
  * ============================================================= */
 export async function DELETE() {
   try {
-    const auth = (await authorizeAdmin()) as Authorized;
+    const auth = (await authorizeAdmin({ write: true })) as Authorized;
     if ("res" in auth) return auth.res;
     const { supabase, actorId } = auth;
 

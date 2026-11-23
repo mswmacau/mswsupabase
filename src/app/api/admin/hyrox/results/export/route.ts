@@ -22,7 +22,7 @@
  * Owner：白客（backend-engineer）
  */
 
-import { authorizeAdmin } from "@/lib/admin-guard";
+import { authorizeModule } from "@/lib/admin-guard";
 import {
   jsonErr,
   jsonInternal,
@@ -75,7 +75,7 @@ export const DELETE = POST;
 export async function GET(request: Request) {
   try {
     /* ── 越權：第一行就擋 ─────────────────────────────────── */
-    const auth = await authorizeAdmin();
+    const auth = await authorizeModule("events", { write: false });
     if (!auth.ok) return auth.res;
     const { supabase } = auth;
 

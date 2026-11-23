@@ -41,6 +41,7 @@
  */
 
 import { NextResponse } from "next/server";
+import { assertModuleAccess } from "@/lib/admin-guard";
 import { revalidatePath, revalidateTag } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { isSupabaseConfigured } from "@/lib/supabase/env";
@@ -113,7 +114,7 @@ type Role = (typeof ROLES)[number];
 type MemberStatus = (typeof STATUSES)[number];
 
 /** Supabase 設定檢查 → 未登入 401 → 非管理員 403（复刻 site-content） */
-async function authorizeAdmin() {
+async function authorizeAdmin(opts: { write?: boolean } = {}) {
   if (!isSupabaseConfigured) return { res: jsonNotConfigured() } as const;
 
   const supabase = await createClient();
@@ -130,6 +131,9 @@ async function authorizeAdmin() {
     .eq("id", user.id)
     .maybeSingle();
   if (profile?.role !== "admin") return { res: jsonForbidden() } as const;
+
+  const denied = await assertModuleAccess(supabase, "members", opts);
+  if (denied) return { res: denied } as const;
 
   return { supabase, actorId: user.id } as const;
 }
@@ -358,7 +362,7 @@ export async function GET(request: Request) {
  * ============================================================= */
 export async function POST(request: Request) {
   try {
-    const auth = (await authorizeAdmin()) as Authorized;
+    const auth = (await authorizeAdmin({ write: true })) as Authorized;
     if ("res" in auth) return auth.res;
     const { supabase, actorId } = auth;
 
@@ -462,7 +466,7 @@ export async function POST(request: Request) {
  * ============================================================= */
 export async function PATCH(request: Request) {
   try {
-    const auth = (await authorizeAdmin()) as Authorized;
+    const auth = (await authorizeAdmin({ write: true })) as Authorized;
     if ("res" in auth) return auth.res;
     const { supabase, actorId } = auth;
 
@@ -717,7 +721,7 @@ export async function PATCH(request: Request) {
         actorId,
         "members",
         "update",
-        `更新會員 ${userId}${changes.length ? `（${changes.join("、")}）` : ""}。`
+        `更新會員 ${memberName}${changes.length ? `（${changes.join("、")}）` : ""}。`
       );
     }
 
@@ -826,7 +830,8 @@ type ServerClient = NonNullable<Awaited<ReturnType<typeof createClient>>>;
 async function purgeMemberViaRpc(
   supabase: ServerClient,
   actorId: string,
-  userId: string
+  userId: string,
+  displayName = "未命名會員"
 ): Promise<Response | null> {
   const { data, error } = await supabase.rpc("admin_purge_member", { p_id: userId });
 
@@ -847,7 +852,7 @@ async function purgeMemberViaRpc(
       actorId,
       "members",
       "delete",
-      `永久刪除會員 ${userId}（RPC admin_purge_member，含 auth 使用者）。`
+      `永久刪除會員 ${displayName}（RPC admin_purge_member，含 auth 使用者）。`
     );
     /* 刪帳號會 cascade 刪掉他的 hyrox_results：公開榜必須立刻失效，
      * 否則「已刪除的成績」最多還會公開 60 秒（QA 實測到的殘留）。 */
@@ -884,7 +889,7 @@ async function purgeMemberViaRpc(
  * ============================================================= */
 export async function DELETE(request: Request) {
   try {
-    const auth = (await authorizeAdmin()) as Authorized;
+    const auth = (await authorizeAdmin({ write: true })) as Authorized;
     if ("res" in auth) return auth.res;
     const { supabase, actorId } = auth;
 
@@ -897,13 +902,18 @@ export async function DELETE(request: Request) {
       return jsonValidation({ userId: "不可刪除自己的帳號。" }, "不可刪除自己的帳號。");
     }
 
-    // 先讀目標角色：admin 需確認不是最後一位（RPC 也會擋，這裡先給清楚的錯誤）
+    // 先讀目標角色與名稱：admin 需確認不是最後一位（RPC 也會擋，這裡先給清楚的錯誤）；
+    // 名稱用於稽核摘要（審計紀錄不應只寫 UUID——站主看不懂是誰）。
     const { data: target, error: targetError } = await supabase
       .from("profiles")
-      .select("role")
+      .select("role, display_name")
       .eq("id", userId)
       .maybeSingle();
     if (targetError) return jsonInternal("DELETE /api/admin/members read", targetError);
+
+    const targetName =
+      ((target as { display_name?: string | null } | null)?.display_name ?? "").trim() ||
+      "未命名會員";
 
     if (!target) {
       // profile 已不存在，但 auth.users 可能還留著（先前只刪了 profile 的孤兒帳號）。
@@ -911,7 +921,7 @@ export async function DELETE(request: Request) {
       // 它用 auth.users 判斷存在性：真的還有就順手清掉，完全沒有才回 NOT_FOUND。
       // 少了這一段，客戶即使跑完 migration 也永遠清不掉這種孤兒帳號（API 會先 404）。
       if (!isServiceRoleConfigured) {
-        const orphanPurged = await purgeMemberViaRpc(supabase, actorId, userId);
+        const orphanPurged = await purgeMemberViaRpc(supabase, actorId, userId, targetName);
         if (orphanPurged) return orphanPurged;
       }
       return jsonNotFound("找不到這位會員。");
@@ -945,7 +955,7 @@ export async function DELETE(request: Request) {
      * 並在 note 說明要跑哪支 SQL；業務規則錯誤一律照契約回對應狀態碼。
      * ------------------------------------------------------------- */
     if (!isServiceRoleConfigured) {
-      const purged = await purgeMemberViaRpc(supabase, actorId, userId);
+      const purged = await purgeMemberViaRpc(supabase, actorId, userId, targetName);
       if (purged) return purged;
 
       /* ---------- 降級：軟刪除（status='disabled'） ---------- */
@@ -964,7 +974,7 @@ export async function DELETE(request: Request) {
         actorId,
         "members",
         "soft_delete",
-        `停用會員 ${userId}（永久刪除未啟用，僅軟刪除）。`
+        `停用會員 ${targetName}（永久刪除未啟用，僅軟刪除）。`
       );
 
       return jsonOk({
@@ -1002,7 +1012,7 @@ export async function DELETE(request: Request) {
       actorId,
       "members",
       "delete",
-      `刪除會員 ${userId}（含 auth 使用者）。`
+      `刪除會員 ${targetName}（含 auth 使用者）。`
     );
 
     return jsonOk({ data: { deleted: true }, message: "已刪除會員帳號。" });

@@ -1,5 +1,5 @@
 import { revalidatePath } from "next/cache";
-import { authorizeAdmin } from "@/lib/admin-guard";
+import { authorizeModule } from "@/lib/admin-guard";
 import {
   isUuid,
   jsonBadJson,
@@ -75,7 +75,7 @@ function statusLabel(status: string): string {
 
 export async function GET(request: Request) {
   try {
-    const auth = await authorizeAdmin();
+    const auth = await authorizeModule("commerce", { write: false });
     if (!auth.ok) return auth.res;
     const { supabase } = auth;
 
@@ -152,7 +152,7 @@ export async function GET(request: Request) {
 
 export async function POST(request: Request) {
   try {
-    const auth = await authorizeAdmin();
+    const auth = await authorizeModule("commerce", { write: true });
     if (!auth.ok) return auth.res;
     const { supabase } = auth;
 

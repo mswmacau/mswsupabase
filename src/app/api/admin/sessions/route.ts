@@ -1,4 +1,5 @@
 import { revalidatePath } from "next/cache";
+import { assertModuleAccess } from "@/lib/admin-guard";
 import { createClient } from "@/lib/supabase/server";
 import { isSupabaseConfigured } from "@/lib/supabase/env";
 import { writeAuditLog } from "@/lib/audit";
@@ -164,7 +165,7 @@ function mapWriteError(where: string, error: unknown, classBound: boolean): Resp
 }
 
 /** 權限：未設定 400 → 未登入 401 → 非管理員 403 */
-async function requireAdmin(): Promise<
+async function requireAdmin(opts: { write?: boolean } = {}): Promise<
   { supabase: Supabase; actorId: string } | { res: Response }
 > {
   if (!isSupabaseConfigured) return { res: jsonNotConfigured() };
@@ -183,6 +184,9 @@ async function requireAdmin(): Promise<
     .eq("id", user.id)
     .maybeSingle();
   if (profile?.role !== "admin") return { res: jsonForbidden() };
+
+  const denied = await assertModuleAccess(supabase, "schedule", opts);
+  if (denied) return { res: denied };
 
   // actorId 給 admin_audit_log 用（場次變動會直接影響公開的 /schedule）
   return { supabase, actorId: user.id };
@@ -216,7 +220,7 @@ function tooLong(
  */
 export async function POST(request: Request) {
   try {
-    const auth = await requireAdmin();
+    const auth = await requireAdmin({ write: true });
     if ("res" in auth) return auth.res;
     const { supabase, actorId } = auth;
 
@@ -250,7 +254,9 @@ export async function POST(request: Request) {
         actorId,
         "sessions",
         id ? "update" : "create",
-        id ? `更新訓練場次 ${id}` : "新增訓練場次"
+        id
+          ? `更新訓練場次${text(body.session_date) ? `（${text(body.session_date)}）` : ""}`
+          : "新增訓練場次"
       );
     }
     return res;
@@ -262,7 +268,7 @@ export async function POST(request: Request) {
 /** PATCH /api/admin/sessions — 以 id 更新（body 需帶 id） */
 export async function PATCH(request: Request) {
   try {
-    const auth = await requireAdmin();
+    const auth = await requireAdmin({ write: true });
     if ("res" in auth) return auth.res;
     const { supabase, actorId } = auth;
 
@@ -274,7 +280,7 @@ export async function PATCH(request: Request) {
 
     const res = await updateSession(supabase, id, body);
     if (res.ok) {
-      await writeAuditLog(supabase, actorId, "sessions", "update", `更新訓練場次 ${id}`);
+      await writeAuditLog(supabase, actorId, "sessions", "update", `更新訓練場次${text(body.session_date) ? `（${text(body.session_date)}）` : ""}`);
     }
     return res;
   } catch (err) {

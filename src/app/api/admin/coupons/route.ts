@@ -1,4 +1,5 @@
 import { revalidatePath } from "next/cache";
+import { assertModuleAccess } from "@/lib/admin-guard";
 import { createClient } from "@/lib/supabase/server";
 import { isSupabaseConfigured } from "@/lib/supabase/env";
 import { writeAuditLog } from "@/lib/audit";
@@ -68,6 +69,9 @@ export async function POST(request: Request) {
       .eq("id", user.id)
       .maybeSingle();
     if (profile?.role !== "admin") return jsonForbidden();
+
+    const denied = await assertModuleAccess(supabase, "points", { write: true });
+    if (denied) return denied;
 
     const body = await readJson(request);
     if (!body) return jsonBadJson();
@@ -143,6 +147,9 @@ export async function PATCH(request: Request) {
       .eq("id", user.id)
       .maybeSingle();
     if (profile?.role !== "admin") return jsonForbidden();
+
+    const denied = await assertModuleAccess(supabase, "points", { write: true });
+    if (denied) return denied;
 
     const body = await readJson(request);
     if (!body) return jsonBadJson();

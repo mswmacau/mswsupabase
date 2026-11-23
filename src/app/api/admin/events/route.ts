@@ -13,6 +13,7 @@
  */
 
 import { revalidatePath, revalidateTag } from "next/cache";
+import { assertModuleAccess } from "@/lib/admin-guard";
 import { createClient } from "@/lib/supabase/server";
 import { isSupabaseConfigured } from "@/lib/supabase/env";
 import { writeAuditLog } from "@/lib/audit";
@@ -50,7 +51,7 @@ function isRealDate(s: string): boolean {
 }
 
 /** H4：IsSupabaseConfigured → 未登入 401 → 非管理員 403 */
-async function authorizeAdmin() {
+async function authorizeAdmin(opts: { write?: boolean } = {}) {
   if (!isSupabaseConfigured) return { res: jsonNotConfigured() } as const;
 
   const supabase = await createClient();
@@ -67,6 +68,9 @@ async function authorizeAdmin() {
     .eq("id", user.id)
     .maybeSingle();
   if (profile?.role !== "admin") return { res: jsonForbidden() } as const;
+
+  const denied = await assertModuleAccess(supabase, "events", opts);
+  if (denied) return { res: denied } as const;
 
   return { supabase, admin: { id: user.id } } as const;
 }
@@ -267,7 +271,7 @@ export async function GET() {
  * ============================================================= */
 export async function POST(request: Request) {
   try {
-    const auth = (await authorizeAdmin()) as Authorized;
+    const auth = (await authorizeAdmin({ write: true })) as Authorized;
     if ("res" in auth) return auth.res;
     const { supabase, admin } = auth;
 
@@ -350,7 +354,7 @@ export async function POST(request: Request) {
  * ============================================================= */
 export async function PATCH(request: Request) {
   try {
-    const auth = (await authorizeAdmin()) as Authorized;
+    const auth = (await authorizeAdmin({ write: true })) as Authorized;
     if ("res" in auth) return auth.res;
     const { supabase } = auth;
 
@@ -535,7 +539,7 @@ export async function PATCH(request: Request) {
  * ============================================================= */
 export async function DELETE(request: Request) {
   try {
-    const auth = (await authorizeAdmin()) as Authorized;
+    const auth = (await authorizeAdmin({ write: true })) as Authorized;
     if ("res" in auth) return auth.res;
     const { supabase } = auth;
 
@@ -551,12 +555,15 @@ export async function DELETE(request: Request) {
 
     const { data: row, error: readErr } = await supabase
       .from("events")
-      .select("id, status")
+      .select("id, status, title")
       .eq("id", id)
       .maybeSingle();
 
     if (readErr) return jsonInternal("DELETE /api/admin/events read", readErr);
     if (!row) return jsonNotFound(NOT_FOUND_MSG);
+    // 稽核摘要用活動名稱（不寫 UUID——站主看不懂）
+    const archiveTitle =
+      ((row as { title?: string | null }).title ?? "").trim() || "未命名活動";
     if ((row as { status: EventStatus }).status === "archived") {
       return jsonConflict("此活動已下架。");
     }
@@ -579,7 +586,7 @@ export async function DELETE(request: Request) {
       auth.admin.id,
       "events",
       "archive",
-      `下架活動 ${id}（status → archived，可復原）`
+      `下架活動「${archiveTitle}」（status → archived，可復原）`
     );
 
     return jsonOk({ message: "活動已下架，可在「已下架」清單復原。" });

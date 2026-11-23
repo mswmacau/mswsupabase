@@ -1,5 +1,5 @@
 import { revalidatePath } from "next/cache";
-import { authorizeAdmin } from "@/lib/admin-guard";
+import { authorizeModule } from "@/lib/admin-guard";
 import { writeAuditLog } from "@/lib/audit";
 import { createAdminClient, isServiceRoleConfigured } from "@/lib/supabase/admin";
 import {
@@ -90,7 +90,7 @@ type AwardResult = {
 
 export async function GET(request: Request) {
   try {
-    const auth = await authorizeAdmin();
+    const auth = await authorizeModule("points", { write: false });
     if (!auth.ok) return auth.res;
     const { supabase } = auth;
 
@@ -163,7 +163,7 @@ export async function GET(request: Request) {
 
 export async function POST(request: Request) {
   try {
-    const auth = await authorizeAdmin();
+    const auth = await authorizeModule("points", { write: true });
     if (!auth.ok) return auth.res;
     const { supabase, actorId } = auth;
 

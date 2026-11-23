@@ -40,9 +40,7 @@
  * Owner：白客（backend-engineer）
  */
 
-import { revalidatePath, revalidateTag } from "next/cache";
-import type { SupabaseClient } from "@supabase/supabase-js";
-import { authorizeAdmin } from "@/lib/admin-guard";
+import { revalidatePath, revalidateTag } from "next/cache"; import type { SupabaseClient } from "@supabase/supabase-js"; import { authorizeModule } from "@/lib/admin-guard";
 import { writeAuditLog } from "@/lib/audit";
 import { publicAssetUrl } from "@/lib/assets";
 import { HYROX_EVENTS_TAG, HYROX_PHOTOS_TAG } from "@/lib/queries";
@@ -212,7 +210,7 @@ function revalidateHyroxPhotos() {
  * ============================================================= */
 export async function GET(request: Request) {
   try {
-    const auth = await authorizeAdmin();
+    const auth = await authorizeModule("events", { write: false });
     if (!auth.ok) return auth.res;
     const { supabase } = auth;
 
@@ -253,7 +251,7 @@ export async function GET(request: Request) {
  * ============================================================= */
 export async function POST(request: Request) {
   try {
-    const auth = await authorizeAdmin();
+    const auth = await authorizeModule("events", { write: true });
     if (!auth.ok) return auth.res;
     const { supabase, actorId } = auth;
 
@@ -475,13 +473,30 @@ export async function POST(request: Request) {
 
     if (updErr) return dbFail("POST /api/admin/hyrox/photos update", updErr);
 
+    // 稽核摘要用場次名稱（相片 id 對站主沒有意義）
+    let photoEventLabel = "未取得場次";
+    try {
+      const { data: phRow } = await supabase
+        .from("event_photos")
+        .select("event:events(title)")
+        .eq("id", id)
+        .maybeSingle();
+      const t = (
+        (phRow as unknown as { event?: { title?: string | null } | null } | null)?.event
+          ?.title ?? ""
+      ).trim();
+      if (t) photoEventLabel = t;
+    } catch {
+      /* 退回通用描述 */
+    }
+
     revalidateHyroxPhotos();
     await writeAuditLog(
       supabase,
       actorId,
       "hyrox",
       "photos-update",
-      `更新 HYROX 場次相片（${id}）`
+      `更新 HYROX 場次相片：${photoEventLabel}`
     );
 
     return jsonOk({
