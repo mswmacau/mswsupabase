@@ -310,7 +310,15 @@ export function PaymentReview({ events }: { events: HyroxEvent[] }) {
 
   const pendingRows = rows.filter((r) => r.payment_status === "pending_review");
   const rejectedRows = rows.filter((r) => r.payment_status === "rejected");
-  const confirmedCount = rows.filter((r) => r.payment_status === "confirmed").length;
+  /**
+   * 已確認：付款審核完成、但**活動當天仍要點名**，所以不能像以前那樣
+   * 只算筆數、不列出來（否則核可後就永遠點不到名）。
+   * 摺疊預設收起，避免名單越積越長；排序照站主要求：報名時間新→舊。
+   */
+  const confirmedRows = rows
+    .filter((r) => r.payment_status === "confirmed")
+    .sort((a, b) => (a.created_at < b.created_at ? 1 : a.created_at > b.created_at ? -1 : 0));
+  const confirmedCount = confirmedRows.length;
   const shownError = actionError ?? error;
 
   /* 連一場都沒有 → 先請管理員建立場次 */
@@ -427,7 +435,11 @@ export function PaymentReview({ events }: { events: HyroxEvent[] }) {
       )}
 
       {/* 空狀態 */}
-      {!loading && !error && pendingRows.length === 0 && rejectedRows.length === 0 && (
+      {!loading &&
+        !error &&
+        pendingRows.length === 0 &&
+        rejectedRows.length === 0 &&
+        confirmedRows.length === 0 && (
         <div className="card-dark px-4 py-14 text-center">
           <ImageOff size={26} className="mx-auto text-white/30" />
           <p className="mt-3 text-sm text-white/75">這一場沒有待審的付款。</p>
@@ -460,6 +472,38 @@ export function PaymentReview({ events }: { events: HyroxEvent[] }) {
             />
           ))}
         </section>
+      )}
+
+      {/* 已確認（預設收起）：付款已定案，但活動當天要在這裡點名 */}
+      {!loading && !error && confirmedRows.length > 0 && (
+        <details className="card-dark px-4 py-3" data-confirmed-group>
+          <summary className="flex min-h-11 cursor-pointer list-none select-none items-center gap-2 text-[11px] font-bold uppercase tracking-[0.22em] text-emerald-300 [&::-webkit-details-marker]:hidden">
+            已確認（{confirmedRows.length}）
+            <span className="text-[10px] font-normal normal-case tracking-normal text-white/45">
+              展開可點名
+            </span>
+          </summary>
+          <ul className="mt-3 space-y-3">
+            {confirmedRows.map((row) => (
+              <ReviewCard
+                key={row.registration_id}
+                row={row}
+                busy={busyId === row.registration_id}
+                showPaymentActions={false}
+                attendanceEnabled={attendanceEnabled}
+                attendanceBusy={attendanceBusyId === row.registration_id}
+                onToggleAttendance={() => void toggleAttendance(row)}
+                onConfirm={() => void review(row, "confirmed")}
+                onReject={() => {
+                  setRejectTarget(row);
+                  setRejectNote("");
+                  setRejectError(null);
+                }}
+                onZoom={setLightbox}
+              />
+            ))}
+          </ul>
+        </details>
       )}
 
       {!loading && rejectedRows.length > 0 && (
@@ -585,6 +629,7 @@ export function PaymentReview({ events }: { events: HyroxEvent[] }) {
 function ReviewCard({
   row,
   busy,
+  showPaymentActions = true,
   attendanceEnabled,
   attendanceBusy,
   onToggleAttendance,
@@ -594,6 +639,8 @@ function ReviewCard({
 }: {
   row: RowWithAttendance;
   busy: boolean;
+  /** 已確認分組不顯示「確認收款／拒絕」（付款已定案，只剩點名） */
+  showPaymentActions?: boolean;
   /** null = 探測中；false = migration 未跑（點名 disabled＋小字） */
   attendanceEnabled: boolean | null;
   attendanceBusy: boolean;
@@ -677,6 +724,7 @@ function ReviewCard({
             </p>
           )}
 
+          {showPaymentActions && (
           <div className="mt-3 flex flex-col gap-2 sm:flex-row">
             <button
               type="button"
@@ -700,6 +748,7 @@ function ReviewCard({
               <X size={15} /> 拒絕
             </button>
           </div>
+          )}
 
           {/* 出席點名（站主：邊個真係嚟到）。390 獨立一行，避免擠爆操作列 */}
           <div className="mt-2 flex flex-wrap items-center gap-2 border-t border-[var(--line-fine)] pt-2">

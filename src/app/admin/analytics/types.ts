@@ -142,6 +142,16 @@ export interface HyroxMonthlyRow {
   revenue_cents: number;
   returning_members: number;
   returning_rate: number;
+  /**
+   * 已點名數（attended_at not null，含未付款但到場者）。
+   * migration-event-attendance.sql 未跑時 RPC 不回此鍵 → undefined，
+   * UI 一律顯示「—」（0 與「未點名」是兩件事）。
+   */
+  attended?: number | null;
+  /** 已付款且出席（attendance_rate 的分子，與分母同一集合） */
+  attended_confirmed?: number | null;
+  /** 出席率 0–100（一位小數）：100 * attended_confirmed / confirmed */
+  attendance_rate?: number | null;
 }
 
 export interface HyroxMonthlyData {

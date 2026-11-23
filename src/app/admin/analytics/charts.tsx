@@ -20,6 +20,20 @@ export function fmtPct(rate: number): string {
   return `${Math.round(rate * 100)}%`;
 }
 
+/**
+ * 0–100 → 「100%」／「83.3%」（一位小數，整數不帶小數點）
+ *
+ * 為什麼要另外一支：fmtPct 的契約是 **0–1**（內部 ×100）；
+ * analytics_hyrox_monthly 的 confirm_rate / returning_rate /
+ * attendance_rate 已經是 **0–100**（SQL 是 round(100.0 * …, 1)）。
+ * 先前誤用 fmtPct → 100% 被再乘 100 顯示成 10000%。
+ * 兩支並存是刻意的：改 fmtPct 語意會波及活動、優惠、頁面流量等既有區塊。
+ */
+export function pct1(value: number): string {
+  const rounded = Math.round(value * 10) / 10;
+  return `${Number.isInteger(rounded) ? rounded : rounded.toFixed(1)}%`;
+}
+
 /** 毫秒 → 「14 秒」／「1 分 30 秒」 */
 export function fmtDwell(ms: number): string {
   const totalSec = Math.round(ms / 1000);

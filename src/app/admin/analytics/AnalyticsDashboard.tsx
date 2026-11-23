@@ -26,6 +26,7 @@ import {
   fmtDwell,
   fmtPct,
   monthShort,
+  pct1,
 } from "./charts";
 import { Download } from "lucide-react";
 import { EventRegistrationCards, PagePathCards, SessionCards } from "./cards";
@@ -851,11 +852,14 @@ function HyroxMonthlyCards({ rows }: { rows: HyroxMonthlyRow[] }) {
                 {monthLabel(r.month)}
               </div>
               <div className="mt-0.5 font-mono text-xs tabular-nums text-white/60">
-                報名 {r.registrations} · 確認 {r.confirmed}
-                （{fmtPct(r.confirm_rate)}）
+                報名 {r.registrations} · 確認 {r.confirmed}（{pct1(r.confirm_rate)}）
+              </div>
+              <div className="mt-0.5 font-mono text-xs tabular-nums text-white/60">
+                點名 {r.attended ?? "—"} · 已付款出席 {r.attended_confirmed ?? "—"}
+                {r.attendance_rate == null ? "" : `（${pct1(r.attendance_rate)}）`}
               </div>
               <div className="mt-0.5 font-mono text-xs tabular-nums text-white/50">
-                回頭會員 {r.returning_members}（{fmtPct(r.returning_rate)}）
+                回頭會員 {r.returning_members}（{pct1(r.returning_rate)}）
               </div>
             </div>
             <div className="shrink-0 text-right">
@@ -882,6 +886,23 @@ function HyroxMonthlySection({ data }: { data: HyroxMonthlyData | null }) {
 
   const rows = [...data.months].reverse(); // RPC 降序 → 圖表由舊到新
   const totalReg = data.months.reduce((s, r) => s + r.registrations, 0);
+  /**
+   * 出席聚合（migration-event-attendance.sql §3）：
+   * 點名 = Σattended；已付款出席 = Σattended_confirmed；
+   * 出席率 = 100 × Σ已付款出席 / Σconfirmed（與 SQL 同一個分子分母集合）。
+   * 舊版 RPC 沒有這三個鍵 → 整組顯示「—」，不要顯示 0。
+   */
+  const hasAttendance = data.months.some((r) => r.attended != null);
+  const totalAttended = data.months.reduce((s, r) => s + (r.attended ?? 0), 0);
+  const totalAttendedConfirmed = data.months.reduce(
+    (s, r) => s + (r.attended_confirmed ?? 0),
+    0
+  );
+  const totalConfirmedForRate = data.months.reduce((s, r) => s + (r.confirmed ?? 0), 0);
+  const overallAttendanceRate =
+    totalConfirmedForRate === 0
+      ? null
+      : (100 * totalAttendedConfirmed) / totalConfirmedForRate;
   const totalRevenue = data.months.reduce((s, r) => s + r.revenue_cents, 0);
   const empty = data.months.length === 0;
 
@@ -917,6 +938,41 @@ function HyroxMonthlySection({ data }: { data: HyroxMonthlyData | null }) {
             </div>
           </div>
 
+          {/* 出席三格：390 直排、1440 兩欄；舊版 RPC 缺鍵一律「—」 */}
+          <div className="mt-3 grid grid-cols-1 gap-3 md:grid-cols-2">
+            <div className="rounded-xl border border-ink-line p-4">
+              <div className="text-xs text-white/55">點名</div>
+              <div className="mt-1 text-2xl font-black tabular-nums">
+                {hasAttendance ? totalAttended : "—"}
+              </div>
+              <div className="mt-0.5 text-[11px] text-white/45">
+                已點名人次（含未付款但到場）
+              </div>
+            </div>
+            <div className="rounded-xl border border-ink-line p-4">
+              <div className="text-xs text-white/55">已付款出席</div>
+              <div className="mt-1 text-2xl font-black tabular-nums">
+                {hasAttendance ? totalAttendedConfirmed : "—"}
+              </div>
+              <div className="mt-0.5 text-[11px] text-white/45">
+                已付款且出席（出席率的分子）
+              </div>
+            </div>
+            <div className="rounded-xl border border-ink-line p-4">
+              <div className="text-xs text-white/55">出席率</div>
+              <div className="mt-1 text-2xl font-black tabular-nums">
+                {hasAttendance
+                  ? overallAttendanceRate == null
+                    ? "—"
+                    : pct1(overallAttendanceRate)
+                  : "—"}
+              </div>
+              <div className="mt-0.5 text-[11px] text-white/45">
+                已付款出席 ÷ 已確認報名
+              </div>
+            </div>
+          </div>
+
           {/* 報名數長條（月份由舊到新） */}
           <ColumnChart
             data={rows.map((r) => ({ label: monthShort(r.month), value: r.registrations }))}
@@ -938,6 +994,8 @@ function HyroxMonthlySection({ data }: { data: HyroxMonthlyData | null }) {
                   <th className="py-3 pr-4 text-right">報名</th>
                   <th className="py-3 pr-4 text-right">確認</th>
                   <th className="py-3 pr-4 text-right">確認率</th>
+                  <th className="py-3 pr-4 text-right">點名</th>
+                  <th className="py-3 pr-4 text-right">出席率</th>
                   <th className="py-3 pr-4 text-right">收入</th>
                   <th className="py-3 pr-4 text-right">回頭會員</th>
                 </tr>
@@ -949,7 +1007,13 @@ function HyroxMonthlySection({ data }: { data: HyroxMonthlyData | null }) {
                     <td className="py-3 pr-4 text-right tabular-nums">{r.registrations}</td>
                     <td className="py-3 pr-4 text-right tabular-nums">{r.confirmed}</td>
                     <td className="py-3 pr-4 text-right tabular-nums">
-                      {fmtPct(r.confirm_rate)}
+                      {pct1(r.confirm_rate)}
+                    </td>
+                    <td className="py-3 pr-4 text-right tabular-nums">
+                      {r.attended ?? "—"}
+                    </td>
+                    <td className="py-3 pr-4 text-right tabular-nums">
+                      {r.attendance_rate == null ? "—" : pct1(r.attendance_rate)}
                     </td>
                     <td className="py-3 pr-4 text-right tabular-nums">
                       {r.revenue_cents === 0
@@ -957,7 +1021,7 @@ function HyroxMonthlySection({ data }: { data: HyroxMonthlyData | null }) {
                         : `MOP ${(r.revenue_cents / 100).toLocaleString("en-US")}`}
                     </td>
                     <td className="py-3 pr-4 text-right tabular-nums">
-                      {r.returning_members}（{fmtPct(r.returning_rate)}）
+                      {r.returning_members}（{pct1(r.returning_rate)}）
                     </td>
                   </tr>
                 ))}
