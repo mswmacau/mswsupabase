@@ -162,6 +162,12 @@ export async function DELETE(request: Request) {
 }
 
 export async function GET() {
+  // 先鑑權再回 405：與 events/route.ts 的處理一致。
+  // 匿名請求應該得到 401（未登入），而不是 405（不支援此方法）——
+  // 405 會讓未登入者知道「這個端點存在但方法不對」，屬於不必要的信息洩漏；
+  // 順序反了也會讓「權限測試」誤判（401 與 405 是兩種不同的結論）。
+  const guard = await requireAdmin();
+  if ("error" in guard) return guard.error;
   return jsonMethodNotAllowed();
 }
 
