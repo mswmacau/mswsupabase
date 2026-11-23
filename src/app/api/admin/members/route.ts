@@ -827,7 +827,16 @@ export async function PATCH(request: Request) {
     }
 
     if (member && adminLevelSaved !== undefined) {
-      (member as { admin_level?: number | null }).admin_level = adminLevelSaved;
+      const m = member as { admin_level?: number | null; role?: "member" | "admin" };
+      m.admin_level = adminLevelSaved;
+      // 【P2-1】role 必須一起覆寫。
+      // `member` 是呼叫 RPC **之前**讀到的舊物件，只覆寫 admin_level 會回
+      // {"role":"member","admin_level":2} —— 資料庫其實已經是 admin。
+      // 前端（MemberManager）用回應即時回寫列表，站主會看到剛提級那一列
+      // 仍標「會員」，誤判失敗而重複操作。
+      // 這裡按 RPC 的返回值同步（p_level=0 → member；p_level=2 → admin），
+      // 不额外查一次 DB：RPC 的成功返回就是資料庫的最終狀態。
+      m.role = adminLevelSaved === null ? "member" : "admin";
     }
 
     let message: string;
