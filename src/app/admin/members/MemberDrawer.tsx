@@ -263,46 +263,89 @@ export function MemberDrawer({
             <p className="text-[11px] font-bold uppercase tracking-[0.14em] text-white/45">
               管理員級別
             </p>
-            <div className="mt-2 flex flex-wrap items-center gap-2">
-              <span
-                className={`slab border px-2.5 py-1 text-xs font-bold ${
-                  (levelOverride ?? (typeof data.admin_level === "number" ? data.admin_level : 0)) === 2 &&
-                  data.role === "admin"
-                    ? "border-cobalt/50 bg-cobalt/15 text-accent-blue"
-                    : data.role === "admin"
-                      ? "border-vital/50 bg-vital/15 text-vital-bright"
-                      : "border-white/20 bg-white/5 text-white/70"
-                }`}
-              >
-                {data.role !== "admin"
-                  ? "非管理員"
-                  : (levelOverride ??
-                        (typeof data.admin_level === "number" ? data.admin_level : 0)) === 2
-                    ? "第二級管理員"
-                    : "第一級管理員"}
-              </span>
+            {(() => {
+              /*
+               * 級別判定必須與後端 admin_module_access() 一致，否則會出現
+               * 「畫面說有級別、實際零權限」。四個狀態要分清楚：
+               *   role !== 'admin'              → 非管理員
+               *   admin_level === 2             → 第二級管理員（對照表）
+               *   admin_level === 1             → 第一級管理員（全開）
+               *   admin_level === null          → **未分級（無權限）**：後端回 none
+               *   admin_level === undefined     → 欄位不存在（migration 未跑）
+               *                                   → 當第一級（那時所有 admin 都全開）
+               *
+               * 為什麼要分 null 與 undefined：typeof null === 'object'，
+               * 用 `typeof x === 'number'` 會把 null 與「沒有欄位」混為一談；
+               * 而這兩者的後端語意相反（null = 全擋、欄位不存在 = 全開）。
+               */
+              const raw = levelOverride ?? data.admin_level;
+              const isAdmin = data.role === "admin";
 
-              {levelConfirm === null ? (
-                <button
-                  type="button"
-                  onClick={() => {
-                    setLevelError(null);
-                    setLevelConfirm(
-                      data.role === "admin" ? 0 : 2
-                    );
-                  }}
-                  className="btn-base btn-ghost min-h-11 px-3 py-2 text-xs"
-                >
-                  {data.role === "admin" ? "取消管理員" : "設為第二級管理員"}
-                </button>
-              ) : null}
-            </div>
+              let label = "非管理員";
+              let tone = "border-white/20 bg-white/5 text-white/70";
+              let target: 0 | 2 = 2;
+              let actionLabel = "設為第二級管理員";
+              let hint: string | null = null;
+
+              if (isAdmin) {
+                if (raw === 2) {
+                  label = "第二級管理員";
+                  tone = "border-cobalt/50 bg-cobalt/15 text-accent-blue";
+                  target = 0;
+                  actionLabel = "取消管理員";
+                } else if (raw === null) {
+                  label = "未分級（無權限）";
+                  tone = "border-amber-500/50 bg-amber-500/15 text-amber-200";
+                  target = 2;
+                  actionLabel = "設為第二級管理員";
+                  hint =
+                    "他是管理員但未設定級別，後端會擋掉所有模組（fail closed）。請按上面設為第二級，或用 SQL 設定 admin_level。";
+                } else {
+                  // raw === 1，或欄位不存在（undefined，migration 未跑）
+                  label = "第一級管理員";
+                  tone = "border-vital/50 bg-vital/15 text-vital-bright";
+                  target = 0;
+                  actionLabel = "取消管理員";
+                }
+              }
+
+              return (
+                <>
+                  <div className="mt-2 flex flex-wrap items-center gap-2">
+                    <span
+                      className={`slab border px-2.5 py-1 text-xs font-bold ${tone}`}
+                    >
+                      {label}
+                    </span>
+
+                    {levelConfirm === null ? (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setLevelError(null);
+                          setLevelConfirm(target);
+                        }}
+                        className="btn-base btn-ghost min-h-11 px-3 py-2 text-xs"
+                      >
+                        {actionLabel}
+                      </button>
+                    ) : null}
+                  </div>
+
+                  {hint ? (
+                    <p className="mt-1.5 text-[11px] leading-relaxed text-amber-200/80">
+                      {hint}
+                    </p>
+                  ) : null}
+                </>
+              );
+            })()}
 
             {levelConfirm !== null ? (
               <div className="mt-3 rounded-lg border border-amber-500/40 bg-amber-500/10 px-3 py-2.5">
                 <p className="text-xs leading-relaxed text-amber-100">
                   {levelConfirm === 2
-                    ? "確定設為第二級管理員？他能進入後台做日常營運，但看不到會員與禮品的修改、也看不到數據分析與網站設定。"
+                    ? "確定設為第二級管理員？他能進入後台做日常營運（班表／活動／待審核／積分／兌換／輪播／教練），但會員與禮品只能看不能改，也看不到數據分析、網站內容、外觀設定與操作紀錄。"
                     : "確定取消管理員？他會立即失去後台存取權。"}
                 </p>
                 <div className="mt-2 flex flex-wrap gap-2">
