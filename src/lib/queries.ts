@@ -1513,6 +1513,11 @@ export async function getAdminEvents(includeArchived = false): Promise<Event[]> 
   let query = supabase
     .from("events")
     .select("*")
+    // 2026-11-23：排除賽事（series='race'）——它們在「賽事」分頁管理，
+    // 出現在一般活動表單只會被誤改狀態（photos→published 之類）。
+    // 用 or(...) 是因為 PostgREST 的 neq 對 NULL 不成立：series 為 NULL 的
+    // 一般活動必須保留（見 migration-races.sql 的既有教訓）。
+    .or("series.is.null,series.neq.race")
     .order("event_date", { ascending: false })
     .limit(200);
 

@@ -80,7 +80,22 @@ function emptyForm(): FormState {
   };
 }
 
-const STATUS_BADGE: Record<EventStatus, { label: string; cls: string }> = {
+/**
+ * 狀態徽章對照表。
+ *
+ * 【2026-11-23 修復 P0】原本是 Record<EventStatus, …>，只有
+ * draft/published/archived 三個鍵。`events.status` 的 check 約束早已放寬為
+ * 六個值（加 open/closed/photos 給賽事用），於是任何一筆 status='photos'
+ * 的活動被塞進這張表 → `STATUS_BADGE[status]` 是 undefined → 讀 `.cls`
+ * 直接拋 TypeError，整頁變成「This page couldn't load」。
+ *
+ * 兩層修正：
+ *   1. 這裡改成 Record<string, …> 並補齊六個值，再加 fallback，
+ *      以後任何新狀態都不會再讓頁面崩潰。
+ *   2. `getAdminEvents()` 同時加上 series≠race 過濾（賽事有自己的分頁），
+ *      避免賽事列出現在這張表單裡被誤改狀態。
+ */
+const STATUS_BADGE: Record<string, { label: string; cls: string }> = {
   draft: {
     label: "草稿",
     cls: "border-white/25 bg-white/10 text-white/70",
@@ -93,6 +108,26 @@ const STATUS_BADGE: Record<EventStatus, { label: string; cls: string }> = {
     label: "已下架",
     cls: "border-red-500/40 bg-red-500/15 text-red-300",
   },
+  // 賽事（series='race'）用的三個狀態。正常情況下不會出現在這一頁，
+  // 但資料層若日後有別的路徑帶進來，也要看得懂而不是崩潰。
+  open: {
+    label: "報名中",
+    cls: "border-sky-500/40 bg-sky-500/15 text-sky-300",
+  },
+  closed: {
+    label: "已截止",
+    cls: "border-amber-500/40 bg-amber-500/15 text-amber-300",
+  },
+  photos: {
+    label: "相片模式",
+    cls: "border-fuchsia-500/40 bg-fuchsia-500/15 text-fuchsia-300",
+  },
+};
+
+/** 未知狀態的保底徽章：寧可顯示原文，也不讓整頁白屏 */
+const UNKNOWN_BADGE = {
+  label: "未知狀態",
+  cls: "border-white/15 bg-white/5 text-white/60",
 };
 
 function buildPayload(form: FormState, editing: Event | null) {
@@ -646,7 +681,8 @@ function EventRow({
   const [pending, setPending] = useState<string | null>(null);
   const [confirm, setConfirm] = useState(false);
   const [rosterOpen, setRosterOpen] = useState(false);
-  const badge = STATUS_BADGE[ev.status];
+  // 未知狀態一律走保底徽章（2026-11-23：六個 status 值都補齊，另加 fallback）
+  const badge = STATUS_BADGE[ev.status] ?? UNKNOWN_BADGE;
 
   async function act(
     fn: () => Promise<{ ok: true; message: string }>,
