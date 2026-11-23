@@ -157,9 +157,21 @@ export function moduleForPath(pathname: string): AdminModule | null {
   return best?.mod ?? null;
 }
 
-/** 這個模組看不看得到（none = 看不到） */
+/**
+ * 這個模組看不看得到（full / read 都算看得到，none 看不到）。
+ *
+ * ⚠️ 刻意寫成「白名單」（=== full || === read）而不是「黑名單」（!== none）：
+ * 後端契約保證 13 個鍵齊全，但前端不該假設它一定拿得到——
+ * 若 access[mod] 是 undefined（鍵名不符、map 不完整、RPC 版本不同），
+ * `undefined !== "none"` 會是 **true → 放行**，那是 fail-open。
+ * 白名單寫法下 undefined → false → 顯示拒訪卡（fail closed）。
+ *
+ * 這條對 audit 模組尤其關鍵：/admin/audit-log 是 server component 直查
+ * admin_audit_log，**沒有對應的 API 守衛**，頁面這道判斷是唯一防線。
+ */
 export function canView(access: AdminAccess, mod: AdminModule): boolean {
-  return access[mod] !== "none";
+  const level = access[mod];
+  return level === "full" || level === "read";
 }
 
 /** 這個模組是不是唯讀（read） */

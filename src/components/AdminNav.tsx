@@ -73,6 +73,8 @@ import { useOverlay } from "@/app/admin/members/useOverlay";
 import {
   FULL_ACCESS,
   PATH_MODULE,
+  canView,
+  isReadOnly,
   type AdminAccess,
 } from "./adminModules";
 
@@ -258,14 +260,15 @@ export function AdminNav({
     ...group,
     items: group.items.filter((item) => {
       const mod = PATH_MODULE[item.href];
-      return !mod || access[mod] !== "none";
+      // 不屬任何模組的項目（今日工作台）一律保留；其餘走同一個 fail-closed 判斷
+      return !mod || canView(access, mod);
     }),
   })).filter((group) => group.items.length > 0);
 
   /** 唯讀模組的項目要加小標 */
   const readOnlyFor = (item: NavItem): boolean => {
     const mod = PATH_MODULE[item.href];
-    return Boolean(mod) && access[mod!] === "read";
+    return Boolean(mod) && isReadOnly(access, mod!);
   };
 
   /** 「待審核」項要顯示數字；其他項不顯示 */
