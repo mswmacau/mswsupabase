@@ -595,6 +595,14 @@ end;
 $$;
 
 -- admin_list_members（來源：migration-profile-test-flag.sql，原 76 行，本檔僅新增 require_module 一行）
+-- ⚠️ 這支一定要先 DROP 再 CREATE（2026-11-23 實測修正）
+--    原因：本版在 returns table(...) 中間多了 admin_level 一欄 → 回傳型別改變，
+--    PostgreSQL 對「回傳型別不同的同名函式」不允許 create or replace（42P13：
+--    cannot change return type of existing function），會讓整份 SQL 的交易回滾。
+--    站主第一次貼本檔時就是卡在這裡，連前面的 require_module 都一併被回滾。
+--    因此改成 drop → create → 重新套用原本的 ACL（見函式後的 revoke/grant）。
+drop function if exists public.admin_list_members(text, text, text, integer, integer);
+
 create or replace function public.admin_list_members(
   p_search text default null,
   p_role   text default null,
@@ -674,6 +682,11 @@ begin
   offset greatest(coalesce(p_offset, 0), 0);
 end;
 $$;
+
+-- drop 後必須重套 ACL：函式預設對 PUBLIC 開放，不收回的話 anon 也能呼叫會員名單。
+revoke all on function public.admin_list_members(text, text, text, integer, integer) from public;
+revoke all on function public.admin_list_members(text, text, text, integer, integer) from anon;
+grant execute on function public.admin_list_members(text, text, text, integer, integer) to authenticated;
 
 -- ------------------------------------------------------------
 -- §3.3 analytics 讀取（L2 = none → 全部拒絕）
