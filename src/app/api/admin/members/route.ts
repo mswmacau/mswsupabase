@@ -863,9 +863,15 @@ export async function PATCH(request: Request) {
           kmCorrection?.after ??
           (member ? Number(member.total_km ?? 0) : null),
         // 級別變更後前端可就地覆蓋那一列（member 為 null 時仍要帶回去）
+        // 級別變更後前端可就地覆蓋那一列（member 為 null 時仍要帶回去）。
+        // 這裡刻意用 `!== undefined` 而不是 `??`：
+        //   undefined = 本次請求沒帶 admin_level（沿用 member 的值）
+        //   null      = 這次「取消管理員」，必須原樣回傳 null
+        // 用 `??` 會把 null 當成「沒有值」而改讀 member，語義就錯了。
         admin_level:
-          adminLevelSaved ??
-          ((member as { admin_level?: number | null } | null)?.admin_level ?? null),
+          adminLevelSaved !== undefined
+            ? adminLevelSaved
+            : ((member as { admin_level?: number | null } | null)?.admin_level ?? null),
       },
       message,
     });
