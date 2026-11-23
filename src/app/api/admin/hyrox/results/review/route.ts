@@ -51,7 +51,9 @@ export const DELETE = GET;
 
 export async function POST(request: Request) {
   try {
-    const auth = await authorizeModule("events", { write: true });
+    // 歸 review 模組（不是 events）：三支都只服務 /admin/review 的「HYROX 成績」分頁，
+    // 與 hyrox/review 屬同一審核工作流；歸 events 會讓「UI 在 review、守衛在 events」脫節。
+    const auth = await authorizeModule("review", { write: true });
     if (!auth.ok) return auth.res;
     const { supabase, actorId } = auth;
 
