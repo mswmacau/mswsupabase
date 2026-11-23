@@ -43,7 +43,7 @@ type MemberDetail = {
 };
 
 const SITE_URL = (
-  process.env.NEXT_PUBLIC_SITE_URL ?? "https://msw-street-workout.vercel.app"
+  process.env.NEXT_PUBLIC_SITE_URL ?? "https://www.mswmacau.com"
 ).replace(/\/+$/, "");
 
 /** 400：寄不出驗證信（一律 JSON，附原始訊息方便管理員判斷是否為 SMTP 問題） */

@@ -18,7 +18,7 @@ import { DEFAULT_THEME, themeCssVars } from "@/lib/theme";
 import { publicAssetUrl } from "@/lib/assets";
 
 const SITE_URL =
-  process.env.NEXT_PUBLIC_SITE_URL ?? "https://msw-street-workout.vercel.app";
+  process.env.NEXT_PUBLIC_SITE_URL ?? "https://www.mswmacau.com";
 
 /** 分頁標題模板的站名後綴（品牌固定字，不屬於 site_seo 可編輯範圍） */
 const TITLE_SUFFIX = "MSW 街健館";

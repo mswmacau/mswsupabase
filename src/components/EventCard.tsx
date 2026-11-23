@@ -31,10 +31,13 @@ import { formatDate, weekdayLabel } from "@/lib/utils";
 import { EventRegisterAction } from "@/components/EventRegisterAction";
 
 /**
- * 報名連結防呆：若 registration_url 指向本站自己（vercel 正式網域、
- * 當前 NEXT_PUBLIC_SITE_URL、localhost），就不渲染成連結——
+ * 報名連結防呆：若 registration_url 指向本站自己（正式網域、當前
+ * NEXT_PUBLIC_SITE_URL、localhost），就不渲染成連結——
  * 避免後台誤填自家網址時，訪客點「報名」又跳回同一頁的空循環
  * （2026-09 實測事故：DB 填了 https://msw-street-workout.vercel.app/events）。
+ *
+ * 2026-11-23 域名切換到 mswmacau.com：舊的 vercel.app 仍然保留判斷，
+ * 因為「已經貼在舊活動資料裡的網址」不會因為換域名而自動改變。
  */
 function isSelfUrl(raw: string): boolean {
   let host: string;
@@ -46,7 +49,10 @@ function isSelfUrl(raw: string): boolean {
     return false; // 非 URL 格式交由既有渲染邏輯處理
   }
 
-  if (host === "msw-street-workout.vercel.app") return true;
+  /* 兩個都是本站的正式入口（新域名與舊 vercel 域名並存一段時間） */
+  if (host === "msw-street-workout.vercel.app" || host === "mswmacau.com") {
+    return true;
+  }
   if (host === "localhost" || host === "127.0.0.1" || host === "0.0.0.0") {
     return true;
   }

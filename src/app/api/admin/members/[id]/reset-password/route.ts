@@ -47,7 +47,7 @@ type MemberDetail = {
 };
 
 const SITE_URL = (
-  process.env.NEXT_PUBLIC_SITE_URL ?? "https://msw-street-workout.vercel.app"
+  process.env.NEXT_PUBLIC_SITE_URL ?? "https://www.mswmacau.com"
 ).replace(/\/+$/, "");
 
 /** 排除 0/O/1/l/I 等易混淆字元，仍同時含大寫、小寫、數字 */

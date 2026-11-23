@@ -4,4 +4,4 @@ Disallow: /admin/
 Disallow: /api/
 Disallow: /dashboard/
 
-Sitemap: https://msw-street-workout.vercel.app/sitemap.xml
+Sitemap: https://www.mswmacau.com/sitemap.xml

@@ -52,6 +52,24 @@ const nextConfig: NextConfig = {
    */
   async redirects() {
     return [
+      /**
+       * 舊 Vercel 域名 → 新正式域名（2026-11-23 換域名）
+       *
+       * 為什麼要寫在這裡：`msw-street-workout.vercel.app` 是專案的永久別名，
+       * 換了自訂域名之後它**仍然可以開**，於是同一份內容有兩個網址 → 搜尋引擎
+       * 會把它當重複內容、舊連結與書籤也繼續落在舊域名（會員在那邊登入後
+       * cookie 不共通，會看起來像「登入失效」）。在路由層回 308 一次解決：
+       * 權重集中到新域名、舊連結自動帶到新站。
+       *
+       * 只匹配「正式別名」這一個 host，不影響任何 preview deployment
+       * （`mswsupabase-git-xxx-….vercel.app` 之類），也不影響 www 自己。
+       */
+      {
+        source: "/:path*",
+        has: [{ type: "host" as const, value: "msw-street-workout.vercel.app" }],
+        destination: "https://www.mswmacau.com/:path*",
+        permanent: true, // 308
+      },
       {
         source: "/about",
         destination: "/coaches#about",
