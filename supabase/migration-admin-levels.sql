@@ -253,6 +253,41 @@ grant execute on function public.admin_set_member_admin_level(uuid, integer) to 
 
 
 -- ------------------------------------------------------------
+-- §5.5  admin_my_access() — 一次回 13 個模組的權限（側欄用）
+--
+--       為什麼要這支：側欄要一次知道「我能看哪幾項」。若前端逐個模組
+--       呼叫 admin_module_access 就要 13 次往返（手機上尤其慢）。
+--       這裡用 jsonb_object_agg 逐模組呼叫同一支函式，
+--       好處是**口徑與 admin_module_access 完全一致**（不可能兩邊不同步）。
+--
+--       非管理員呼叫時不 raise，直接回全部 'none'（側欄照常渲染、只是全隱藏），
+--       這樣未登入／非管理員的情境不需要多一層錯誤處理。
+-- ------------------------------------------------------------
+create or replace function public.admin_my_access()
+returns jsonb
+language sql
+stable
+security definer
+set search_path = public
+as $$
+  select jsonb_object_agg(m, public.admin_module_access(m))
+    from unnest(
+      array[
+        'analytics', 'schedule', 'events', 'members', 'review', 'points',
+        'rewards', 'commerce', 'content', 'slides', 'coaches', 'theme', 'audit'
+      ]
+    ) as m;
+$$;
+
+comment on function public.admin_my_access() is
+  '一次回 13 個模組的權限 jsonb（側欄用）：逐模組轉呼叫 admin_module_access，'
+  '口徑必然一致；非管理員／無級別回全部 none（不 raise）。';
+
+revoke all on function public.admin_my_access() from public, anon;
+grant execute on function public.admin_my_access() to authenticated;
+
+
+-- ------------------------------------------------------------
 -- §6  profiles.admin_level 護欄（只有第一級改得動）
 --
 --     為什麼獨立一支：guard_profile_sensitive_fields 對 is_admin() 一律放行，
@@ -321,12 +356,18 @@ notify pgrst, 'reload schema';
 --   select count(*) from public.profiles where role='admin' and admin_level is null;
 --   → 0
 --
--- 8.5 三個函式都在
+-- 8.5 四個函式都在
 --   select proname from pg_proc
 --    where pronamespace='public'::regnamespace
---      and proname in ('is_super_admin','admin_module_access','admin_set_member_admin_level')
+--      and proname in ('is_super_admin','admin_module_access',
+--                      'admin_set_member_admin_level','admin_my_access')
 --    order by 1;
---   → 3 列
+--   → 4 列
+--
+-- 8.5b admin_my_access 的形狀（SQL Editor 無 JWT → 應全 none）
+--   select public.admin_my_access();
+--   → 13 個鍵全部 "none"：{"analytics":"none","schedule":"none",...,"audit":"none"}
+--   （真實 JWT 下第一級應全 "full"、第二級應按對照表）
 --
 -- 8.6 SQL Editor 沒有 JWT → 應 fail closed
 --   select public.is_super_admin();          → false
@@ -354,6 +395,7 @@ notify pgrst, 'reload schema';
 -- drop trigger if exists profiles_guard_admin_level on public.profiles;
 -- drop function if exists public.guard_admin_level();
 -- drop function if exists public.admin_set_member_admin_level(uuid, integer);
+-- drop function if exists public.admin_my_access();
 -- drop function if exists public.admin_module_access(text);
 -- drop function if exists public.is_super_admin();
 --

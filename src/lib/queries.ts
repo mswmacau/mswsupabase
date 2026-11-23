@@ -28,6 +28,7 @@ import {
 } from "./draft";
 import { addMonths, currentMonth, monthLabel, todayISO } from "./utils";
 import { isUuid } from "./api";
+import type { AdminModule, ModuleAccess } from "./admin-guard";
 // 賽事月曆查詢共用 races.ts 的快取 tag（後台寫入端以同一個字串 revalidateTag）。
 // races.ts 沒有反向 import queries.ts，不構成循環依賴。
 import { RACES_TAG } from "./races";
@@ -2490,6 +2491,86 @@ export async function getRecentAuditLog(
       actor_name: row.profile?.display_name ?? null,
     })),
   };
+}
+
+/* =============================================================
+ * 兩級管理員：我的模組權限（側欄用）
+ *
+ * 契約：supabase/migration-admin-levels.sql §5.5 admin_my_access()
+ *   一次回 13 個模組的 'full' | 'read' | 'none'。
+ *
+ * 【降級（硬要求）】
+ * 函式不存在（migration 未跑）或任何查詢異常 → 依 role 判斷：
+ *   role='admin' → 全部 'full'（＝舊行為，不鎖死站主）
+ *   其他         → 全部 'none'
+ * 永不拋錯：側欄渲染不可以因為分級系統故障而整頁掛掉。
+ * ============================================================= */
+
+/** 後台 13 個模組（順序與 SQL 的 unnest 陣列一致） */
+const ADMIN_MODULE_KEYS: readonly AdminModule[] = [
+  "analytics",
+  "schedule",
+  "events",
+  "members",
+  "review",
+  "points",
+  "rewards",
+  "commerce",
+  "content",
+  "slides",
+  "coaches",
+  "theme",
+  "audit",
+] as const;
+
+/** 13 個模組填同一個值（保證回傳的鍵齊全，不是 Partial） */
+function buildAccess(value: ModuleAccess): Record<AdminModule, ModuleAccess> {
+  const out = {} as Record<AdminModule, ModuleAccess>;
+  for (const key of ADMIN_MODULE_KEYS) out[key] = value;
+  return out;
+}
+
+/**
+ * 當前登入者的模組權限（側欄／唯讀標記用）。
+ * 這個函式刻意不快取：權限隨時可能被第一級調整。
+ */
+export async function getMyAdminAccess(): Promise<Record<AdminModule, ModuleAccess>> {
+  try {
+    const supabase = await createClient();
+    if (!supabase) return buildAccess("none");
+
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+    if (!user) return buildAccess("none");
+
+    // 一次 RPC 拿 13 個模組（逐個呼叫會多 12 次往返）
+    const { data, error } = await supabase.rpc("admin_my_access");
+    if (!error && data && typeof data === "object" && !Array.isArray(data)) {
+      const raw = data as Record<string, unknown>;
+      const out = buildAccess("none");
+      for (const key of ADMIN_MODULE_KEYS) {
+        const value = String(raw[key] ?? "").toLowerCase();
+        if (value === "full" || value === "read" || value === "none") {
+          out[key] = value;
+        }
+      }
+      return out;
+    }
+
+    // fallback：函式不存在／出錯 → 舊行為（admin 全開、其他人全關）
+    const { data: profile } = await supabase
+      .from("profiles")
+      .select("role")
+      .eq("id", user.id)
+      .maybeSingle();
+
+    return (profile as { role?: string | null } | null)?.role === "admin"
+      ? buildAccess("full")
+      : buildAccess("none");
+  } catch {
+    return buildAccess("none");
+  }
 }
 
 /**

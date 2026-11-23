@@ -575,12 +575,32 @@ export async function PATCH(request: Request) {
     if (Object.keys(fields).length > 0) return jsonValidation(fields);
 
     const hasKmCorrection = totalKm !== null;
+
+    /* ---------- 管理員級別（兩級管理員）：只接受 0 或 2，且必須單獨送出 ----------
+     * 0 = 取消管理員（落地成 role='member', admin_level=null）
+     * 2 = 設為第二級（role='admin', admin_level=2）
+     * 不允許 1：第一級只能由 SQL 維護，防止提權鏈（見 migration §5）。
+     * 稽核由 RPC 內部寫（含會員名稱），API 不重複寫一筆。 */
+    let adminLevel: 0 | 2 | null = null;
+    const adminLevelRaw = body.admin_level;
+    if (adminLevelRaw !== undefined && adminLevelRaw !== null) {
+      if (adminLevelRaw !== 0 && adminLevelRaw !== 2) {
+        fields.admin_level = "管理員級別只接受 0（取消管理員）或 2（第二級）。";
+      } else if (hasPointsDelta || hasTestChange || hasProfileChanges || hasKmCorrection) {
+        fields.admin_level = "管理員級別需單獨送出，請分開操作。";
+      } else {
+        adminLevel = adminLevelRaw as 0 | 2;
+      }
+    }
+    if (Object.keys(fields).length > 0) return jsonValidation(fields);
+
+    const hasAdminLevelChange = adminLevel !== null;
     // 只送積分／只切換測試旗標／只更正里程時不必再跑一次 admin_update_member
     //（避免無謂的 RPC 與一筆「什麼都沒改」的稽核）；
     // 其餘情況（含空 body）維持原行為，一律先更新 profile。
     const shouldUpdateProfile =
       hasProfileChanges ||
-      (!hasPointsDelta && !hasTestChange && !hasKmCorrection);
+      (!hasPointsDelta && !hasTestChange && !hasKmCorrection && !hasAdminLevelChange);
 
     /* ---------- 第一段：會員資料 / 角色 / 狀態 ---------- */
     if (shouldUpdateProfile) {
@@ -764,6 +784,45 @@ export async function PATCH(request: Request) {
       );
     }
 
+    /* ---------- 第五段：管理員級別（RPC 內自行寫稽核） ---------- */
+    let adminLevelSaved: number | null | undefined;
+    if (hasAdminLevelChange) {
+      const { data: levelData, error: levelError } = await supabase.rpc(
+        "admin_set_member_admin_level",
+        { p_id: userId, p_level: adminLevel }
+      );
+
+      if (levelError) {
+        const msg = levelError.message ?? "";
+        if (
+          levelError.code === "PGRST202" ||
+          levelError.code === "42883" ||
+          /could not find the function/i.test(msg)
+        ) {
+          return jsonErr(
+            "資料庫尚未建立管理員級別功能。請到 Supabase → SQL Editor 執行 supabase/migration-admin-levels.sql，完成後重新整理本頁。",
+            "SCHEMA_OUTDATED",
+            503
+          );
+        }
+        if (levelError.code === "P0001") {
+          if (/只有最高級/.test(msg)) return jsonForbidden();
+          if (/找不到這位會員/.test(msg)) return jsonNotFound("找不到這位會員。");
+          if (/級別只接受/.test(msg)) {
+            return jsonValidation({ admin_level: "管理員級別只接受 0 或 2。" });
+          }
+        }
+        return rpcFailure("PATCH /api/admin/members admin_level", levelError);
+      }
+
+      const saved = (levelData ?? {}) as { level?: number | null };
+      adminLevelSaved = saved.level ?? null;
+    }
+
+    if (member && adminLevelSaved !== undefined) {
+      (member as { admin_level?: number | null }).admin_level = adminLevelSaved;
+    }
+
     let message: string;
     if (kmCorrection !== null) {
       message = `已更正總里程：原 ${kmText(kmCorrection.before)} km → 新 ${kmText(
@@ -775,6 +834,8 @@ export async function PATCH(request: Request) {
       message = "已調整會員積分。";
     } else if (hasProfileChanges) {
       message = "已更新會員資料。";
+    } else if (hasAdminLevelChange) {
+      message = adminLevel === 2 ? "已設為第二級管理員。" : "已取消管理員。";
     } else if (testFlagSaved !== null) {
       message = testFlagSaved
         ? "已將會員標記為測試帳號（不計入公開排行榜）。"
@@ -801,6 +862,10 @@ export async function PATCH(request: Request) {
         total_km:
           kmCorrection?.after ??
           (member ? Number(member.total_km ?? 0) : null),
+        // 級別變更後前端可就地覆蓋那一列（member 為 null 時仍要帶回去）
+        admin_level:
+          adminLevelSaved ??
+          ((member as { admin_level?: number | null } | null)?.admin_level ?? null),
       },
       message,
     });
