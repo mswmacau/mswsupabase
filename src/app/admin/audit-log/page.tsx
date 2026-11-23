@@ -1,4 +1,5 @@
 import { createClient } from "@/lib/supabase/server";
+import type { SupabaseClient } from "@supabase/supabase-js";
 import { isSupabaseConfigured } from "@/lib/supabase/env";
 import { AuditLogCards } from "./AuditLogCards";
 import { SummaryText } from "./SummaryText";
@@ -70,6 +71,22 @@ const MODULE_LABELS: Record<string, string> = {
   redemptions: "兌換管理",
   merchants: "商戶管理",
   "point-rules": "積分規則",
+  /* 2026-11-23 補齊：這些模組早就在寫稽核，但沒進對照表，頁面上直接
+     顯示英文路由名（members／training／hyrox_results…），站主看唔明。 */
+  members: "會員",
+  events: "活動",
+  hyrox: "HYROX 場次",
+  hyrox_results: "HYROX 成績",
+  races: "賽事",
+  training: "班表",
+  sessions: "訓練場次",
+  "review-run": "跑步審核",
+  home: "首頁輪播",
+  "merchant-verify": "商戶驗證",
+  analytics: "數據分析",
+  coaches: "教練",
+  slides: "首頁輪播",
+  audit: "操作紀錄",
 };
 
 /** 動作 → 中文（對照 src/lib/audit.ts 已接線的 action 值） */
@@ -88,7 +105,85 @@ const ACTION_LABELS: Record<string, string> = {
   review: "審批兌換",
   fulfill: "核銷",
   award: "手動補發",
+  /* 2026-11-23 補齊：以下動作實際存在於 admin_audit_log（實查 470 筆
+     的全部組合），但原本沒有中文，頁面顯示成 delete／set-admin-level
+     這類英文鍵。 */
+  delete: "永久刪除",
+  soft_delete: "停用",
+  "set-admin-level": "調整管理員級別",
+  adjust_points: "調整積分",
+  "correct-km": "修正里程",
+  set_test: "標記測試帳號",
+  resend_verification: "重發驗證信",
+  status: "更新狀態",
+  attendance: "更新出席",
+  confirmed: "確認報名",
+  "event-delete": "刪除場次",
+  "photos-add": "新增相片",
+  "photos-remove": "刪除相片",
+  approve: "核准",
+  reject: "拒絕",
+  archive: "下架",
+  "category-add": "新增組別",
+  duplicate: "複製",
+  "registration-review": "審核報名",
+  batch: "批次生成",
+  copy: "複製",
+  generate: "生成",
+  "legend-update": "更新圖例",
+  unpublish: "取消發佈",
+  "slides-create": "新增輪播",
+  pin_fail: "PIN 驗證失敗",
+  redeem: "兌換核銷",
 };
+
+/**
+ * 摘要裡出現的 UUID → 會員名稱（顯示層翻譯）。
+ *
+ * 為什麼要有：早期紀錄把 UUID 直接寫進摘要（「永久刪除會員 5f2a…」），
+ * 站主明確說「管理員會看不明白」。這裡用**一次批次查詢**處理整頁，
+ * 不是每列查一次（否則 20 列 = 20 次往返）。
+ *
+ * 查不到的兩種情況，都如實顯示「名稱未留存」而不是假裝知道：
+ *   · 帳號已被永久刪除（profiles 那列已隨 auth.users cascade 消失）
+ *   · RLS 或連線問題令查詢失敗（寧可顯示事實，不要顯示 UUID）
+ */
+const UUID_IN_TEXT =
+  /[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/gi;
+
+async function resolveSummaryNames(
+  supabase: SupabaseClient,
+  rows: AuditRow[]
+): Promise<Record<string, string>> {
+  const ids = new Set<string>();
+  for (const row of rows) {
+    for (const match of row.summary?.match(UUID_IN_TEXT) ?? []) {
+      ids.add(match.toLowerCase());
+    }
+  }
+  if (ids.size === 0) return {};
+
+  const list = [...ids];
+  const map: Record<string, string> = {};
+
+  /* 每批 100 個：PostgREST 的 in.() 走 query string，太多會撐爆網址長度 */
+  for (let i = 0; i < list.length; i += 100) {
+    const chunk = list.slice(i, i + 100);
+    const { data, error } = await supabase
+      .from("profiles")
+      .select("id, display_name")
+      .in("id", chunk);
+
+    /* 查詢失敗就整批跳過（顯示「名稱未留存」），不讓稽核頁因此掛掉 */
+    if (error || !data) continue;
+    for (const profile of data as { id: string; display_name: string | null }[]) {
+      const name = profile.display_name?.trim();
+      if (name) map[profile.id.toLowerCase()] = name;
+    }
+  }
+
+  return map;
+}
 
 /** 澳門時區（UTC+8，全年無日光節約）的人話時間：2026/10/23 14:05 */
 const MACAU_OFFSET_MS = 8 * 60 * 60 * 1000;
@@ -192,6 +287,10 @@ export default async function AdminAuditLogPage({
 
   const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
 
+  /* 摘要裡的 UUID → 人名（一次批次查詢；查不到的就是帳號已刪，顯示「名稱未留存」） */
+  const summaryNames =
+    supabase && rows.length > 0 ? await resolveSummaryNames(supabase, rows) : {};
+
   return (
     <div className="space-y-6">
       <PageIntro />
@@ -222,6 +321,7 @@ export default async function AdminAuditLogPage({
               action: actionLabel(r.action),
               summary: r.summary,
             }))}
+            summaryNames={summaryNames}
           />
 
           {/* ===== 桌面（≥768px）：原本的表格，欄位與樣式與改動前一致 ===== */}
@@ -256,7 +356,7 @@ export default async function AdminAuditLogPage({
                     {actionLabel(r.action)}
                   </td>
                   <td className="py-3 pr-4 text-white/85">
-                    <SummaryText text={r.summary} />
+                    <SummaryText text={r.summary} names={summaryNames} />
                   </td>
                 </tr>
               ))}

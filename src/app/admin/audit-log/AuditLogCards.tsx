@@ -48,7 +48,13 @@ export interface AuditCardRow {
 const useIsoLayoutEffect =
   typeof window === "undefined" ? useEffect : useLayoutEffect;
 
-function AuditCard({ row }: { row: AuditCardRow }) {
+function AuditCard({
+  row,
+  summaryNames,
+}: {
+  row: AuditCardRow;
+  summaryNames?: Record<string, string>;
+}) {
   const [open, setOpen] = useState(false);
   /** 先假設會被截斷：clamp 一律套著，量到沒溢出再把展開入口收掉 */
   const [clamped, setClamped] = useState(true);
@@ -112,7 +118,7 @@ function AuditCard({ row }: { row: AuditCardRow }) {
           open ? "block" : "line-clamp-1"
         }`}
       >
-        <SummaryText text={row.summary} />
+        <SummaryText text={row.summary} names={summaryNames} />
       </span>
     </>
   );
@@ -135,11 +141,18 @@ function AuditCard({ row }: { row: AuditCardRow }) {
   );
 }
 
-export function AuditLogCards({ rows }: { rows: AuditCardRow[] }) {
+export function AuditLogCards({
+  rows,
+  summaryNames,
+}: {
+  rows: AuditCardRow[];
+  /** 摘要裡的 UUID → 會員名稱（server 端批次查好，避免 client 端再打 DB） */
+  summaryNames?: Record<string, string>;
+}) {
   return (
     <ul className="space-y-1.5 md:hidden">
       {rows.map((row) => (
-        <AuditCard key={row.id} row={row} />
+        <AuditCard key={row.id} row={row} summaryNames={summaryNames} />
       ))}
     </ul>
   );
