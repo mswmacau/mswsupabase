@@ -39,6 +39,13 @@ type MemberRow = {
   status_reason: string | null;
   points: number;
   total_km: number | string;
+  /**
+   * 管理員級別（supabase/migration-admin-levels.sql）：1=最高級、2=第二級、null=非管理員。
+   * **刻意保留 undefined 的語意**：undefined = 該欄位不存在（migration 未跑），
+   * null = 有這一欄但值為空。前端（MemberDrawer）靠這個區分「未跑 migration」
+   * 與「未分級」，所以這裡不能寫 `?? null`（那會把兩者混為一談）。
+   */
+  admin_level?: 1 | 2 | null;
   created_at: string;
   last_sign_in_at: string | null;
   run_count: number | string;
@@ -52,6 +59,7 @@ type MemberDetail = {
   email: string | null;
   phone: string | null;
   role: MemberRow["role"];
+  admin_level?: 1 | 2 | null;
   status: MemberRow["status"];
   status_reason: string | null;
   status_updated_at: string | null;
@@ -73,6 +81,8 @@ function toMemberRow(detail: MemberDetail): MemberRow {
     email: detail.email,
     phone: detail.phone,
     role: detail.role,
+    // 透傳，不做 ?? null：undefined（migration 未跑）與 null（未分級）是兩件事
+    admin_level: detail.admin_level,
     status: detail.status,
     status_reason: detail.status_reason,
     points: Number(detail.points ?? 0),

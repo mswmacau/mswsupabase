@@ -78,6 +78,13 @@ type MemberRow = {
    * 對外回應一律補成 boolean（見 GET 的 map），契約不因 schema 版本而變。
    */
   is_test?: boolean;
+  /**
+   * 管理員級別（supabase/migration-admin-levels.sql）：1=最高級、2=第二級、null=非管理員。
+   * **刻意保留 undefined 的語意**：undefined = 該欄位不存在（migration 未跑），
+   * null = 有這一欄但值為空。前端（MemberDrawer）靠這個區分「未跑 migration」
+   * 與「未分級」，所以這裡不能寫 `?? null`（那會把兩者混為一談）。
+   */
+  admin_level?: 1 | 2 | null;
   created_at: string;
   last_sign_in_at: string | null;
   run_count: number | string;
