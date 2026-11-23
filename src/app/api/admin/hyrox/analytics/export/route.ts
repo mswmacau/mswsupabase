@@ -55,7 +55,9 @@ export const DELETE = POST;
 export async function GET(request: Request) {
   try {
     /* ── 越權：第一行就擋 ─────────────────────────────────── */
-    const auth = await authorizeModule("events", { write: false });
+    // 歸 analytics 模組（不是 events）：第二級對 analytics 是 none，
+    // 若留在 events（full）等於讓第二級匯出分析數據，違反站主「數據分析不可看」的原意。
+    const auth = await authorizeModule("analytics", { write: false });
     if (!auth.ok) return auth.res;
     const { supabase } = auth;
 
