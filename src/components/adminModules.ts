@@ -113,7 +113,15 @@ export function canView(access: AdminAccess, mod: AdminModule): boolean {
   return level === "full" || level === "read";
 }
 
-/** 這個模組是不是唯讀（read） */
+/**
+ * 這個模組是不是唯讀（不給寫入 UI）。
+ *
+ * 寫成「不是 full 就算唯讀」而不是「等於 read 才算唯讀」，是因為
+ * undefined／未知值應該往保守方向倒：當成唯讀 → 少給一顆寫入按鈕；
+ * 若寫成 `=== "read"`，未知值會回 false（當成可寫），那是寬鬆方向。
+ * 呼叫端通常會先 canView 再問 isReadOnly，所以 "none" 走不到這裡，
+ * 但順序若被改動，保守值也不會出事。
+ */
 export function isReadOnly(access: AdminAccess, mod: AdminModule): boolean {
-  return access[mod] === "read";
+  return access[mod] !== "full";
 }

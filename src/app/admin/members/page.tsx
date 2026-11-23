@@ -1,6 +1,8 @@
 import { MemberManager } from "./MemberManager";
 import { getAdminAccess } from "@/app/admin/_components/adminAccess";
-import { isReadOnly } from "@/components/adminModules";
+import { canView, isReadOnly } from "@/components/adminModules";
+import { AdminDeniedCard } from "@/app/admin/_components/AdminDeniedCard";
+import { MODULE_LABELS } from "@/components/adminModules";
 import { ReadOnlyNotice } from "@/app/admin/_components/ReadOnlyNotice";
 
 export const metadata = { title: "會員管理" };
@@ -27,8 +29,15 @@ export default async function AdminMembersPage({
 }: {
   searchParams: Promise<{ member?: string; action?: string }>;
 }) {
-  /* 第二級管理員：members 是唯讀模組 → 頂部提示 + 所有寫入入口不渲染 */
+  /* 兩級管理員：
+     ① 先 canView（none → 拒訪卡，連名單都不查）
+     ② 再 isReadOnly（read → 頂部提示 + 所有寫入入口不渲染）
+     順序不可顛倒：members 目前矩陣裡只會是 full/read，但若日後改成 none，
+     少了①就會把會員名單（姓名／電話／身份證後四位）以「唯讀」形式露出來。 */
   const access = await getAdminAccess();
+  if (!canView(access, "members")) {
+    return <AdminDeniedCard moduleLabel={MODULE_LABELS.members} />;
+  }
   const readOnly = isReadOnly(access, "members");
 
   const params = await searchParams;

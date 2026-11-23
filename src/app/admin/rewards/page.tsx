@@ -3,7 +3,9 @@ import { isSupabaseConfigured } from "@/lib/supabase/env";
 import { RewardsManager } from "./RewardsManager";
 import type { MerchantOption, RewardRow } from "./types";
 import { getAdminAccess } from "@/app/admin/_components/adminAccess";
-import { isReadOnly } from "@/components/adminModules";
+import { canView, isReadOnly } from "@/components/adminModules";
+import { MODULE_LABELS } from "@/components/adminModules";
+import { AdminDeniedCard } from "@/app/admin/_components/AdminDeniedCard";
 import { ReadOnlyNotice } from "@/app/admin/_components/ReadOnlyNotice";
 
 export const metadata = { title: "禮品管理" };
@@ -19,6 +21,10 @@ export const dynamic = "force-dynamic";
 export default async function AdminRewardsPage() {
   /* 第二級管理員：rewards 是唯讀模組 → 頂部提示 + 不渲染任何寫入入口 */
   const access = await getAdminAccess();
+  /* 同 members：先擋 none（連禮品資料都不查），再談唯讀 */
+  if (!canView(access, "rewards")) {
+    return <AdminDeniedCard moduleLabel={MODULE_LABELS.rewards} />;
+  }
   const readOnly = isReadOnly(access, "rewards");
 
   if (!isSupabaseConfigured) {
